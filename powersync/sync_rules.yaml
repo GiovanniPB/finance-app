@@ -1,0 +1,15 @@
+# =========================================================================
+# PowerSync Sync Rules
+# Define o que cada cliente baixa para o SQLite local. Aqui, cada usuário só
+# sincroniza as próprias linhas (isolamento por owner), espelhando o RLS do
+# Postgres. `request.user_id()` vem do JWT emitido pelo Supabase Auth.
+#
+# Após editar, publique no PowerSync (Dashboard ou `powersync` CLI) e valide.
+# =========================================================================
+bucket_definitions:
+  user_data:
+    # Um bucket por usuário autenticado.
+    parameters: select request.user_id() as user_id
+    data:
+      - select * from profiles where id = bucket.user_id
+      - select * from accounts where owner_id = bucket.user_id

@@ -1,0 +1,25 @@
+version: 2
+updates:
+  # Dependências Dart/Flutter de cada membro do workspace.
+  - package-ecosystem: "pub"
+    directory: "/apps/finance"
+    schedule:
+      interval: "weekly"
+    open-pull-requests-limit: 5
+  - package-ecosystem: "pub"
+    directory: "/packages/core"
+    schedule:
+      interval: "weekly"
+  - package-ecosystem: "pub"
+    directory: "/packages/database"
+    schedule:
+      interval: "weekly"
+  - package-ecosystem: "pub"
+    directory: "/packages/design_system"
+    schedule:
+      interval: "weekly"
+  # Actions do GitHub.
+  - package-ecosystem: "github-actions"
+    directory: "/"
+    schedule:
+      interval: "weekly"

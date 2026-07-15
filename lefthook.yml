@@ -1,0 +1,19 @@
+# Git hooks gerenciados pelo lefthook.
+# Instale uma vez: `fvm dart pub global activate lefthook && lefthook install`
+# (ou via brew: `brew install lefthook && lefthook install`).
+
+pre-commit:
+  parallel: true
+  commands:
+    format:
+      glob: "*.dart"
+      run: fvm dart format --set-exit-if-changed {staged_files}
+    analyze:
+      glob: "*.dart"
+      # Analisa o workspace inteiro (rápido com o cache do analyzer).
+      run: fvm dart analyze --fatal-infos --fatal-warnings
+
+pre-push:
+  commands:
+    test:
+      run: fvm dart run melos run test

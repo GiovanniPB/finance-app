@@ -1,0 +1,29 @@
+name: database
+description: >-
+  Camada de persistência local offline-first: schema do PowerSync, conector
+  Supabase (credenciais + upload da fila) e fábrica do banco. Envolve o SDK
+  do PowerSync atrás de uma API própria para isolar o resto do app.
+version: 0.1.0
+publish_to: none
+resolution: workspace
+
+environment:
+  sdk: ^3.12.2
+  flutter: ">=1.17.0"
+
+dependencies:
+  core:
+    path: ../core
+  flutter:
+    sdk: flutter
+  path: ^1.9.1
+  path_provider: ^2.1.6
+  powersync: ^2.3.1
+  supabase_flutter: ^2.16.0
+
+dev_dependencies:
+  flutter_test:
+    sdk: flutter
+  mocktail: ^1.0.5
+
+flutter:

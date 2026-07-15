@@ -1,0 +1,4 @@
+-- Seed local (aplicado em `supabase db reset` / `supabase start`).
+-- Vazio por ora: os dados de teste da vertical slice são criados via signup
+-- programático nos testes de integração. Adicione seeds determinísticos aqui
+-- conforme necessário para o desenvolvimento local.

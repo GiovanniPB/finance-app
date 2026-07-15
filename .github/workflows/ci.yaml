@@ -1,0 +1,75 @@
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+    branches: [main]
+
+concurrency:
+  group: ci-${{ github.ref }}
+  cancel-in-progress: true
+
+env:
+  FLUTTER_VERSION: "3.44.6"
+
+jobs:
+  verify:
+    name: Format · Analyze · Test · Coverage
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: subosito/flutter-action@v2
+        with:
+          flutter-version: ${{ env.FLUTTER_VERSION }}
+          channel: stable
+          cache: true
+
+      - name: Resolve workspace (pub get)
+        run: flutter pub get
+
+      - name: Activate Melos
+        run: dart pub global activate melos
+
+      - name: Code generation
+        run: dart pub global run melos run gen --no-select
+
+      - name: Check formatting
+        run: dart format --output=none --set-exit-if-changed .
+
+      - name: Analyze
+        run: dart pub global run melos run analyze --no-select
+
+      - name: Test (with coverage)
+        run: dart pub global run melos run coverage --no-select
+
+      - name: Coverage gate (>= 80%)
+        run: bash tool/check_coverage.sh 80
+
+      - name: Upload coverage artifact
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: coverage
+          path: "**/coverage/lcov.info"
+          if-no-files-found: ignore
+
+  build-smoke:
+    name: Build smoke (web)
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: subosito/flutter-action@v2
+        with:
+          flutter-version: ${{ env.FLUTTER_VERSION }}
+          channel: stable
+          cache: true
+
+      - name: Resolve workspace (pub get)
+        run: flutter pub get
+
+      - name: Build web (dev entrypoint)
+        working-directory: apps/finance
+        run: flutter build web --target lib/main_dev.dart

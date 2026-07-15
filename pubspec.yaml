@@ -1,0 +1,58 @@
+name: finance_workspace
+description: >-
+  Monorepo raiz do app de finanças pessoais (Flutter + Supabase + PowerSync).
+  Este pacote existe apenas para definir o Pub Workspace e as ferramentas de
+  desenvolvimento compartilhadas — não contém código de aplicação.
+publish_to: none
+
+environment:
+  sdk: ^3.12.2
+
+# Pub Workspace: uma única resolução de dependências para todos os membros.
+# Rode `fvm dart pub get` (ou `fvm dart run melos bootstrap`) na raiz.
+workspace:
+  - apps/finance
+  - packages/core
+  - packages/database
+  - packages/design_system
+
+dev_dependencies:
+  # Orquestração do monorepo (scripts, filtros de pacote, versionamento).
+  melos: ^8.0.0
+  # Lints estritos compartilhados por todo o workspace (via analysis_options.yaml).
+  very_good_analysis: ^10.0.0
+
+# ---------------------------------------------------------------------------
+# Configuração do Melos (Melos 8 lê daqui quando há Pub Workspace).
+# ---------------------------------------------------------------------------
+melos:
+  scripts:
+    analyze:
+      description: Análise estática de todos os pacotes (falha em infos/warnings).
+      exec: dart analyze --fatal-infos --fatal-warnings .
+
+    format:
+      description: Verifica formatação (usado no CI).
+      exec: dart format --output=none --set-exit-if-changed .
+
+    format:fix:
+      description: Aplica a formatação.
+      exec: dart format .
+
+    gen:
+      description: Roda build_runner nos pacotes que dependem dele.
+      exec: dart run build_runner build
+      packageFilters:
+        dependsOn: build_runner
+
+    test:
+      description: Roda os testes de todos os pacotes com um diretório test/.
+      exec: flutter test
+      packageFilters:
+        dirExists: test
+
+    coverage:
+      description: Testes com cobertura (lcov) em todos os pacotes.
+      exec: flutter test --coverage
+      packageFilters:
+        dirExists: test

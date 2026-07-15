@@ -1,0 +1,27 @@
+# Lints estritos compartilhados por todo o monorepo.
+# Cada membro (apps/*, packages/*) inclui este arquivo via caminho relativo.
+include: package:very_good_analysis/analysis_options.yaml
+
+analyzer:
+  language:
+    strict-casts: true
+    strict-inference: true
+    strict-raw-types: true
+  exclude:
+    - "**/*.g.dart"
+    - "**/*.freezed.dart"
+    - "**/*.gr.dart"
+    - "**/*.mocks.dart"
+    - "**/generated_plugin_registrant.dart"
+  errors:
+    # Import de biblioteca não exportada como erro (fronteiras de pacote).
+    depend_on_referenced_packages: error
+    # TODOs não quebram o build, mas ficam visíveis.
+    todo: info
+
+linter:
+  rules:
+    # Reforços além do very_good_analysis, alinhados às regras do projeto.
+    public_member_api_docs: false # habilitar por pacote quando a API estabilizar
+    prefer_relative_imports: true
+    always_use_package_imports: false

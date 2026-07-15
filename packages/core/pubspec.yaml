@@ -1,0 +1,17 @@
+name: core
+description: >-
+  Utilitários transversais em Dart puro: tipos Result/Failure, logging,
+  configuração de ambiente e extensions. Sem dependência de Flutter.
+version: 0.1.0
+publish_to: none
+resolution: workspace
+
+environment:
+  sdk: ^3.12.2
+
+dependencies:
+  logging: ^1.3.0
+  meta: ^1.16.0
+
+dev_dependencies:
+  test: ^1.25.0

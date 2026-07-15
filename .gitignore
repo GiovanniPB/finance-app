@@ -1,0 +1,54 @@
+# ==========================================================================
+# Monorepo Flutter — .gitignore raiz
+# ==========================================================================
+
+# FVM (versão do Flutter pinada no .fvmrc; o cache do SDK não é versionado)
+.fvm/
+
+# Dart / Pub
+.dart_tool/
+.packages
+build/
+pubspec_overrides.yaml
+
+# Lockfiles dos membros: no Pub Workspace só o lockfile da raiz é versionado.
+apps/*/pubspec.lock
+packages/*/pubspec.lock
+
+# Código gerado (estratégia: NÃO versionar — regenerar via `melos run gen`)
+*.g.dart
+*.freezed.dart
+*.gr.dart
+*.mocks.dart
+*.config.dart
+
+# Cobertura
+coverage/
+*.lcov
+
+# Segredos / configuração de ambiente (ver env/example.json)
+env/*.json
+!env/example.json
+*.env
+.env*
+
+# IDE / editor
+.idea/
+*.iml
+.vscode/
+!.vscode/extensions.json
+!.vscode/launch.json
+!.vscode/settings.json
+
+# macOS
+.DS_Store
+
+# Flutter/Dart tooling
+.flutter-plugins
+.flutter-plugins-dependencies
+doc/api/
+
+# Symbolication / debug info de builds de release
+app.*.symbols
+app.*.map.json
+/debug-info/
