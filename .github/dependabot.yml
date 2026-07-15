@@ -1,23 +1,12 @@
 version: 2
 updates:
-  # Dependências Dart/Flutter de cada membro do workspace.
+  # Dependências Dart/Flutter. Com Pub Workspaces, a resolução ocorre só na
+  # raiz do workspace — o Dependabot deve apontar para "/" (não por pacote).
   - package-ecosystem: "pub"
-    directory: "/apps/finance"
+    directory: "/"
     schedule:
       interval: "weekly"
     open-pull-requests-limit: 5
-  - package-ecosystem: "pub"
-    directory: "/packages/core"
-    schedule:
-      interval: "weekly"
-  - package-ecosystem: "pub"
-    directory: "/packages/database"
-    schedule:
-      interval: "weekly"
-  - package-ecosystem: "pub"
-    directory: "/packages/design_system"
-    schedule:
-      interval: "weekly"
   # Actions do GitHub.
   - package-ecosystem: "github-actions"
     directory: "/"

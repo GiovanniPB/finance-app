@@ -70,6 +70,14 @@ jobs:
       - name: Resolve workspace (pub get)
         run: flutter pub get
 
+      - name: Activate Melos
+        run: dart pub global activate melos
+
+      # Arquivos gerados (*.g.dart, *.freezed.dart) não são versionados;
+      # é preciso gerá-los antes de compilar.
+      - name: Code generation
+        run: dart pub global run melos run gen --no-select
+
       - name: Build web (dev entrypoint)
         working-directory: apps/finance
         run: flutter build web --target lib/main_dev.dart
