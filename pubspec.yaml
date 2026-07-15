@@ -26,6 +26,19 @@ dev_dependencies:
 # Configuração do Melos (Melos 8 lê daqui quando há Pub Workspace).
 # ---------------------------------------------------------------------------
 melos:
+  # Usado para gerar links de commit nos CHANGELOGs.
+  repository: https://github.com/GiovanniPB/finance-app
+
+  command:
+    version:
+      # Versionamento automático a partir dos Conventional Commits.
+      # Cada pacote é versionado de forma independente e recebe sua própria tag
+      # (ex.: core-v0.2.0). `melos version` bumpa os pubspecs, atualiza os
+      # CHANGELOGs e cria as tags; rode na `main`.
+      linkToCommits: true
+      workspaceChangelog: true
+      branch: main
+
   scripts:
     analyze:
       description: Análise estática de todos os pacotes (falha em infos/warnings).

@@ -36,3 +36,31 @@
 | Feature (data/domain/presentation) | `apps/finance/lib/features/<feature>` |
 
 Features estabilizadas podem ser promovidas a pacotes em `packages/`.
+
+## Releases e versionamento
+
+O versionamento é automatizado pelo Melos a partir dos **Conventional Commits**
+(por isso a disciplina de commits importa). Cada pacote é versionado de forma
+independente e recebe a sua própria tag (ex.: `core-v0.2.0`).
+
+Regras de bump (semver): `fix:` → patch · `feat:` → minor · `!`/`BREAKING
+CHANGE` → major. `docs:`/`chore:`/`ci:`/`test:` não geram release.
+
+### Como criar um release
+
+Preferencialmente pelo workflow **Release (version)** no GitHub Actions
+(`workflow_dispatch`), que roda na `main`, versiona, gera CHANGELOGs, cria as
+tags e faz push. Use o input `dry_run` para pré-visualizar sem commitar.
+
+Localmente (a partir da `main` atualizada):
+
+```bash
+fvm dart run melos version --all        # --all inclui os pacotes privados
+git push --follow-tags origin main
+```
+
+> `--all` é necessário porque todos os pacotes são `publish_to: none`
+> (privados) — o Melos os pularia por padrão. Nada é publicado no pub.dev.
+
+Build e distribuição de artefatos (Android/iOS/web, lojas, OTA) são um passo
+futuro (Nível 2), a ser adicionado quando houver app publicável.
