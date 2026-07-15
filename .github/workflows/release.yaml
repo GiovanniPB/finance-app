@@ -1,0 +1,59 @@
+name: Release (version)
+
+# Disparo manual. Versiona os pacotes a partir dos Conventional Commits desde a
+# última tag, atualiza os CHANGELOGs e cria as tags — depois faz push na `main`.
+on:
+  workflow_dispatch:
+    inputs:
+      dry_run:
+        description: "Preview: calcula versões sem commitar/pushar"
+        type: boolean
+        default: false
+
+# Necessário para o push do commit de release e das tags.
+permissions:
+  contents: write
+
+concurrency:
+  group: release
+  cancel-in-progress: false
+
+env:
+  FLUTTER_VERSION: "3.44.6"
+
+jobs:
+  version:
+    name: Version & tag
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0 # histórico completo p/ o Melos ler os commits
+
+      - uses: subosito/flutter-action@v2
+        with:
+          flutter-version: ${{ env.FLUTTER_VERSION }}
+          channel: stable
+          cache: true
+
+      - name: Resolve workspace (pub get)
+        run: flutter pub get
+
+      - name: Activate Melos
+        run: dart pub global activate melos
+
+      - name: Configure git
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+
+      # --all: inclui pacotes privados (publish_to: none). --yes: não-interativo.
+      - name: Version (preview)
+        if: ${{ inputs.dry_run }}
+        run: dart pub global run melos version --all --yes --no-git-commit-version
+
+      - name: Version, tag e push
+        if: ${{ !inputs.dry_run }}
+        run: |
+          dart pub global run melos version --all --yes
+          git push --follow-tags origin main
