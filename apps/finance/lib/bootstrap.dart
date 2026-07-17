@@ -9,6 +9,7 @@ import 'package:supabase_flutter/supabase_flutter.dart';
 
 import 'app.dart';
 import 'di/providers.dart';
+import 'features/sync/sync_coordinator.dart';
 
 /// Ponto de entrada comum a todos os flavors. Inicializa serviços, abre o banco
 /// local e injeta as instâncias prontas na árvore de providers.
@@ -32,13 +33,19 @@ Future<void> bootstrap(AppEnv env) async {
       final powerSync = await PowerSyncService.open(path: dbPath);
       final connector = SupabaseConnector(powerSyncUrl: env.powersyncUrl);
 
+      // Ativa o ciclo de vida do sync via cascade: conecta o PowerSync ao
+      // autenticar e limpa os dados locais no logout (reage ao stream de auth).
+      final container = ProviderContainer(
+        overrides: [
+          appEnvProvider.overrideWithValue(env),
+          powerSyncServiceProvider.overrideWithValue(powerSync),
+          supabaseConnectorProvider.overrideWithValue(connector),
+        ],
+      )..read(syncCoordinatorProvider);
+
       runApp(
-        ProviderScope(
-          overrides: [
-            appEnvProvider.overrideWithValue(env),
-            powerSyncServiceProvider.overrideWithValue(powerSync),
-            supabaseConnectorProvider.overrideWithValue(connector),
-          ],
+        UncontrolledProviderScope(
+          container: container,
           child: const FinanceApp(),
         ),
       );
