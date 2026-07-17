@@ -14,13 +14,15 @@ import 'features/sync/sync_coordinator.dart';
 /// Ponto de entrada comum a todos os flavors. Inicializa serviços, abre o banco
 /// local e injeta as instâncias prontas na árvore de providers.
 Future<void> bootstrap(AppEnv env) async {
-  WidgetsFlutterBinding.ensureInitialized();
-
   AppLogger.configure(level: env.flavor.isProd ? Level.WARNING : Level.ALL);
   final log = AppLogger('bootstrap');
 
   await runZonedGuarded(
     () async {
+      // Inicializa as bindings DENTRO da mesma zona do runApp: com
+      // runZonedGuarded, inicializá-las na zona raiz causa "Zone mismatch".
+      WidgetsFlutterBinding.ensureInitialized();
+
       FlutterError.onError = (details) =>
           log.severe('FlutterError', details.exception, details.stack);
 
