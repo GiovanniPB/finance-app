@@ -1,15 +1,30 @@
 # =========================================================================
-# PowerSync Sync Rules
-# Define o que cada cliente baixa para o SQLite local. Aqui, cada usuário só
-# sincroniza as próprias linhas (isolamento por owner), espelhando o RLS do
-# Postgres. `request.user_id()` vem do JWT emitido pelo Supabase Auth.
+# PowerSync Sync Rules — define o que cada cliente baixa para o SQLite local.
+# Ver ADR 0004: acesso por membership de espaço. Dois grupos de buckets:
 #
-# Após editar, publique no PowerSync (Dashboard ou `powersync` CLI) e valide.
+#  • user_owned — o que é "meu" independentemente de espaço (perfil, contas do
+#    dono). Parâmetro vem do JWT do Supabase (request.user_id()).
+#  • by_space   — tudo com escopo de espaço, por membership. O parameter query
+#    lê space_members para derivar um bucket por espaço ativo do usuário
+#    (padrão canônico many-to-many do PowerSync).
+#
+# Espelha o RLS do Postgres. Após editar, publique no PowerSync (Dashboard ou
+# CLI `powersync`) e valide. Novas tabelas com escopo de espaço entram na lista
+# `by_space.data` conforme forem criadas (transactions, categories, budgets…).
 # =========================================================================
 bucket_definitions:
-  user_data:
-    # Um bucket por usuário autenticado.
+  user_owned:
     parameters: select request.user_id() as user_id
     data:
       - select * from profiles where id = bucket.user_id
       - select * from accounts where owner_id = bucket.user_id
+
+  by_space:
+    # Um bucket por espaço em que o usuário é membro ativo.
+    parameters: >-
+      select space_id from space_members
+      where user_id = request.user_id() and status = 'active'
+    data:
+      - select * from spaces where id = bucket.space_id
+      - select * from space_members where space_id = bucket.space_id
+      - select * from accounts where linked_space_id = bucket.space_id

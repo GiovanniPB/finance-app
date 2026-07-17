@@ -7,6 +7,8 @@ import '../features/accounts/data/accounts_repository_impl.dart';
 import '../features/accounts/domain/accounts_repository.dart';
 import '../features/auth/data/auth_repository_impl.dart';
 import '../features/auth/domain/auth_repository.dart';
+import '../features/spaces/data/spaces_repository_impl.dart';
+import '../features/spaces/domain/spaces_repository.dart';
 
 part 'providers.g.dart';
 
@@ -40,3 +42,7 @@ AccountsRepository accountsRepository(Ref ref) => AccountsRepositoryImpl(
   db: ref.watch(powerSyncServiceProvider).db,
   supabase: ref.watch(supabaseClientProvider),
 );
+
+@Riverpod(keepAlive: true)
+SpacesRepository spacesRepository(Ref ref) =>
+    SpacesRepositoryImpl(db: ref.watch(powerSyncServiceProvider).db);
