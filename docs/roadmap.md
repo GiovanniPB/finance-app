@@ -4,16 +4,21 @@ Documento vivo. O **PRD** define *o quê* e *por quê*; este arquivo registra
 *onde estamos*. Atualize junto com o PR que muda o estado.
 
 - Última atualização: **2026-07-27**
-- Branch de trabalho atual: `feat/categoria-usuario`
+- Branch de trabalho atual: `feat/onboarding`
 
 ---
 
 ## Estado em uma frase
 
-**A Fase 0 está a um item de fechar.** Dá para registrar um gasto em três toques,
-editar e excluir lançamento, definir e ajustar limite de orçamento com alerta em
-80% e 100%, criar categoria própria e trocar de espaço — tudo verificado no
-simulador contra sync real. Falta **só o onboarding**.
+**A Fase 0 está fechada.** Dá para ser apresentado ao produto, registrar um gasto
+em três toques, editar e excluir lançamento, definir e ajustar limite de orçamento
+com alerta em 80% e 100%, criar categoria própria e trocar de espaço — tudo
+verificado rodando no simulador contra Supabase e PowerSync reais.
+
+A próxima decisão é de produto, não de código: **começar a Fase 1 (poupança +
+Open Finance) ou pagar débitos antes**. Os candidatos a pagar primeiro estão
+abaixo — os testes de integração ausentes e a entidade `Account` pela metade são
+os que mais atrapalham a Fase 1, porque ela mexe justamente em contas.
 
 ## Por onde começar numa sessão nova
 
@@ -133,10 +138,29 @@ Três decisões que valem lembrar:
 e PowerSync reais). Foi essa passagem que revelou a duplicação na lista e o chip
 "Nova" exigindo seis arrastes — nenhum dos dois aparecia em teste de widget.
 
-### Pendente — é isto que fecha a Fase 0
+### Concluído na fatia de onboarding (branch `feat/onboarding`)
 
-- [ ] **Onboarding minimalista** — 3 telas de pilar + primeira ação (PRD §10.2).
-      É o único item que falta.
+| Item | Onde |
+|---|---|
+| Três telas de pilar, progresso em barras, "Pular" sempre visível | `.../onboarding/presentation/onboarding_page.dart` |
+| Fragmentos: o do pilar 1 é a `TransactionTile` de verdade | `.../onboarding/presentation/onboarding_pillars.dart` |
+| Entrega dentro da ação: abre o registro rápido com orientação de primeira vez | `quick_entry_sheet.dart` (`showFirstRunHint`) |
+| Preferência local sem dependência nova: tabela `localOnly` `app_prefs` | `packages/database/lib/src/schema.dart`, `.../onboarding/data/onboarding_store.dart` |
+| Guard de primeira execução no router (autenticar → apresentar → home) | `apps/finance/lib/router/app_router.dart` |
+
+Desenhado na rodada 2 do Claude Design e aprovado antes de virar Dart. As duas
+decisões que não se leem no código:
+
+- **O produto se apresenta com o próprio produto** — fragmento real da interface
+  em vez de ilustração. A regra de dinheiro do sistema (receita com `+` e cor,
+  despesa sem cor) é demonstrada nos primeiros dez segundos.
+- **Pilares 2 e 3 dizem que ainda não existem.** Chip de contorno em texto
+  apagado, nunca âmbar. Os fragmentos deles são esboço, não especificação das
+  telas das fases 1 e 2.
+
+### Fase 0 — completa
+
+Não há mais itens pendentes da Fase 0.
 
 ---
 
@@ -197,6 +221,11 @@ Ordenados por risco. Todos verificados no código.
       README. O CLAUDE.md §7 excluí a glue de sync/composição da métrica de
       cobertura justamente esperando que ela seja coberta por integração.
 - [ ] **Golden tests ausentes.** Depende de empacotar as fontes primeiro (abaixo).
+- [ ] **A flag de onboarding é por aparelho e some no logout.** Fica em tabela
+      `localOnly`, e `disconnectAndClear()` apaga junto. Consequência: trocar de
+      conta no mesmo aparelho mostra a apresentação de novo (defensável), e
+      reinstalar também (menos defensável). Levar para `profiles` exigiria
+      migration + coluna no schema do PowerSync + republicar sync rules.
 - [ ] **Remover/editar categoria não existe na UI.** `CategoriesRepository`
       tem `delete` (com guarda para não apagar categoria de sistema), mas a folha
       só cria: uma categoria criada por engano fica permanente, só sai por SQL.
