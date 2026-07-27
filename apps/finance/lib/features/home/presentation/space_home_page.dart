@@ -12,6 +12,7 @@ import '../../categories/presentation/categories_providers.dart';
 import '../../spaces/presentation/spaces_providers.dart';
 import '../../transactions/domain/transaction.dart';
 import '../../transactions/presentation/quick_entry_sheet.dart';
+import '../../transactions/presentation/transaction_edit_sheet.dart';
 import '../../transactions/presentation/transaction_list.dart';
 import '../../transactions/presentation/transactions_page.dart';
 import '../../transactions/presentation/transactions_providers.dart';
@@ -323,7 +324,12 @@ class _RecentActivity extends StatelessWidget {
   Widget build(BuildContext context) => Column(
     children: [
       for (final day in TransactionDay.groupByDay(transactions))
-        TransactionDaySection(day: day, categoriesById: categoriesById),
+        TransactionDaySection(
+          day: day,
+          categoriesById: categoriesById,
+          onTapTransaction: (transaction) =>
+              TransactionEditSheet.show(context, transaction),
+        ),
     ],
   );
 }
