@@ -153,15 +153,19 @@ class _Row extends StatelessWidget {
         ? CategoryIcons.uncategorized
         : CategoryIcons.resolve(category!.iconKey);
 
+    final described = transaction.description?.trim();
+    final hasDescription = described != null && described.isNotEmpty;
+
     return TransactionTile(
-      description: transaction.description?.trim().isNotEmpty ?? false
-          ? transaction.description!
-          : categoryName ?? 'Sem descrição',
+      description: hasDescription ? described : categoryName ?? 'Sem descrição',
       amount: transaction.amount,
       icon: icon,
       // Receita usa o swatch da marca; despesa, a matiz da categoria.
       categoryId: transaction.isIncome ? null : transaction.categoryId,
-      meta: categoryName,
+      categoryColorIndex: transaction.isIncome ? null : category?.colorIndex,
+      // Sem descrição, o título já é o nome da categoria: repeti-lo embaixo
+      // ("Alimentação / Alimentação") gasta uma linha para não dizer nada.
+      meta: hasDescription ? categoryName : null,
       isIncome: transaction.isIncome,
       onTap: onTap == null ? null : () => onTap!(transaction),
     );

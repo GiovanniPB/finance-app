@@ -4,6 +4,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../../categories/domain/category.dart';
 import '../../categories/presentation/categories_providers.dart';
+import '../../categories/presentation/category_form_sheet.dart';
 import '../../categories/presentation/category_picker.dart';
 import '../domain/transaction.dart';
 import 'transaction_edit_controller.dart';
@@ -116,6 +117,12 @@ class _TransactionEditSheetState extends ConsumerState<TransactionEditSheet> {
                       categories: categories,
                       selectedId: state.categoryId,
                       onSelected: _controller.selectCategory,
+                      onCreate: () async {
+                        final created = await CategoryFormSheet.show(context);
+                        if (created != null) {
+                          _controller.selectCategory(created);
+                        }
+                      },
                     ),
                     const SizedBox(height: AppSpacing.lg),
                     _DateField(

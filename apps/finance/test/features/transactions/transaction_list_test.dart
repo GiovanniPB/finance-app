@@ -169,8 +169,9 @@ void main() {
         tx(minor: 100, occurredAt: DateTime.now(), description: null),
       ]);
 
-      // Alimentação aparece como título e como metadado.
-      expect(find.text('Alimentação'), findsWidgets);
+      // Uma vez só: com o título já sendo o nome da categoria, repeti-lo no
+      // metadado gastava uma linha para não dizer nada.
+      expect(find.text('Alimentação'), findsOneWidget);
     });
 
     testWidgets('descrição em branco também cai na categoria', (tester) async {
@@ -178,7 +179,18 @@ void main() {
         tx(minor: 100, occurredAt: DateTime.now(), description: '   '),
       ]);
 
-      expect(find.text('Alimentação'), findsWidgets);
+      expect(find.text('Alimentação'), findsOneWidget);
+    });
+
+    testWidgets('com descrição, a categoria aparece como metadado', (
+      tester,
+    ) async {
+      await pumpList(tester, [
+        tx(minor: 100, occurredAt: DateTime.now(), description: 'Padaria'),
+      ]);
+
+      expect(find.text('Padaria'), findsOneWidget);
+      expect(find.text('Alimentação'), findsOneWidget);
     });
 
     testWidgets('sem descrição nem categoria mostra fallback', (tester) async {

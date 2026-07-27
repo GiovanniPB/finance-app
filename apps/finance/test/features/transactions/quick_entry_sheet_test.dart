@@ -211,14 +211,23 @@ void main() {
       expect(find.text('Alimentação'), findsOneWidget);
     });
 
-    testWidgets('sem categorias avisa que está sincronizando', (tester) async {
+    testWidgets('sem categorias, diz o que sabe e oferece criar', (
+      tester,
+    ) async {
       await pumpSheet(
         tester,
         repo: RecordingTransactionsRepository(),
         categories: const [],
       );
 
-      expect(find.text('Sincronizando categorias…'), findsOneWidget);
+      // A cópia anterior ("Sincronizando categorias…") era um beco sem saída:
+      // sem categoria o Salvar nunca habilita, e o app não distingue sync em
+      // andamento de ausência real.
+      expect(
+        find.text('Nenhuma categoria sincronizada ainda.'),
+        findsOneWidget,
+      );
+      expect(find.byKey(const Key('create_category')), findsOneWidget);
     });
 
     testWidgets('Salvar habilita com valor + categoria', (tester) async {
