@@ -5,6 +5,8 @@ import 'package:finance/features/budgets/domain/budget.dart';
 import 'package:finance/features/budgets/domain/budgets_repository.dart';
 import 'package:finance/features/categories/domain/categories_repository.dart';
 import 'package:finance/features/categories/domain/category.dart';
+import 'package:finance/features/onboarding/domain/onboarding_preferences.dart';
+import 'package:finance/features/onboarding/presentation/onboarding_providers.dart';
 import 'package:finance/features/spaces/domain/space.dart';
 import 'package:finance/features/spaces/domain/spaces_repository.dart';
 import 'package:finance/features/transactions/domain/transaction.dart';
@@ -105,6 +107,21 @@ class FakeBudgetsRepository implements BudgetsRepository {
       throw UnimplementedError();
 }
 
+/// Preferência de primeira execução que só conta as gravações.
+class FakeOnboardingPreferences implements OnboardingPreferences {
+  /// Quantas vezes a apresentação foi concluída ou pulada.
+  int marked = 0;
+
+  @override
+  Future<bool> hasSeen() async => marked > 0;
+
+  @override
+  Future<Result<void, Failure>> markSeen() async {
+    marked++;
+    return const Ok(null);
+  }
+}
+
 // ---------------------------------------------------------------------------
 // Fábricas de dado de teste
 // ---------------------------------------------------------------------------
@@ -196,6 +213,11 @@ Future<void> pumpScreen(
   List<Budget> budgets = const [],
   TransactionsRepository? transactionsRepository,
   BudgetsRepository? budgetsRepository,
+  OnboardingPreferences? onboardingPreferences,
+
+  /// Estado da apresentação no boot. O padrão é `true` — "já viu" — porque é o
+  /// que toda tela que não é a apresentação pressupõe.
+  bool onboardingSeenAtBoot = true,
   bool dark = false,
   bool wrapInScaffold = true,
   bool settle = true,
@@ -215,6 +237,10 @@ Future<void> pumpScreen(
         budgetsRepositoryProvider.overrideWithValue(
           budgetsRepository ?? FakeBudgetsRepository(budgets),
         ),
+        onboardingStoreProvider.overrideWithValue(
+          onboardingPreferences ?? FakeOnboardingPreferences(),
+        ),
+        onboardingSeenAtBootProvider.overrideWithValue(onboardingSeenAtBoot),
       ],
       child: MaterialApp(
         theme: dark ? AppTheme.dark() : AppTheme.light(),

@@ -9,6 +9,8 @@ import 'package:supabase_flutter/supabase_flutter.dart';
 
 import 'app.dart';
 import 'di/providers.dart';
+import 'features/onboarding/data/onboarding_store.dart';
+import 'features/onboarding/presentation/onboarding_providers.dart';
 import 'features/sync/sync_coordinator.dart';
 
 /// Ponto de entrada comum a todos os flavors. Inicializa serviços, abre o banco
@@ -35,6 +37,10 @@ Future<void> bootstrap(AppEnv env) async {
       final powerSync = await PowerSyncService.open(path: dbPath);
       final connector = SupabaseConnector(powerSyncUrl: env.powersyncUrl);
 
+      // Lido aqui, e não num provider assíncrono, para o guard de rota decidir
+      // no primeiro frame se mostra a apresentação (ver onboarding_providers).
+      final seenOnboarding = await OnboardingStore(db: powerSync.db).hasSeen();
+
       // Ativa o ciclo de vida do sync via cascade: conecta o PowerSync ao
       // autenticar e limpa os dados locais no logout (reage ao stream de auth).
       final container = ProviderContainer(
@@ -42,6 +48,7 @@ Future<void> bootstrap(AppEnv env) async {
           appEnvProvider.overrideWithValue(env),
           powerSyncServiceProvider.overrideWithValue(powerSync),
           supabaseConnectorProvider.overrideWithValue(connector),
+          onboardingSeenAtBootProvider.overrideWithValue(seenOnboarding),
         ],
       )..read(syncCoordinatorProvider);
 

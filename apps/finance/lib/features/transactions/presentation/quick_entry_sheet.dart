@@ -15,14 +15,23 @@ import 'quick_entry_controller.dart';
 /// despesa (o caso esmagadoramente mais comum), espaço é o ativo. Caminho
 /// mínimo: **digitar valor → tocar categoria → Salvar**.
 class QuickEntrySheet extends ConsumerWidget {
-  const QuickEntrySheet({super.key});
+  const QuickEntrySheet({this.showFirstRunHint = false, super.key});
+
+  /// Acrescenta uma linha de orientação no topo, para a primeira vez.
+  ///
+  /// Só a apresentação inicial usa isto: um campo de valor em branco levanta
+  /// uma pergunta ("qual gasto?") que vale responder uma vez, e nunca mais.
+  final bool showFirstRunHint;
 
   /// Abre o sheet. Devolve `true` quando uma transação foi salva.
-  static Future<bool?> show(BuildContext context) => showModalBottomSheet<bool>(
+  static Future<bool?> show(
+    BuildContext context, {
+    bool showFirstRunHint = false,
+  }) => showModalBottomSheet<bool>(
     context: context,
     isScrollControlled: true,
     useSafeArea: true,
-    builder: (_) => const QuickEntrySheet(),
+    builder: (_) => QuickEntrySheet(showFirstRunHint: showFirstRunHint),
   );
 
   @override
@@ -43,6 +52,7 @@ class QuickEntrySheet extends ConsumerWidget {
         mainAxisSize: MainAxisSize.min,
         children: [
           const SheetGrabHandle(),
+          if (showFirstRunHint) const _FirstRunHint(),
           AppSegmentedControl(
             segments: const ['Despesa', 'Receita'],
             selectedIndex: state.type == TransactionType.income ? 1 : 0,
@@ -97,4 +107,39 @@ class QuickEntrySheet extends ConsumerWidget {
       ),
     );
   }
+}
+
+/// Orientação de primeira vez, dentro da folha.
+///
+/// Fica aqui e não sobre o scrim: sobre o scrim ela colidia com o saldo atrás —
+/// e dentro da folha é o próprio widget que sabe quando é a primeira vez.
+///
+/// "Qualquer um serve" tira o peso da escolha, e "dá para corrigir depois" é
+/// uma promessa que o produto cumpre: existe folha de edição.
+class _FirstRunHint extends StatelessWidget {
+  const _FirstRunHint();
+
+  @override
+  Widget build(BuildContext context) => Padding(
+    padding: const EdgeInsets.only(bottom: AppSpacing.lg),
+    child: Column(
+      children: [
+        Text(
+          'Comece pelo gasto mais recente.',
+          textAlign: TextAlign.center,
+          style: context.texts.titleSmall,
+        ),
+        const SizedBox(height: 2),
+        Text(
+          'Qualquer um serve. Dá para corrigir depois.',
+          textAlign: TextAlign.center,
+          style: context.texts.bodySmall?.copyWith(
+            color: context.tokens.textMuted,
+          ),
+        ),
+        const SizedBox(height: AppSpacing.lg),
+        Divider(height: 1, color: context.tokens.hairline),
+      ],
+    ),
+  );
 }
