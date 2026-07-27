@@ -69,3 +69,12 @@ melos:
       exec: flutter test --coverage
       packageFilters:
         dirExists: test
+
+    integration:
+      description: >-
+        Testes de integração sobre um PowerSync local de verdade. Rodam na
+        máquina (sem simulador) e não entram na métrica de cobertura: existem
+        justamente para cobrir a glue que ela exclui.
+      exec: flutter test integration_test
+      packageFilters:
+        dirExists: integration_test
