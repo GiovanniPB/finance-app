@@ -4,16 +4,16 @@ Documento vivo. O **PRD** define *o quê* e *por quê*; este arquivo registra
 *onde estamos*. Atualize junto com o PR que muda o estado.
 
 - Última atualização: **2026-07-27**
-- Branch de trabalho atual: `feat/transacao-edicao`
+- Branch de trabalho atual: `feat/categoria-usuario`
 
 ---
 
 ## Estado em uma frase
 
-**O loop central da Fase 0 fecha.** Dá para registrar um gasto em três toques,
-ver a lista do mês agrupada por dia, definir e ajustar limite de orçamento com
-alerta em 80% e 100%, e trocar de espaço. Faltam duas telas acessórias (abaixo)
-e o onboarding.
+**A Fase 0 está a um item de fechar.** Dá para registrar um gasto em três toques,
+editar e excluir lançamento, definir e ajustar limite de orçamento com alerta em
+80% e 100%, criar categoria própria e trocar de espaço — tudo verificado no
+simulador contra sync real. Falta **só o onboarding**.
 
 ## Por onde começar numa sessão nova
 
@@ -27,9 +27,18 @@ e o onboarding.
 4. Antes de mexer em UI, leia a doc de `AppTokens` em
    `packages/design_system/lib/src/theme/app_tokens.dart` — a regra "despesa é o
    estado neutro" é a espinha do sistema visual.
-5. Para rodar: `supabase start` (precisa de Docker) e depois
+5. Para rodar: **não precisa de Docker.** O `env/dev.json` aponta para um
+   Supabase e um PowerSync **na nuvem** (o `supabase start` local existe para
+   testar migrations, não para rodar o app).
    `cd apps/finance && fvm flutter run -d iphone --target lib/main_dev.dart --dart-define-from-file=../../env/dev.json`.
    Criar conta é passo manual.
+6. **Se as telas ficarem vazias ou o registro rápido travar em "nenhuma
+   categoria", suspeite das sync rules publicadas.** O arquivo
+   `powersync/sync_rules.yaml` do repo **não é publicado automaticamente**: toda
+   vez que ele muda, é preciso colar o conteúdo no editor de Sync Rules do
+   dashboard do PowerSync e fazer Deploy. Para diagnosticar, inspecione o SQLite
+   local do app (`ps_buckets` mostra quais buckets chegaram) — foi assim que se
+   descobriu que faltava o bucket `global`.
 
 ---
 
@@ -110,12 +119,24 @@ Três decisões que valem lembrar:
 - **Ações em rodapé fixo**, campos rolando acima: seis campos e um teclado não
   cabem numa tela pequena.
 
+### Concluído na fatia de categoria (branch `feat/categoria-usuario`)
+
+| Item | Onde |
+|---|---|
+| Folha de criar categoria: nome, ícone, matiz, com prévia | `.../categories/presentation/category_form_sheet.dart` |
+| Controller da criação | `.../categories/presentation/category_form_controller.dart` |
+| `colorIndex` passa a ser **renderizado** (`colorsAt` + `CategorySwatch.colorIndex`) | `packages/design_system` |
+| Chip "Nova" fora da rolagem, e estado vazio com saída | `.../categories/presentation/category_picker.dart` |
+| Fim da duplicação "Alimentação / Alimentação" na lista | `.../transactions/presentation/transaction_list.dart` |
+
+**As telas foram vistas renderizadas** (iPhone 17 Pro, simulador, contra Supabase
+e PowerSync reais). Foi essa passagem que revelou a duplicação na lista e o chip
+"Nova" exigindo seis arrastes — nenhum dos dois aparecia em teste de widget.
+
 ### Pendente — é isto que fecha a Fase 0
 
 - [ ] **Onboarding minimalista** — 3 telas de pilar + primeira ação (PRD §10.2).
-- [ ] **Criar categoria de usuário.** Repositório pronto; sem UI. Hoje o
-      formulário de orçamento diz "todas as categorias já têm limite neste mês"
-      quando acabam as categorias — o caminho para criar uma nova sai daqui.
+      É o único item que falta.
 
 ---
 
@@ -176,10 +197,12 @@ Ordenados por risco. Todos verificados no código.
       README. O CLAUDE.md §7 excluí a glue de sync/composição da métrica de
       cobertura justamente esperando que ela seja coberta por integração.
 - [ ] **Golden tests ausentes.** Depende de empacotar as fontes primeiro (abaixo).
-- [ ] **As telas nunca foram vistas renderizadas com fonte real.** A verificação
-      até agora é por teste de widget (alturas, ausência de overflow nos dois
-      temas). Para olhar de fato é preciso uma sessão autenticada, e criar conta
-      não é algo que o agente faça — é passo manual.
+- [ ] **Remover/editar categoria não existe na UI.** `CategoriesRepository`
+      tem `delete` (com guarda para não apagar categoria de sistema), mas a folha
+      só cria: uma categoria criada por engano fica permanente, só sai por SQL.
+      O desenho pendente é permitir remover **apenas categoria sem lançamento
+      algum** — o caso "tem lançamento" é pergunta de produto (reatribuir?
+      deixar sem categoria?), o caso "recém-criada por engano" é trivial.
 - [ ] **Abas sem URL própria.** O `AppShell` usa `IndexedStack`, então deep link
       por aba não funciona. Quando virar requisito, trocar por
       `StatefulShellRoute` do go_router.
@@ -209,7 +232,15 @@ Ordenados por risco. Todos verificados no código.
       `ink-500` para `ink-600` por isso), mas sem verificação automática. Checar
       `textMuted` sobre `surfaceSunken` e o âmbar no tema escuro.
 - [ ] **Set de ícones não escolhido.** Hoje Material Icons. Decidir antes de as
-      telas multiplicarem os pontos de uso.
+      telas multiplicarem os pontos de uso. O formulário de categoria já oferece
+      nove chaves (`CategoryIcons.selectable`), então trocar de set agora custa
+      mais que antes.
+- [ ] **O FAB "Novo limite" é o único componente que lê como Material padrão.**
+      Visto no simulador. Vale passar pela rodada de design em vez de eu
+      arbitrar.
+- [ ] **A fila de categorias corta o último chip visível** contra o chip "Nova"
+      ancorado. Funciona, mas o corte parece defeito de renderização; a saída
+      usual é um fade na borda da rolagem.
 
 ---
 
@@ -218,9 +249,10 @@ Ordenados por risco. Todos verificados no código.
 | Item | Estado |
 |---|---|
 | macOS desktop | ✅ Roda. Entitlement `network.client` corrigida no PR #10. |
-| iOS Simulator | ✅ Xcode 26.1.1, simuladores disponíveis. `127.0.0.1` alcança o host. |
+| iOS Simulator | ✅ Xcode 26.1.1. Verificado rodando de fato: `fvm flutter build ios --simulator --debug` + instalar o `Runner.app`. |
 | Supabase local | ✅ Configurado nas portas 553xx (offset +1000, coexiste com `finance-dashboard`). Exige Docker de pé. |
-| **PowerSync** | ⚠️ `POWERSYNC_URL` em `env/dev.json` é **placeholder** (`REPLACE-WITH-YOUR-POWERSYNC-INSTANCE`). O app boota (o `AppEnv` valida presença, não formato), mas o sync falha ao conectar. Precisa de uma instância (Cloud free tier ou self-hosted) apontada para o Postgres local, com as sync rules publicadas. |
+| **PowerSync** | ✅ Instância Cloud (ambiente Development) ligada ao Supabase da nuvem, com as sync rules do repo publicadas. ⚠️ **Publicar é manual**: o arquivo do repo não sobe sozinho, e regras velhas se manifestam como tabela vazia no cliente sem erro nenhum. |
+| **Supabase (nuvem)** | ✅ Projeto `ivfcypfljxvwkvnvmuum`, 5 migrations aplicadas, 10 categorias de sistema semeadas, 7 tabelas com `REPLICA IDENTITY FULL` na publication `powersync`. É o que o `env/dev.json` usa. |
 | Web (Chrome) | ⚠️ Compila, mas falta `sqlite3.wasm` + worker em `apps/finance/web/`. `PowerSyncService.open()` falharia. |
 | Android | ⚠️ Três bloqueios: `cmdline-tools` ausente, nenhum AVD criado, e o `env/dev.json` não serve (no emulador o host é `10.0.2.2`, não `127.0.0.1`, e o Android 9+ bloqueia cleartext — o `AndroidManifest.xml` não tem exceção). Precisaria de `env/dev-android.json` + network security config. |
 
