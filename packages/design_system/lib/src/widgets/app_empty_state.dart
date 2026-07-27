@@ -9,6 +9,11 @@ import 'app_button.dart';
 /// **Sempre nomeia a próxima ação.** "Nenhum dado" sozinho é um beco sem saída;
 /// por isso [actionLabel] e [onAction] existem, e o corpo é escrito para
 /// convidar em vez de informar uma ausência.
+///
+/// Mede pelo conteúdo, e não pelo espaço disponível. Sem isso, o card só ficava
+/// do tamanho certo dentro de um `ListView` (que oferece altura infinita, e aí
+/// a `Column` encolhe sozinha); num `Center` de tela inteira ele esticava até a
+/// borda e lia como caixa de placeholder em vez de estado desenhado.
 class AppEmptyState extends StatelessWidget {
   const AppEmptyState({
     required this.icon,
@@ -47,6 +52,7 @@ class AppEmptyState extends StatelessWidget {
         border: Border.all(color: tokens.hairlineStrong),
       ),
       child: Column(
+        mainAxisSize: MainAxisSize.min,
         children: [
           Container(
             height: 44,

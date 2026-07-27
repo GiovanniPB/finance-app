@@ -17,6 +17,10 @@ dependencies:
     path: ../../packages/design_system
   flutter:
     sdk: flutter
+  # Traduções dos widgets do Material (seletor de data, tooltips padrão). Vem do
+  # SDK, não é pacote de terceiro.
+  flutter_localizations:
+    sdk: flutter
   flutter_riverpod: ^3.3.2
   freezed_annotation: ^3.1.0
   go_router: ^17.3.0

@@ -293,7 +293,11 @@ class _TypeRow extends StatelessWidget {
           ),
           child: Row(
             children: [
-              CategorySwatch.brand(icon: GoalIcons.forType(type)),
+              // Na linha marcada o swatch é a marca SÓLIDA, não `brandSubtle`:
+              // o fundo da linha já é `brandSubtle`, e um swatch da mesma cor
+              // simplesmente desaparece — o ícone fica solto no ar, como se o
+              // desenho tivesse esquecido dele.
+              _TypeSwatch(type: type, isSelected: isSelected),
               const SizedBox(width: AppSpacing.md),
               Expanded(
                 child: Column(
@@ -318,6 +322,37 @@ class _TypeRow extends StatelessWidget {
               ],
             ],
           ),
+        ),
+      ),
+    );
+  }
+}
+
+/// Swatch do tipo, que inverte na linha marcada.
+class _TypeSwatch extends StatelessWidget {
+  const _TypeSwatch({required this.type, required this.isSelected});
+
+  final SavingsGoalType type;
+  final bool isSelected;
+
+  @override
+  Widget build(BuildContext context) {
+    if (!isSelected) {
+      return CategorySwatch.brand(icon: GoalIcons.forType(type));
+    }
+
+    return Container(
+      height: AppSizes.categorySwatch,
+      width: AppSizes.categorySwatch,
+      decoration: BoxDecoration(
+        color: context.colors.primary,
+        borderRadius: AppRadii.brMd,
+      ),
+      child: Center(
+        child: Icon(
+          GoalIcons.forType(type),
+          size: AppSizes.categorySwatch * 0.5,
+          color: context.colors.onPrimary,
         ),
       ),
     );

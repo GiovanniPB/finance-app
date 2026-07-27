@@ -385,6 +385,18 @@ Ordenados por risco. Todos verificados no código.
       [ADR 0004](adr/0004-multi-tenancy-por-espacos.md) e viraria vazamento
       entre membros assim que um household vinculasse contas.
 
+- [x] **O app inteiro mostrava widget do Material em inglês.** Não havia
+      `localizationsDelegates`, então todo texto que vem do Flutter (e não do
+      nosso código) saía em inglês: o seletor de data do prazo da meta aparecia
+      como "Fri, Jan 1 / January 2027 / Cancel / OK" no meio de um app em
+      português. Nenhuma revisão de código pegaria — o texto não está no repo. Só
+      rodar e olhar. Corrigido com `flutter_localizations` e `pt_BR` como único
+      idioma declarado.
+- [x] **`AppEmptyState` esticava até a borda da tela.** O `Column` não tinha
+      `mainAxisSize.min`, então o card só ficava do tamanho certo dentro de um
+      `ListView` (que dá altura infinita). Num `Center` de tela cheia — o caso da
+      aba Poupança vazia, e também do "Sincronizando" da home — ele virava uma
+      moldura do tamanho da tela e lia como caixa de placeholder.
 - [x] **`AmountDisplay` estourava com valor de cinco dígitos.** A partir de
       `R$ 8.000,00`, 40px mono não cabia na largura de uma folha em tela de
       390px, e o Flutter pintava a faixa de overflow — em **qualquer** folha que
