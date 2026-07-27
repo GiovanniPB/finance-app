@@ -3,7 +3,7 @@ import 'package:riverpod_annotation/riverpod_annotation.dart';
 
 import '../features/auth/presentation/auth_providers.dart';
 import '../features/auth/presentation/login_page.dart';
-import '../features/home/presentation/home_page.dart';
+import '../features/shell/presentation/app_shell.dart';
 
 part 'app_router.g.dart';
 
@@ -33,7 +33,7 @@ GoRouter goRouter(Ref ref) {
     routes: [
       GoRoute(
         path: Routes.home,
-        builder: (context, state) => const HomePage(),
+        builder: (context, state) => const AppShell(),
       ),
       GoRoute(
         path: Routes.signIn,

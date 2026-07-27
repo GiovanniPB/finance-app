@@ -49,20 +49,21 @@ design system completo estão de pé. Nenhuma transação pode ser registrada ai
 | Data: os três repositories sobre SQL bruto | `.../data` |
 | Providers: mês em foco, transações do mês, resumo, categorias indexadas, uso de orçamento | `.../presentation` |
 | **Escopo de espaço em `accounts` corrigido** (débito de risco alto) | `apps/finance/lib/features/accounts` |
+| Shell de navegação com as 4 abas + ação central | `apps/finance/lib/features/shell` |
+| Registro rápido: teclado numérico próprio, 3 toques até salvar | `.../transactions/presentation/quick_entry_*` |
+| Lista de transações agrupada por dia, com total do dia | `.../transactions/presentation/transaction_list.dart`, `transactions_page.dart` |
+| Home do espaço: saldo como momento alto, orçamento, atividade recente | `.../home/presentation/space_home_page.dart` |
+| Página de espaços com troca de contexto | `.../spaces/presentation/spaces_page.dart` |
+| Orçamento: acumulado vs. limite com limiares de 80% / 100% (RN-1.3) | `BudgetUsage` + `BudgetProgress` |
 
 ### Pendente — é isto que fecha a Fase 0
 
-- [ ] **Shell de navegação** com `AppBottomNav` (Início · Espaços · + · Social ·
-      Perfil), com Social e Perfil como placeholders honestos.
-- [ ] **Tela de registro rápido** — teclado numérico próprio, campos
-      pré-preenchidos, caminho mínimo de 3 toques.
-- [ ] **Lista de transações** — seções por dia com total, estado de
-      "aguardando envio".
-- [ ] **Home do espaço** — saldo do mês como momento alto, tiras de orçamento,
-      atividade recente.
-- [ ] **Orçamento mensal básico** — cálculo de acumulado vs. limite e alertas em
-      80% / 100% (RN-1.3).
-- [ ] **Onboarding minimalista** — 3 telas de pilar + primeira ação.
+- [ ] **Onboarding minimalista** — 3 telas de pilar + primeira ação (PRD §10.2).
+- [ ] **Tela de criar/editar orçamento.** O cálculo e a exibição existem, mas
+      não há UI para definir um limite — hoje só entra por SQL direto.
+- [ ] **Detalhe/edição de transação.** `TransactionsRepository.update` e
+      `delete` existem e estão testados; falta a tela (PRD §11.2).
+- [ ] **Criar categoria de usuário.** Repositório pronto; sem UI.
 
 ---
 
@@ -108,6 +109,16 @@ Ordenados por risco. Todos verificados no código.
       README. O CLAUDE.md §7 excluí a glue de sync/composição da métrica de
       cobertura justamente esperando que ela seja coberta por integração.
 - [ ] **Golden tests ausentes.** Depende de empacotar as fontes primeiro (abaixo).
+- [ ] **As telas nunca foram vistas renderizadas com fonte real.** A verificação
+      até agora é por teste de widget (alturas, ausência de overflow nos dois
+      temas). Para olhar de fato é preciso uma sessão autenticada, e criar conta
+      não é algo que o agente faça — é passo manual.
+- [ ] **Abas sem URL própria.** O `AppShell` usa `IndexedStack`, então deep link
+      por aba não funciona. Quando virar requisito, trocar por
+      `StatefulShellRoute` do go_router.
+- [ ] **Duplicação de fakes nos testes.** `test/helpers/app_harness.dart`
+      centraliza os fakes, mas quatro arquivos de teste anteriores ainda têm a
+      sua própria cópia. Vale migrá-los.
 
 ### Baixo
 
