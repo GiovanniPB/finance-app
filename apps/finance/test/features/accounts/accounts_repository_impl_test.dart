@@ -78,6 +78,7 @@ void main() {
     name: 'Conta corrente',
     type: AccountType.checking,
     currentBalance: const Money.fromMinor(25000),
+    balanceAsOf: DateTime.utc(2026, 7, 14, 12),
     isSavingsTarget: false,
     createdAt: DateTime.utc(2026, 7, 14, 12),
     updatedAt: DateTime.utc(2026, 7, 14, 12),
@@ -294,6 +295,46 @@ void main() {
       verifyNever(() => db.execute(any(), any()));
     });
 
+    // A razão de `balance_as_of` existir: renomear a conta não pode fazer a
+    // tela afirmar que o saldo foi conferido hoje.
+    test('renomear não renova a data do saldo', () async {
+      when(
+        () => db.execute(any(), any()),
+      ).thenAnswer((_) async => emptyResultSet());
+
+      final repo = AccountsRepositoryImpl(
+        db: db,
+        supabase: supabase,
+        now: () => DateTime.utc(2026, 7, 28, 9),
+        genId: () => 'acc-1',
+      );
+      final result = await repo.update(
+        testAccount().copyWith(name: 'Outro nome'),
+      );
+
+      expect(result.valueOrNull?.balanceAsOf, DateTime.utc(2026, 7, 14, 12));
+      expect(result.valueOrNull?.updatedAt, DateTime.utc(2026, 7, 28, 9));
+    });
+
+    test('saldo novo renova a data do saldo', () async {
+      when(
+        () => db.execute(any(), any()),
+      ).thenAnswer((_) async => emptyResultSet());
+
+      final repo = AccountsRepositoryImpl(
+        db: db,
+        supabase: supabase,
+        now: () => DateTime.utc(2026, 7, 28, 9),
+        genId: () => 'acc-1',
+      );
+      final result = await repo.update(
+        testAccount().copyWith(currentBalance: const Money.fromMinor(99900)),
+        balanceChanged: true,
+      );
+
+      expect(result.valueOrNull?.balanceAsOf, DateTime.utc(2026, 7, 28, 9));
+    });
+
     test('retorna DatabaseFailure quando o banco lança', () async {
       when(() => db.execute(any(), any())).thenThrow(Exception('db down'));
 
@@ -339,8 +380,8 @@ void main() {
           CREATE TABLE accounts_data (
             id TEXT PRIMARY KEY, owner_id TEXT, linked_space_id TEXT,
             name TEXT, account_type TEXT, institution TEXT, currency TEXT,
-            current_balance_minor INTEGER, is_savings_target INTEGER,
-            created_at TEXT, updated_at TEXT
+            current_balance_minor INTEGER, balance_as_of TEXT,
+            is_savings_target INTEGER, created_at TEXT, updated_at TEXT
           );
         ''')
         ..execute('CREATE VIEW accounts AS SELECT * FROM accounts_data;')
@@ -348,11 +389,11 @@ void main() {
           CREATE TRIGGER accounts_insert INSTEAD OF INSERT ON accounts BEGIN
             INSERT INTO accounts_data (id, owner_id, linked_space_id, name,
               account_type, institution, currency, current_balance_minor,
-              is_savings_target, created_at, updated_at)
+              balance_as_of, is_savings_target, created_at, updated_at)
             VALUES (new.id, new.owner_id, new.linked_space_id, new.name,
               new.account_type, new.institution, new.currency,
-              new.current_balance_minor, new.is_savings_target,
-              new.created_at, new.updated_at);
+              new.current_balance_minor, new.balance_as_of,
+              new.is_savings_target, new.created_at, new.updated_at);
           END;
         ''')
         ..execute('''
@@ -361,6 +402,7 @@ void main() {
               name = new.name, account_type = new.account_type,
               institution = new.institution, currency = new.currency,
               current_balance_minor = new.current_balance_minor,
+              balance_as_of = new.balance_as_of,
               is_savings_target = new.is_savings_target,
               updated_at = new.updated_at
             WHERE id = new.id;

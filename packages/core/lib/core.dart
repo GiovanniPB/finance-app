@@ -2,6 +2,7 @@
 library;
 
 export 'src/env/app_env.dart';
+export 'src/format/day_label.dart';
 export 'src/format/month_label.dart';
 export 'src/logging/app_logger.dart';
 export 'src/money/minor_digits.dart';

@@ -3,6 +3,7 @@ import 'package:design_system/design_system.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
+import '../../accounts/presentation/accounts_providers.dart';
 import '../../categories/presentation/categories_providers.dart';
 import '../domain/transaction.dart';
 import 'quick_entry_sheet.dart';
@@ -69,6 +70,7 @@ class TransactionsPage extends ConsumerWidget {
                 : TransactionList(
                     days: TransactionDay.groupByDay(transactions),
                     categoriesById: categoriesById,
+                    accountLabels: ref.watch(accountLabelsProvider),
                     onTapTransaction: (transaction) =>
                         TransactionEditSheet.show(context, transaction),
                   ),

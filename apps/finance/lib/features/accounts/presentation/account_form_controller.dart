@@ -44,9 +44,21 @@ abstract class AccountFormState with _$AccountFormState {
   /// Texto do saldo para exibição, sem símbolo.
   String get balanceLabel => balance.format(withSymbol: false);
 
-  /// O que o número do saldo significa, que depende do tipo.
-  String get balanceHint =>
-      type.isDebt ? 'Fatura atual — o quanto você deve' : 'Saldo de hoje';
+  /// O que o número do saldo significa, que depende do tipo — e, quando já
+  /// existe conta, de quando ele é.
+  ///
+  /// Ao editar, o campo não é "saldo de hoje": é o que foi informado da última
+  /// vez, e dizer "de hoje" faria o usuário confiar num número que pode ter
+  /// meses.
+  String get balanceHint {
+    final base = type.isDebt ? 'Fatura atual' : 'Saldo';
+    final account = editing;
+    if (account == null) {
+      return type.isDebt ? '$base — o quanto você deve' : '$base de hoje';
+    }
+    return '$base informado em '
+        '${formatDayLabel(account.balanceAsOf.toLocal()).toLowerCase()}';
+  }
 
   bool get isEditing => editing != null;
 
@@ -139,6 +151,8 @@ class AccountFormController extends _$AccountFormController {
               institution: state.institution,
               linkedSpaceId: state.linkedSpaceId,
             ),
+            balanceChanged:
+                state.balanceMinor != editing.currentBalance.amountMinor.abs(),
           );
 
     return switch (result) {

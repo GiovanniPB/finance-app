@@ -4,7 +4,7 @@ Documento vivo. O **PRD** define *o quê* e *por quê*; este arquivo registra
 *onde estamos*. Atualize junto com o PR que muda o estado.
 
 - Última atualização: **2026-07-27**
-- Branch de trabalho atual: `feat/contas`
+- Branch de trabalho atual: `feat/conta-no-lancamento`
 
 ---
 
@@ -17,9 +17,9 @@ criar categoria própria, trocar de espaço e agora cadastrar contas (tipo,
 instituição, saldo, alvo de poupança, vínculo a household) — tudo verificado
 rodando no simulador contra Supabase e PowerSync reais.
 
-O que falta para a Fase 1 começar sem tropeço: **conta ainda não é escolhível ao
-lançar** (a coluna e o controller existem, a UI não) e **não há teste de
-integração**. Os dois estão nos débitos abaixo.
+O lançamento já sabe de que conta saiu. O que falta para a Fase 1 começar sem
+tropeço é **teste de integração** — não existe nenhum, e o gate de cobertura
+exclui a glue de sync justamente contando com eles.
 
 ## Por onde começar numa sessão nova
 
@@ -201,6 +201,39 @@ vermelho — `MoneyTone.over` é reservado a orçamento estourado, e usar vermel
 para dívida ordinária é exatamente o "vermelho lê como erro" que o design system
 existe para evitar. Hoje o tom é neutro, com um teste de guarda.
 
+### Concluído na fatia da conta no lançamento (branch `feat/conta-no-lancamento`)
+
+| Item | Onde |
+|---|---|
+| `AccountPicker`, espelhando o gesto do `CategoryPicker` | `.../accounts/presentation/account_picker.dart` |
+| Conta no registro rápido e na folha de edição | `quick_entry_sheet.dart`, `transaction_edit_sheet.dart` |
+| `soleAccountIdProvider` — padrão de conta única, sem custar toque | `.../accounts/presentation/accounts_providers.dart` |
+| `accountLabelsProvider` — nome da conta na lista **só quando há mais de uma** | idem |
+| Migration `balance_as_of` e a data do saldo na tela | `supabase/migrations/20260727230000_*.sql`, `account_tile.dart` |
+| `formatDayLabel` promovido para `package:core` | `packages/core/lib/src/format/day_label.dart` |
+
+Três decisões que não se leem no código:
+
+- **Com uma conta só, ela já vem escolhida.** Perguntar custaria um toque para
+  uma resposta que já se sabe, e o registro rápido tem um orçamento de três.
+  Com duas ou mais não há palpite honesto, e o campo fica vazio. A regra vive
+  num provider porque a tela e o controller precisam da **mesma** resposta: o
+  chip marcado tem de ser a conta que o Salvar grava.
+- **`accountTouched` distingue "ainda não escolhi" de "tirei de propósito".**
+  Sem essa marca, desmarcar a conta única seria desfeito pelo padrão no Salvar.
+- **A edição não atribui conta sozinha.** O lançamento já existe; dar conta a
+  ele por padrão seria inventar dado que ninguém informou.
+
+**Saldo continua snapshot** — registrar gasto não o move. A mitigação é
+`balance_as_of`: a tela diz "de hoje", "de ontem", "de 5 de março". A coluna só
+se move quando o **valor** muda; renomear a conta não faz o saldo ficar mais
+novo, e `updated_at` faria.
+
+**Visto rodando:** conta única já marcada no registro rápido, lançamento
+chegando ao Postgres com `account_id`, e o nome da conta aparecendo na linha
+assim que existiu uma segunda conta. A passagem pegou "de Hoje" com maiúscula no
+meio da frase.
+
 ---
 
 ## Fases 1 a 4 — não iniciadas
@@ -251,17 +284,16 @@ Ordenados por risco. Todos verificados no código.
 
 ### Médio
 
-- [ ] **Conta não é escolhível ao lançar.** Agora que dá para cadastrar conta,
-      esta é a lacuna mais visível: `transactions.account_id` existe, o
-      `QuickEntryController` já tem `selectAccount`, e **nenhuma tela chama**.
-      Toda transação nasce sem conta. É a próxima fatia natural — e ela também
-      levanta a pergunta de saldo: hoje o saldo da conta é digitado e não se
-      mexe quando se lança gasto (ver abaixo).
-- [ ] **Saldo de conta não reconcilia com lançamento.** É snapshot por decisão
-      (ver a fatia de contas), mas assim que a conta virar campo do lançamento
-      a divergência fica visível: gastar R$ 50 na conta corrente não muda o
-      saldo mostrado. As saídas são reconciliação pelo Open Finance (Fase 1) ou
-      um "saldo estimado" derivado — decisão de produto, não de código.
+- [ ] **Saldo de conta não reconcilia com lançamento.** É snapshot por decisão,
+      e agora a divergência é visível: gastar R$ 50 na conta corrente não muda
+      o saldo mostrado. Mitigado por `balance_as_of` — a tela diz de quando o
+      número é —, mas a divergência continua. As saídas são reconciliação pelo
+      Open Finance (Fase 1) ou um "saldo estimado" derivado exibido ao lado do
+      informado. Decisão de produto, não de código.
+- [ ] **Lançamentos antigos ficaram sem conta.** O padrão de conta única só
+      vale para lançamento novo; nada preencheu o histórico. Um "atribuir os
+      lançamentos sem conta a esta" resolveria de uma vez, mas é palpite sobre
+      dado passado — hoje o caminho é editar um a um.
 - [ ] **`profiles` sem `username`.** O PRD pede `username` **unique** (handle
       público do grafo social), `pix_key`, `avatar_url`, `phone`,
       `subscription_tier`. Nada é Fase 0, mas `username unique` é o campo mais
@@ -340,7 +372,7 @@ Ordenados por risco. Todos verificados no código.
 | iOS Simulator | ✅ Xcode 26.1.1. Verificado rodando de fato: `fvm flutter build ios --simulator --debug` + instalar o `Runner.app`. |
 | Supabase local | ✅ Configurado nas portas 553xx (offset +1000, coexiste com `finance-dashboard`). Exige Docker de pé. |
 | **PowerSync** | ✅ Instância Cloud (ambiente Development) ligada ao Supabase da nuvem, com as sync rules do repo publicadas. ⚠️ **Publicar é manual**: o arquivo do repo não sobe sozinho, e regras velhas se manifestam como tabela vazia no cliente sem erro nenhum. **Coluna nova não exige republicar** — os buckets usam `select *`, e a fatia de contas confirmou isso rodando: as quatro colunas novas chegaram ao SQLite local sem tocar no dashboard. Tabela ou bucket novo, sim. |
-| **Supabase (nuvem)** | ✅ Projeto `ivfcypfljxvwkvnvmuum`, 6 migrations aplicadas, 10 categorias de sistema semeadas, 7 tabelas com `REPLICA IDENTITY FULL` na publication `powersync`. É o que o `env/dev.json` usa. |
+| **Supabase (nuvem)** | ✅ Projeto `ivfcypfljxvwkvnvmuum`, 7 migrations aplicadas, 10 categorias de sistema semeadas, 7 tabelas com `REPLICA IDENTITY FULL` na publication `powersync`. É o que o `env/dev.json` usa. |
 | Web (Chrome) | ⚠️ Compila, mas falta `sqlite3.wasm` + worker em `apps/finance/web/`. `PowerSyncService.open()` falharia. |
 | Android | ⚠️ Três bloqueios: `cmdline-tools` ausente, nenhum AVD criado, e o `env/dev.json` não serve (no emulador o host é `10.0.2.2`, não `127.0.0.1`, e o Android 9+ bloqueia cleartext — o `AndroidManifest.xml` não tem exceção). Precisaria de `env/dev-android.json` + network security config. |
 

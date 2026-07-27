@@ -35,7 +35,14 @@ abstract interface class AccountsRepository {
   ///
   /// Só o dono edita, mesmo quando a conta está vinculada a um household — é a
   /// soberania do dono do ADR 0004, garantida pelo RLS no servidor.
-  Future<Result<Account, Failure>> update(Account account);
+  ///
+  /// [balanceChanged] renova a data do saldo (`balanceAsOf`). Quem chama sabe
+  /// se o número mudou; o repository não tem como saber, e carimbar a data em
+  /// toda edição faria uma renomeação afirmar que o saldo é de hoje.
+  Future<Result<Account, Failure>> update(
+    Account account, {
+    bool balanceChanged = false,
+  });
 
   /// Remove uma conta pelo id.
   ///

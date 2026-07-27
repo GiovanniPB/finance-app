@@ -1,14 +1,17 @@
+import 'package:core/core.dart';
 import 'package:design_system/design_system.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
+import '../../accounts/domain/account.dart';
+import '../../accounts/presentation/account_picker.dart';
+import '../../accounts/presentation/accounts_providers.dart';
 import '../../categories/domain/category.dart';
 import '../../categories/presentation/categories_providers.dart';
 import '../../categories/presentation/category_form_sheet.dart';
 import '../../categories/presentation/category_picker.dart';
 import '../domain/transaction.dart';
 import 'transaction_edit_controller.dart';
-import 'transaction_list.dart' show formatDayLabel;
 
 /// Detalhe e edição de um lançamento (PRD §11.2).
 ///
@@ -58,6 +61,8 @@ class _TransactionEditSheetState extends ConsumerState<TransactionEditSheet> {
     );
     final categories =
         ref.watch(categoriesProvider).asData?.value ?? const <Category>[];
+    final accounts =
+        ref.watch(spaceAccountsProvider).asData?.value ?? const <Account>[];
 
     return ConstrainedBox(
       // Seis campos e um teclado não cabem numa tela pequena. A folha cresce
@@ -124,6 +129,14 @@ class _TransactionEditSheetState extends ConsumerState<TransactionEditSheet> {
                         }
                       },
                     ),
+                    if (accounts.isNotEmpty) ...[
+                      const SizedBox(height: AppSpacing.lg),
+                      AccountPicker(
+                        accounts: accounts,
+                        selectedId: state.accountId,
+                        onSelected: _controller.selectAccount,
+                      ),
+                    ],
                     const SizedBox(height: AppSpacing.lg),
                     _DateField(
                       date: state.occurredAt,

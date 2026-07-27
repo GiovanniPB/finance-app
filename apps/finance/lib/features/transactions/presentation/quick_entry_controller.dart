@@ -3,6 +3,7 @@ import 'package:freezed_annotation/freezed_annotation.dart';
 import 'package:riverpod_annotation/riverpod_annotation.dart';
 
 import '../../../di/providers.dart';
+import '../../accounts/presentation/accounts_providers.dart';
 import '../../spaces/presentation/spaces_providers.dart';
 import '../domain/transaction.dart';
 
@@ -18,12 +19,27 @@ abstract class QuickEntryState with _$QuickEntryState {
     @Default(TransactionType.expense) TransactionType type,
     String? categoryId,
     String? accountId,
+
+    /// Se o usuário já mexeu no campo de conta.
+    ///
+    /// Sem isto, `accountId` nulo seria ambíguo: "ainda não escolhi" e "tirei a
+    /// conta de propósito" são estados diferentes, e o padrão de conta única
+    /// não pode reverter uma escolha explícita de deixar sem conta.
+    @Default(false) bool accountTouched,
     DateTime? occurredAt,
     @Default(false) bool isSaving,
     String? errorMessage,
   }) = _QuickEntryState;
 
   const QuickEntryState._();
+
+  /// Conta que vale para este lançamento: a escolhida, ou a conta única do
+  /// espaço (`soleAccountIdProvider`) enquanto ninguém escolheu nada.
+  ///
+  /// A tela usa isto para marcar o chip e o `save` para gravar — assim o que
+  /// aparece selecionado é sempre o que vai para o banco.
+  String? effectiveAccountId(String? soleAccountId) =>
+      accountTouched ? accountId : soleAccountId;
 
   /// Valor como [Money], sempre positivo — o tipo carrega a direção.
   Money get amount => Money.fromMinor(amountMinor);
@@ -67,9 +83,9 @@ class QuickEntryController extends _$QuickEntryController {
   /// Define a data do lançamento.
   void selectDate(DateTime date) => state = state.copyWith(occurredAt: date);
 
-  /// Define a conta do lançamento.
+  /// Define (ou tira) a conta do lançamento.
   void selectAccount(String? accountId) =>
-      state = state.copyWith(accountId: accountId);
+      state = state.copyWith(accountId: accountId, accountTouched: true);
 
   /// Persiste a transação. Devolve `true` quando salvou.
   ///
@@ -102,7 +118,7 @@ class QuickEntryController extends _$QuickEntryController {
           amount: state.amount,
           occurredAt: state.occurredAt ?? DateTime.now(),
           categoryId: state.categoryId,
-          accountId: state.accountId,
+          accountId: state.effectiveAccountId(ref.read(soleAccountIdProvider)),
         );
 
     return switch (result) {

@@ -1,3 +1,4 @@
+import 'package:core/core.dart';
 import 'package:design_system/design_system.dart';
 import 'package:flutter/material.dart';
 
@@ -27,6 +28,7 @@ class AccountTile extends StatelessWidget {
   Widget build(BuildContext context) {
     final tokens = context.tokens;
     final balance = account.signedBalance;
+    final asOf = formatDayLabel(account.balanceAsOf.toLocal()).toLowerCase();
 
     return Material(
       color: Colors.transparent,
@@ -78,13 +80,30 @@ class AccountTile extends StatelessWidget {
                 ),
               ),
               const SizedBox(width: AppSpacing.sm),
-              // Sem cor, nos dois sentidos. Saldo positivo não é receita, e
-              // fatura de cartão não é erro nem estouro de orçamento — são as
-              // duas únicas coisas que ganham cor neste sistema (`AppTokens`).
-              // Pintar toda fatura de vermelho seria exatamente o
-              // "vermelho-para-despesa lê como erro" que a regra evita; o sinal
-              // negativo e as figuras tabulares já dizem o que precisa.
-              MoneyText(balance),
+              Column(
+                crossAxisAlignment: CrossAxisAlignment.end,
+                children: [
+                  // Sem cor, nos dois sentidos. Saldo positivo não é receita, e
+                  // fatura de cartão não é erro nem estouro de orçamento — são
+                  // as duas únicas coisas que ganham cor neste sistema
+                  // (`AppTokens`). Pintar toda fatura de vermelho seria o
+                  // "vermelho-para-despesa lê como erro" que a regra evita; o
+                  // sinal negativo e as figuras tabulares já bastam.
+                  MoneyText(balance),
+                  const SizedBox(height: AppSpacing.xxs),
+                  // Registrar gasto não move o saldo (é snapshot), então o
+                  // número precisa dizer de quando é. Sem isso ele envelhece
+                  // calado e ninguém percebe.
+                  Text(
+                    // Minúscula porque a data entra no meio da frase: o rótulo
+                    // devolve "Hoje", e "de Hoje" lê como erro de digitação.
+                    'de $asOf',
+                    style: context.texts.labelSmall?.copyWith(
+                      color: tokens.textMuted,
+                    ),
+                  ),
+                ],
+              ),
             ],
           ),
         ),

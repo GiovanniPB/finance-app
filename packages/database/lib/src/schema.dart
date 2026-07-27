@@ -56,6 +56,9 @@ const appSchema = Schema([
       Column.text('institution'),
       Column.text('currency'),
       Column.integer('current_balance_minor'),
+      // Desde quando o saldo é verdade. Só se move quando o valor muda, nunca
+      // numa renomeação — por isso não é o `updated_at`.
+      Column.text('balance_as_of'),
       Column.integer('is_savings_target'),
       Column.text('created_at'),
       Column.text('updated_at'),

@@ -3,6 +3,7 @@ import 'package:design_system/design_system.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
+import '../../accounts/presentation/accounts_providers.dart';
 import '../../budgets/domain/budget.dart';
 import '../../budgets/presentation/budget_form_sheet.dart';
 import '../../budgets/presentation/budgets_page.dart';
@@ -102,6 +103,7 @@ class SpaceHomePage extends ConsumerWidget {
           _RecentActivity(
             transactions: transactions.take(3).toList(),
             categoriesById: categoriesById,
+            accountLabels: ref.watch(accountLabelsProvider),
           ),
         ],
       ],
@@ -315,10 +317,12 @@ class _RecentActivity extends StatelessWidget {
   const _RecentActivity({
     required this.transactions,
     required this.categoriesById,
+    required this.accountLabels,
   });
 
   final List<Transaction> transactions;
   final Map<String, Category> categoriesById;
+  final Map<String, String> accountLabels;
 
   @override
   Widget build(BuildContext context) => Column(
@@ -327,6 +331,7 @@ class _RecentActivity extends StatelessWidget {
         TransactionDaySection(
           day: day,
           categoriesById: categoriesById,
+          accountLabels: accountLabels,
           onTapTransaction: (transaction) =>
               TransactionEditSheet.show(context, transaction),
         ),

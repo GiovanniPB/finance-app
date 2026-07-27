@@ -26,15 +26,15 @@ abstract final class AccountSql {
   static const insert =
       'INSERT INTO accounts (id, owner_id, linked_space_id, name, '
       'account_type, institution, currency, current_balance_minor, '
-      'is_savings_target, created_at, updated_at) '
-      'VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)';
+      'balance_as_of, is_savings_target, created_at, updated_at) '
+      'VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)';
 
   /// `owner_id` e `created_at` ficam de fora: são a identidade da linha, não
   /// dado editável.
   static const update =
       'UPDATE accounts SET linked_space_id = ?, name = ?, account_type = ?, '
       'institution = ?, currency = ?, current_balance_minor = ?, '
-      'is_savings_target = ?, updated_at = ? WHERE id = ?';
+      'balance_as_of = ?, is_savings_target = ?, updated_at = ? WHERE id = ?';
 
   static const deleteById = 'DELETE FROM accounts WHERE id = ?';
 
@@ -48,6 +48,7 @@ abstract final class AccountSql {
     cols['institution'],
     cols['currency'],
     cols['current_balance_minor'],
+    cols['balance_as_of'],
     cols['is_savings_target'],
     cols['created_at'],
     cols['updated_at'],
@@ -61,6 +62,7 @@ abstract final class AccountSql {
     cols['institution'],
     cols['currency'],
     cols['current_balance_minor'],
+    cols['balance_as_of'],
     cols['is_savings_target'],
     cols['updated_at'],
     cols['id'],
@@ -135,6 +137,7 @@ class AccountsRepositoryImpl implements AccountsRepository {
       name: trimmedName,
       type: type,
       currentBalance: currentBalance,
+      balanceAsOf: timestamp,
       isSavingsTarget: isSavingsTarget,
       createdAt: timestamp,
       updatedAt: timestamp,
@@ -157,16 +160,23 @@ class AccountsRepositoryImpl implements AccountsRepository {
   }
 
   @override
-  Future<Result<Account, Failure>> update(Account account) async {
+  Future<Result<Account, Failure>> update(
+    Account account, {
+    bool balanceChanged = false,
+  }) async {
     final trimmedName = account.name.trim();
     if (trimmedName.isEmpty) {
       return const Err(ValidationFailure('Informe um nome para a conta.'));
     }
 
+    final timestamp = _now();
     final updated = account.copyWith(
       name: trimmedName,
       institution: _blankToNull(account.institution),
-      updatedAt: _now(),
+      // Só um saldo novo renova a data do saldo. Corrigir o nome não torna o
+      // número mais recente, e afirmar que torna é pior que não dizer nada.
+      balanceAsOf: balanceChanged ? timestamp : account.balanceAsOf,
+      updatedAt: timestamp,
     );
 
     try {
