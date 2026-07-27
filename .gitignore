@@ -52,3 +52,5 @@ doc/api/
 app.*.symbols
 app.*.map.json
 /debug-info/
+
+PRD.pdf
