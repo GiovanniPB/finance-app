@@ -4,7 +4,7 @@ Documento vivo. O **PRD** define *o quê* e *por quê*; este arquivo registra
 *onde estamos*. Atualize junto com o PR que muda o estado.
 
 - Última atualização: **2026-07-27**
-- Branch de trabalho atual: `feat/orcamento-ui`
+- Branch de trabalho atual: `feat/transacao-edicao`
 
 ---
 
@@ -91,11 +91,28 @@ em julho cria uma linha nova a partir de julho e deixa junho como estava, então
 mês substitui o limite, sem duplicar. O `budgetUsageProvider` reduz a um
 orçamento por categoria — o mais recente vigente no mês.
 
+### Concluído na fatia de edição de lançamento (branch `feat/transacao-edicao`)
+
+| Item | Onde |
+|---|---|
+| Folha de detalhe/edição, com excluir sob confirmação | `.../transactions/presentation/transaction_edit_sheet.dart` |
+| Controller da edição (lançamento como argumento do provider) | `.../transactions/presentation/transaction_edit_controller.dart` |
+| Toque na linha abre a edição, na lista do mês e na atividade recente | `transactions_page.dart`, `space_home_page.dart` |
+| `pumpScreen` aceita repositórios que registram escrita | `test/helpers/app_harness.dart` |
+
+Três decisões que valem lembrar:
+
+- **`savings` e `transfer` aparecem como tipo fixo**, não como segmento. Um
+  segmento de duas posições trocaria o tipo em silêncio no primeiro toque.
+- **Categoria é opcional na edição**, ao contrário do registro rápido:
+  lançamento importado do Open Finance chega sem categoria, e exigir uma
+  impediria corrigir o valor de algo que ainda não se sabe classificar.
+- **Ações em rodapé fixo**, campos rolando acima: seis campos e um teclado não
+  cabem numa tela pequena.
+
 ### Pendente — é isto que fecha a Fase 0
 
 - [ ] **Onboarding minimalista** — 3 telas de pilar + primeira ação (PRD §10.2).
-- [ ] **Detalhe/edição de transação.** `TransactionsRepository.update` e
-      `delete` existem e estão testados; falta a tela (PRD §11.2).
 - [ ] **Criar categoria de usuário.** Repositório pronto; sem UI. Hoje o
       formulário de orçamento diz "todas as categorias já têm limite neste mês"
       quando acabam as categorias — o caminho para criar uma nova sai daqui.
@@ -168,7 +185,11 @@ Ordenados por risco. Todos verificados no código.
       `StatefulShellRoute` do go_router.
 - [ ] **Duplicação de fakes nos testes.** `test/helpers/app_harness.dart`
       centraliza os fakes, mas quatro arquivos de teste anteriores ainda têm a
-      sua própria cópia. Vale migrá-los.
+      sua própria cópia. Vale migrá-los. O harness já aceita repositório
+      injetado, então o caminho está aberto.
+- [ ] **Editar lançamento não mexe em conta nem em rateio.** `account_id` e
+      `is_shared` são preservados, mas não editáveis — conta pertence à entidade
+      `Account` incompleta (acima) e rateio é Fase 2.
 - [ ] **Orçamento semanal existe no schema, não na UI.** `BudgetPeriod.weekly`
       persiste, mas `budgetUsageProvider` filtra só mensal e a folha grava sempre
       mensal. Um limite semanal criado por SQL fica invisível no app.
