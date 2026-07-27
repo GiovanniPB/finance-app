@@ -26,6 +26,35 @@ Stream<List<Account>> spaceAccounts(Ref ref) {
   return ref.watch(accountsRepositoryProvider).watchForSpace(space.id);
 }
 
+/// A única conta do espaço, quando é uma só. Nulo quando são zero ou várias.
+///
+/// É o padrão do registro rápido: com uma conta só, todo lançamento vem dela, e
+/// perguntar custaria um toque para uma resposta que já se sabe. Com duas ou
+/// mais não há palpite honesto, e o campo fica vazio.
+///
+/// Vive num provider, e não espalhado pela tela e pelo controller, porque os
+/// dois precisam da **mesma** resposta: o chip que aparece marcado tem de ser a
+/// conta que o Salvar grava.
+@riverpod
+String? soleAccountId(Ref ref) {
+  final accounts = ref.watch(spaceAccountsProvider).asData?.value ?? const [];
+  return accounts.length == 1 ? accounts.single.id : null;
+}
+
+/// Nome da conta por id, para a lista de lançamentos — **vazio quando há uma
+/// conta só**.
+///
+/// Com uma conta, dizer "Nubank" em toda linha não distingue nada: distingue
+/// quando existe de onde escolher. A regra vive aqui, e não em cada tela, para
+/// a lista do mês e a atividade recente nunca discordarem.
+@riverpod
+Map<String, String> accountLabels(Ref ref) {
+  final accounts = ref.watch(spaceAccountsProvider).asData?.value ?? const [];
+  if (accounts.length < 2) return const {};
+
+  return {for (final account in accounts) account.id: account.name};
+}
+
 /// Espaços aos quais uma conta pode ser vinculada.
 ///
 /// Só `household`: vincular ao espaço pessoal não significaria nada (o dono já

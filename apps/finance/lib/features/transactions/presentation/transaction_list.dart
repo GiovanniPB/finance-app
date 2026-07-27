@@ -43,12 +43,18 @@ class TransactionList extends StatelessWidget {
   const TransactionList({
     required this.days,
     required this.categoriesById,
+    this.accountLabels = const {},
     this.onTapTransaction,
     super.key,
   });
 
   final List<TransactionDay> days;
   final Map<String, Category> categoriesById;
+
+  /// Nome da conta por id. Vazio esconde a conta da linha — é o que
+  /// `accountLabelsProvider` devolve quando há uma conta só.
+  final Map<String, String> accountLabels;
+
   final void Function(Transaction)? onTapTransaction;
 
   @override
@@ -58,6 +64,7 @@ class TransactionList extends StatelessWidget {
     itemBuilder: (context, index) => TransactionDaySection(
       day: days[index],
       categoriesById: categoriesById,
+      accountLabels: accountLabels,
       onTapTransaction: onTapTransaction,
     ),
   );
@@ -71,12 +78,14 @@ class TransactionDaySection extends StatelessWidget {
   const TransactionDaySection({
     required this.day,
     required this.categoriesById,
+    this.accountLabels = const {},
     this.onTapTransaction,
     super.key,
   });
 
   final TransactionDay day;
   final Map<String, Category> categoriesById;
+  final Map<String, String> accountLabels;
   final void Function(Transaction)? onTapTransaction;
 
   @override
@@ -126,6 +135,7 @@ class TransactionDaySection extends StatelessWidget {
                 _Row(
                   transaction: day.transactions[i],
                   category: categoriesById[day.transactions[i].categoryId],
+                  accountName: accountLabels[day.transactions[i].accountId],
                   onTap: onTapTransaction,
                 ),
               ],
@@ -138,11 +148,24 @@ class TransactionDaySection extends StatelessWidget {
 }
 
 class _Row extends StatelessWidget {
-  const _Row({required this.transaction, this.category, this.onTap});
+  const _Row({
+    required this.transaction,
+    this.category,
+    this.accountName,
+    this.onTap,
+  });
 
   final Transaction transaction;
   final Category? category;
+  final String? accountName;
   final void Function(Transaction)? onTap;
+
+  /// Segunda linha da tile: categoria e conta, o que houver. Nulo quando não
+  /// há nada a dizer — uma linha em branco é pior que nenhuma linha.
+  static String? _meta(String? categoryName, String? accountName) {
+    final parts = [?categoryName, ?accountName];
+    return parts.isEmpty ? null : parts.join(' · ');
+  }
 
   @override
   Widget build(BuildContext context) {
@@ -165,38 +188,14 @@ class _Row extends StatelessWidget {
       categoryColorIndex: transaction.isIncome ? null : category?.colorIndex,
       // Sem descrição, o título já é o nome da categoria: repeti-lo embaixo
       // ("Alimentação / Alimentação") gasta uma linha para não dizer nada.
-      meta: hasDescription ? categoryName : null,
+      // A conta entra ao lado dela, e só quando há mais de uma para distinguir
+      // (ver `accountLabelsProvider`).
+      meta: _meta(hasDescription ? categoryName : null, accountName),
       isIncome: transaction.isIncome,
       onTap: onTap == null ? null : () => onTap!(transaction),
     );
   }
 }
 
-/// Rótulo do dia em pt-BR, com "Hoje" e "Ontem" no lugar da data.
-///
-/// [today] existe para o teste não depender do relógio.
-String formatDayLabel(DateTime date, {DateTime? today}) {
-  final now = today ?? DateTime.now();
-  final reference = DateTime(now.year, now.month, now.day);
-  final target = DateTime(date.year, date.month, date.day);
-  final difference = reference.difference(target).inDays;
-
-  if (difference == 0) return 'Hoje';
-  if (difference == 1) return 'Ontem';
-
-  const months = [
-    'janeiro',
-    'fevereiro',
-    'março',
-    'abril',
-    'maio',
-    'junho',
-    'julho',
-    'agosto',
-    'setembro',
-    'outubro',
-    'novembro',
-    'dezembro',
-  ];
-  return '${target.day} de ${months[target.month - 1]}';
-}
+// `formatDayLabel` vive em `package:core` desde que a feature de contas também
+// passou a precisar dele (data do saldo). Ficava aqui.

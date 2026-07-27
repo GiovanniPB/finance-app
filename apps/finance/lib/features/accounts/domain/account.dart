@@ -71,6 +71,10 @@ abstract class Account with _$Account {
     required String name,
     required AccountType type,
     required Money currentBalance,
+
+    /// Desde quando [currentBalance] é verdade. Só se move quando o **valor**
+    /// muda — renomear a conta não faz o saldo ficar mais novo.
+    required DateTime balanceAsOf,
     required bool isSavingsTarget,
     required DateTime createdAt,
     required DateTime updatedAt,
@@ -98,6 +102,11 @@ abstract class Account with _$Account {
       row['current_balance_minor'] as int? ?? 0,
       currency: row['currency']! as String,
     ),
+    // Linha anterior à coluna cai na data de criação, que é quando o saldo
+    // daquela conta foi informado de fato.
+    balanceAsOf: DateTime.parse(
+      (row['balance_as_of'] ?? row['created_at'])! as String,
+    ),
     isSavingsTarget: (row['is_savings_target'] as int? ?? 0) != 0,
     createdAt: DateTime.parse(row['created_at']! as String),
     updatedAt: DateTime.parse(row['updated_at']! as String),
@@ -118,6 +127,7 @@ abstract class Account with _$Account {
     'institution': institution,
     'currency': currentBalance.currency,
     'current_balance_minor': currentBalance.amountMinor.abs(),
+    'balance_as_of': balanceAsOf.toUtc().toIso8601String(),
     'is_savings_target': isSavingsTarget ? 1 : 0,
     'created_at': createdAt.toUtc().toIso8601String(),
     'updated_at': updatedAt.toUtc().toIso8601String(),

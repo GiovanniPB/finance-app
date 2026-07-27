@@ -18,6 +18,7 @@ abstract class TransactionEditState with _$TransactionEditState {
     /// Valor **absoluto** em centavos. A direção mora em [type].
     @Default(0) int amountMinor,
     String? categoryId,
+    String? accountId,
     String? description,
     @Default(false) bool isSaving,
     String? errorMessage,
@@ -58,6 +59,10 @@ class TransactionEditController extends _$TransactionEditController {
     occurredAt: transaction.occurredAt,
     amountMinor: transaction.amount.amountMinor.abs(),
     categoryId: transaction.categoryId,
+    // Sem padrão de conta única aqui, ao contrário do registro rápido: este
+    // lançamento já existe, e atribuir conta a ele sozinho seria inventar um
+    // dado que ninguém informou.
+    accountId: transaction.accountId,
     description: transaction.description,
   );
 
@@ -79,6 +84,10 @@ class TransactionEditController extends _$TransactionEditController {
   /// Seleciona (ou desmarca) a categoria.
   void selectCategory(String? categoryId) =>
       state = state.copyWith(categoryId: categoryId);
+
+  /// Seleciona (ou desmarca) a conta de onde o dinheiro saiu.
+  void selectAccount(String? accountId) =>
+      state = state.copyWith(accountId: accountId);
 
   /// Define a data do lançamento.
   void selectDate(DateTime date) => state = state.copyWith(occurredAt: date);
@@ -108,6 +117,7 @@ class TransactionEditController extends _$TransactionEditController {
             amount: state.amount,
             occurredAt: state.occurredAt,
             categoryId: state.categoryId,
+            accountId: state.accountId,
             description: state.description,
           ),
         );

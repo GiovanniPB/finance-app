@@ -82,9 +82,16 @@ class FakeAccountsRepository implements AccountsRepository {
     return Ok(account);
   }
 
+  /// `true` na última chamada de [update] em que o saldo mudou de valor.
+  bool lastUpdateChangedBalance = false;
+
   @override
-  Future<Result<Account, Failure>> update(Account account) async {
+  Future<Result<Account, Failure>> update(
+    Account account, {
+    bool balanceChanged = false,
+  }) async {
     updated.add(account);
+    lastUpdateChangedBalance = balanceChanged;
     return Ok(account);
   }
 
@@ -209,12 +216,14 @@ Account testAccount({
   bool isSavingsTarget = false,
   String? institution,
   String? linkedSpaceId,
+  DateTime? balanceAsOf,
 }) => Account(
   id: id,
   ownerId: 'user-1',
   name: name,
   type: type,
   currentBalance: Money.fromMinor(balanceMinor),
+  balanceAsOf: balanceAsOf ?? DateTime.utc(2026, 7),
   isSavingsTarget: isSavingsTarget,
   createdAt: DateTime.utc(2026, 7),
   updatedAt: DateTime.utc(2026, 7),
@@ -240,6 +249,7 @@ Transaction testTransaction({
   DateTime? occurredAt,
   TransactionType type = TransactionType.expense,
   String? categoryId = 'cat-1',
+  String? accountId,
   String? description = 'Mercado',
   String id = 'tx-1',
 }) {
@@ -256,6 +266,7 @@ Transaction testTransaction({
     aiCategorized: false,
     createdAt: when,
     updatedAt: when,
+    accountId: accountId,
     categoryId: categoryId,
     description: description,
   );

@@ -2,6 +2,9 @@ import 'package:design_system/design_system.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
+import '../../accounts/domain/account.dart';
+import '../../accounts/presentation/account_picker.dart';
+import '../../accounts/presentation/accounts_providers.dart';
 import '../../categories/domain/category.dart';
 import '../../categories/presentation/categories_providers.dart';
 import '../../categories/presentation/category_form_sheet.dart';
@@ -40,6 +43,8 @@ class QuickEntrySheet extends ConsumerWidget {
     final controller = ref.read(quickEntryControllerProvider.notifier);
     final categories =
         ref.watch(categoriesProvider).asData?.value ?? const <Category>[];
+    final accounts =
+        ref.watch(spaceAccountsProvider).asData?.value ?? const <Account>[];
 
     return Padding(
       padding: const EdgeInsets.fromLTRB(
@@ -85,6 +90,19 @@ class QuickEntrySheet extends ConsumerWidget {
               if (created != null) controller.selectCategory(created);
             },
           ),
+          // Some por completo quando não há conta cadastrada: quem nunca
+          // cadastrou uma não deve esbarrar num campo vazio no caminho dos
+          // 30 segundos.
+          if (accounts.isNotEmpty) ...[
+            const SizedBox(height: AppSpacing.lg),
+            AccountPicker(
+              accounts: accounts,
+              selectedId: state.effectiveAccountId(
+                ref.watch(soleAccountIdProvider),
+              ),
+              onSelected: controller.selectAccount,
+            ),
+          ],
           const SizedBox(height: AppSpacing.lg),
           AmountKeypad(
             onDigit: controller.pressDigit,

@@ -84,6 +84,18 @@ void main() {
       }
     });
 
+    // Saldo é snapshot: registrar gasto não o move. Sem a data, o número
+    // envelhece calado e ninguém percebe.
+    testWidgets('o saldo diz de quando é, em minúscula', (tester) async {
+      await pumpScreen(
+        tester,
+        const ProfilePage(),
+        accounts: [testAccount(balanceAsOf: DateTime.utc(2026, 3, 5, 12))],
+      );
+
+      expect(find.text('de 5 de março'), findsOneWidget);
+    });
+
     testWidgets('não some com a promessa das fases seguintes', (tester) async {
       await pumpScreen(tester, const ProfilePage());
 

@@ -52,6 +52,7 @@ void main() {
       'institution': null,
       'currency': 'BRL',
       'current_balance_minor': 25000,
+      'balance_as_of': '2026-07-14T12:00:00.000Z',
       'is_savings_target': 0,
       'created_at': '2026-07-14T12:00:00.000Z',
       'updated_at': '2026-07-14T12:30:00.000Z',
@@ -94,6 +95,9 @@ void main() {
       expect(legacy.type, AccountType.checking);
       expect(legacy.currentBalance, const Money.zero());
       expect(legacy.isSavingsTarget, isFalse);
+      // Sem `balance_as_of`, a data de criação é a melhor resposta honesta:
+      // é quando aquele saldo foi informado.
+      expect(legacy.balanceAsOf, DateTime.utc(2026, 7, 14, 12));
     });
 
     test('toColumns produz as chaves do schema com datas ISO UTC', () {
@@ -138,6 +142,7 @@ void main() {
       name: 'Conta',
       type: type,
       currentBalance: Money.fromMinor(balanceMinor),
+      balanceAsOf: DateTime.utc(2026, 7, 14),
       isSavingsTarget: false,
       createdAt: DateTime.utc(2026, 7, 14),
       updatedAt: DateTime.utc(2026, 7, 14),
