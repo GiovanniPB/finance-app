@@ -13,6 +13,7 @@ class CategorySwatch extends StatelessWidget {
   const CategorySwatch({
     required this.categoryId,
     required this.icon,
+    this.colorIndex,
     this.size = AppSizes.categorySwatch,
     super.key,
   });
@@ -23,10 +24,15 @@ class CategorySwatch extends StatelessWidget {
     required this.icon,
     this.size = AppSizes.categorySwatch,
     super.key,
-  }) : categoryId = null;
+  }) : categoryId = null,
+       colorIndex = null;
 
   /// Id da categoria. `null` usa a cor da marca.
   final String? categoryId;
+
+  /// Matiz escolhida pelo usuário. Quando presente, **vence** o hash do id —
+  /// escolha explícita ganha de cor derivada.
+  final int? colorIndex;
 
   final IconData icon;
   final double size;
@@ -35,12 +41,14 @@ class CategorySwatch extends StatelessWidget {
   Widget build(BuildContext context) {
     final tokens = context.tokens;
     final id = categoryId;
-    final fill = id == null
-        ? tokens.brandSubtle
-        : tokens.colorsForCategory(id).fill;
-    final ink = id == null
-        ? tokens.brandText
-        : tokens.colorsForCategory(id).ink;
+    final chosen = colorIndex;
+    final colors = chosen != null
+        ? tokens.colorsAt(chosen)
+        : id != null
+        ? tokens.colorsForCategory(id)
+        : null;
+    final fill = colors?.fill ?? tokens.brandSubtle;
+    final ink = colors?.ink ?? tokens.brandText;
 
     return Container(
       height: size,

@@ -200,6 +200,17 @@ class AppTokens extends ThemeExtension<AppTokens> {
     return categoryPalette[index];
   }
 
+  /// Cor da paleta por índice, para categoria com matiz **escolhida**.
+  ///
+  /// A coluna `color_index` guarda a escolha do usuário (ver `Category`). Um
+  /// índice fora da faixa dá a volta em vez de estourar: a paleta pode encurtar
+  /// entre versões, e uma linha antiga não deve derrubar a lista.
+  CategoryColors colorsAt(int index) =>
+      categoryPalette[index.abs() % categoryPalette.length];
+
+  /// Quantas matizes a paleta oferece — o seletor de cor itera por aqui.
+  int get categoryHues => categoryPalette.length;
+
   @override
   AppTokens copyWith({
     Color? moneyNeutral,

@@ -27,6 +27,23 @@ abstract final class CategoryIcons {
   /// Ícone da chave informada, ou [fallback] quando desconhecida.
   static IconData resolve(String? iconKey) => _map[iconKey] ?? fallback;
 
+  /// Chaves que o formulário de categoria oferece, na ordem de exibição.
+  ///
+  /// `salary` fica fora: é o ícone das categorias de receita do sistema, e
+  /// oferecê-lo numa categoria de despesa criaria uma linha que se lê como
+  /// entrada sem ser.
+  static const selectable = <String>[
+    'food',
+    'transport',
+    'home',
+    'health',
+    'leisure',
+    'education',
+    'shopping',
+    'subscriptions',
+    'other',
+  ];
+
   /// Ícone usado quando a transação não tem categoria.
   static const IconData uncategorized = Icons.help_outline;
 

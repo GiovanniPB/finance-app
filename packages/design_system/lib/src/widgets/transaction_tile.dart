@@ -18,6 +18,7 @@ class TransactionTile extends StatelessWidget {
     required this.amount,
     required this.icon,
     this.categoryId,
+    this.categoryColorIndex,
     this.meta,
     this.isIncome = false,
     this.isPending = false,
@@ -36,6 +37,9 @@ class TransactionTile extends StatelessWidget {
 
   /// Id da categoria, para resolver a matiz do swatch. `null` = cor da marca.
   final String? categoryId;
+
+  /// Matiz escolhida para a categoria, quando houver. Vence o hash do id.
+  final int? categoryColorIndex;
 
   /// Linha auxiliar (ex.: "Alimentação · Conta corrente").
   final String? meta;
@@ -68,7 +72,11 @@ class TransactionTile extends StatelessWidget {
             if (catId == null)
               CategorySwatch.brand(icon: icon)
             else
-              CategorySwatch(categoryId: catId, icon: icon),
+              CategorySwatch(
+                categoryId: catId,
+                icon: icon,
+                colorIndex: categoryColorIndex,
+              ),
             const SizedBox(width: AppSpacing.md),
             Expanded(
               child: Column(

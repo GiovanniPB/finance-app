@@ -4,6 +4,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../../categories/domain/category.dart';
 import '../../categories/presentation/categories_providers.dart';
+import '../../categories/presentation/category_form_sheet.dart';
 import '../../categories/presentation/category_picker.dart';
 import '../domain/transaction.dart';
 import 'quick_entry_controller.dart';
@@ -67,6 +68,12 @@ class QuickEntrySheet extends ConsumerWidget {
             categories: categories,
             selectedId: state.categoryId,
             onSelected: controller.selectCategory,
+            // Criar já seleciona a categoria nova: quem parou para criá-la é
+            // porque quer usá-la neste lançamento.
+            onCreate: () async {
+              final created = await CategoryFormSheet.show(context);
+              if (created != null) controller.selectCategory(created);
+            },
           ),
           const SizedBox(height: AppSpacing.lg),
           AmountKeypad(

@@ -5,6 +5,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../../categories/domain/category.dart';
 import '../../categories/presentation/categories_providers.dart';
+import '../../categories/presentation/category_form_sheet.dart';
 import '../../categories/presentation/category_picker.dart';
 import '../../transactions/presentation/transactions_providers.dart';
 import '../domain/budget.dart';
@@ -188,8 +189,13 @@ class _CategoryField extends ConsumerWidget {
       categories: available,
       selectedId: state.categoryId,
       onSelected: onSelected,
+      // Sem categoria livre, criar uma é a única saída para orçar mais algo.
+      onCreate: () async {
+        final created = await CategoryFormSheet.show(context);
+        if (created != null) onSelected(created);
+      },
       emptyMessage: all.isEmpty
-          ? 'Sincronizando categorias…'
+          ? 'Nenhuma categoria sincronizada ainda.'
           : 'Todas as categorias já têm limite neste mês.',
     );
   }
