@@ -5,6 +5,38 @@ import 'package:sqlite_async/sqlite_async.dart';
 import '../domain/budget.dart';
 import '../domain/budgets_repository.dart';
 
+/// Statements de orçamento, em constantes para o teste de guarda rodá-las
+/// contra uma view igual à que o PowerSync cria.
+///
+/// **Por que não há UPSERT aqui.** No Postgres, `budgets` tem
+/// `unique (space_id, category_id, period, starts_at)` e um `ON CONFLICT`
+/// resolveria o reorçamento numa statement só. Localmente não: as tabelas do
+/// PowerSync são **views com triggers `INSTEAD OF`**, e o SQLite recusa com
+/// `cannot UPSERT a view`. Daí o select-then-write — a unicidade continua
+/// garantida no servidor, que é onde ela vale contra escrita concorrente.
+abstract final class BudgetSql {
+  /// Busca o orçamento do período pela chave de negócio, não pelo id.
+  static const selectExisting =
+      'SELECT id, created_at FROM budgets '
+      'WHERE space_id = ? AND category_id = ? AND period = ? '
+      'AND starts_at = ? LIMIT 1';
+
+  static const insert =
+      'INSERT INTO budgets (id, space_id, category_id, amount_minor, '
+      'currency, period, starts_at, created_at, updated_at) '
+      'VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)';
+
+  /// Só limite e moeda mudam: período, categoria e início são a identidade.
+  static const update =
+      'UPDATE budgets SET amount_minor = ?, currency = ?, updated_at = ? '
+      'WHERE id = ?';
+
+  static const deleteById = 'DELETE FROM budgets WHERE id = ?';
+
+  static const watchBySpace =
+      'SELECT * FROM budgets WHERE space_id = ? ORDER BY starts_at DESC';
+}
+
 /// Implementação sobre o PowerSync (SQL bruto).
 class BudgetsRepositoryImpl implements BudgetsRepository {
   BudgetsRepositoryImpl({
@@ -23,10 +55,7 @@ class BudgetsRepositoryImpl implements BudgetsRepository {
 
   @override
   Stream<List<Budget>> watchBySpace(String spaceId) => db
-      .watch(
-        'SELECT * FROM budgets WHERE space_id = ? ORDER BY starts_at DESC',
-        parameters: [spaceId],
-      )
+      .watch(BudgetSql.watchBySpace, parameters: [spaceId])
       .map((results) => results.map(Budget.fromRow).toList());
 
   @override
@@ -44,40 +73,59 @@ class BudgetsRepositoryImpl implements BudgetsRepository {
     }
 
     final timestamp = _now();
-    final budget = Budget(
-      id: _genId(),
-      spaceId: spaceId,
-      categoryId: categoryId,
-      limit: limit,
-      period: period,
-      startsAt: startsAt,
-      createdAt: timestamp,
-      updatedAt: timestamp,
-    );
 
     try {
-      final cols = budget.toColumns();
-      // O ON CONFLICT espelha a unique do Postgres: reorçar a mesma
-      // categoria/período substitui o limite em vez de duplicar a linha.
-      await db.execute(
-        'INSERT INTO budgets (id, space_id, category_id, amount_minor, '
-        'currency, period, starts_at, created_at, updated_at) '
-        'VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?) '
-        'ON CONFLICT (space_id, category_id, period, starts_at) '
-        'DO UPDATE SET amount_minor = excluded.amount_minor, '
-        'currency = excluded.currency, updated_at = excluded.updated_at',
-        [
-          cols['id'],
-          cols['space_id'],
-          cols['category_id'],
-          cols['amount_minor'],
-          cols['currency'],
-          cols['period'],
-          cols['starts_at'],
-          cols['created_at'],
-          cols['updated_at'],
-        ],
+      final existing = await db.getOptional(BudgetSql.selectExisting, [
+        spaceId,
+        categoryId,
+        period.db,
+        Budget.dateOnly(startsAt),
+      ]);
+
+      if (existing != null) {
+        // Reorçar o mesmo período substitui o limite: mantém o id e a data de
+        // criação original, em vez de duplicar a linha.
+        final budget = Budget(
+          id: existing['id'] as String,
+          spaceId: spaceId,
+          categoryId: categoryId,
+          limit: limit,
+          period: period,
+          startsAt: startsAt,
+          createdAt: DateTime.parse(existing['created_at'] as String),
+          updatedAt: timestamp,
+        );
+        await db.execute(BudgetSql.update, [
+          limit.amountMinor,
+          limit.currency,
+          timestamp.toIso8601String(),
+          budget.id,
+        ]);
+        return Ok(budget);
+      }
+
+      final budget = Budget(
+        id: _genId(),
+        spaceId: spaceId,
+        categoryId: categoryId,
+        limit: limit,
+        period: period,
+        startsAt: startsAt,
+        createdAt: timestamp,
+        updatedAt: timestamp,
       );
+      final cols = budget.toColumns();
+      await db.execute(BudgetSql.insert, [
+        cols['id'],
+        cols['space_id'],
+        cols['category_id'],
+        cols['amount_minor'],
+        cols['currency'],
+        cols['period'],
+        cols['starts_at'],
+        cols['created_at'],
+        cols['updated_at'],
+      ]);
       return Ok(budget);
     } on Exception catch (e, st) {
       _log.severe('Falha ao salvar orçamento', e, st);
@@ -90,7 +138,7 @@ class BudgetsRepositoryImpl implements BudgetsRepository {
   @override
   Future<Result<void, Failure>> delete(String id) async {
     try {
-      await db.execute('DELETE FROM budgets WHERE id = ?', [id]);
+      await db.execute(BudgetSql.deleteById, [id]);
       return const Ok(null);
     } on Exception catch (e, st) {
       _log.severe('Falha ao remover orçamento', e, st);

@@ -448,6 +448,63 @@ void main() {
       expect(container.read(budgetUsageProvider), isEmpty);
     });
 
+    test(
+      'mantém só o orçamento vigente quando a categoria foi reorçada',
+      () async {
+        // Limite definido em maio e refeito em julho: em julho vale o de julho,
+        // e a categoria não pode aparecer duas vezes na lista.
+        final container = await ready(
+          transactions: [tx(minor: 60000)],
+          budgets: [
+            budget(id: 'bud-maio', startsAt: DateTime.utc(2026, 5)),
+            budget(
+              id: 'bud-julho',
+              limitMinor: 60000,
+              startsAt: DateTime.utc(2026, 7),
+            ),
+          ],
+        );
+        await container.read(monthTransactionsProvider.future);
+        await container.read(budgetsProvider.future);
+        container
+            .read(focusedMonthProvider.notifier)
+            .select(
+              DateTime.utc(2026, 7),
+            );
+
+        final usage = container.read(budgetUsageProvider);
+        expect(usage, hasLength(1));
+        expect(usage.single.budget.id, 'bud-julho');
+        expect(usage.single.percent, 100);
+      },
+    );
+
+    test(
+      'um mês antes do reorçamento continua valendo o limite anterior',
+      () async {
+        final container = await ready(
+          budgets: [
+            budget(id: 'bud-maio', startsAt: DateTime.utc(2026, 5)),
+            budget(
+              id: 'bud-julho',
+              limitMinor: 60000,
+              startsAt: DateTime.utc(2026, 7),
+            ),
+          ],
+        );
+        await container.read(budgetsProvider.future);
+        container
+            .read(focusedMonthProvider.notifier)
+            .select(
+              DateTime.utc(2026, 6),
+            );
+
+        final usage = container.read(budgetUsageProvider);
+        expect(usage, hasLength(1));
+        expect(usage.single.budget.id, 'bud-maio');
+      },
+    );
+
     test('a lista devolvida é imutável', () async {
       final container = await ready(budgets: [budget()]);
       await container.read(budgetsProvider.future);

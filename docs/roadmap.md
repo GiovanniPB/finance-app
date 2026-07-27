@@ -4,16 +4,16 @@ Documento vivo. O **PRD** define *o quê* e *por quê*; este arquivo registra
 *onde estamos*. Atualize junto com o PR que muda o estado.
 
 - Última atualização: **2026-07-27**
-- Branch de trabalho atual: `feat/transacoes`
+- Branch de trabalho atual: `feat/orcamento-ui`
 
 ---
 
 ## Estado em uma frase
 
 **O loop central da Fase 0 fecha.** Dá para registrar um gasto em três toques,
-ver a lista do mês agrupada por dia, acompanhar orçamento com alerta em 80% e
-100%, e trocar de espaço. Faltam quatro telas acessórias (abaixo) e o
-onboarding.
+ver a lista do mês agrupada por dia, definir e ajustar limite de orçamento com
+alerta em 80% e 100%, e trocar de espaço. Faltam duas telas acessórias (abaixo)
+e o onboarding.
 
 ## Por onde começar numa sessão nova
 
@@ -72,14 +72,33 @@ onboarding.
 | Página de espaços com troca de contexto | `.../spaces/presentation/spaces_page.dart` |
 | Orçamento: acumulado vs. limite com limiares de 80% / 100% (RN-1.3) | `BudgetUsage` + `BudgetProgress` |
 
+### Concluído na fatia de orçamento (branch `feat/orcamento-ui`)
+
+| Item | Onde |
+|---|---|
+| **Escrita de orçamento consertada** (era quebrada, ver débitos resolvidos) | `budgets_repository_impl.dart` |
+| Página de orçamentos do mês, com quanto ainda cabe por categoria | `.../budgets/presentation/budgets_page.dart` |
+| Folha de criar/editar/remover limite, com vigência explícita | `.../budgets/presentation/budget_form_sheet.dart` |
+| Controller do formulário (orçamento a editar como argumento do provider) | `.../budgets/presentation/budget_form_controller.dart` |
+| Entrada pela home: ação "Gerenciar" e convite para quem já registra | `.../home/presentation/space_home_page.dart` |
+| `AmountDisplay`, `AmountKeypad` e `SheetGrabHandle` promovidos | `packages/design_system` |
+| `MinorDigits` (acumulador de centavos) e `monthLabel` promovidos | `packages/core` |
+| `CategoryPicker` compartilhado entre registro rápido e orçamento | `.../categories/presentation/category_picker.dart` |
+
+**Modelo de vigência.** Salvar grava `starts_at` no mês em foco: mudar o limite
+em julho cria uma linha nova a partir de julho e deixa junho como estava, então
+"quanto eu tinha orçado" continua honesto mês a mês. Salvar duas vezes no mesmo
+mês substitui o limite, sem duplicar. O `budgetUsageProvider` reduz a um
+orçamento por categoria — o mais recente vigente no mês.
+
 ### Pendente — é isto que fecha a Fase 0
 
 - [ ] **Onboarding minimalista** — 3 telas de pilar + primeira ação (PRD §10.2).
-- [ ] **Tela de criar/editar orçamento.** O cálculo e a exibição existem, mas
-      não há UI para definir um limite — hoje só entra por SQL direto.
 - [ ] **Detalhe/edição de transação.** `TransactionsRepository.update` e
       `delete` existem e estão testados; falta a tela (PRD §11.2).
-- [ ] **Criar categoria de usuário.** Repositório pronto; sem UI.
+- [ ] **Criar categoria de usuário.** Repositório pronto; sem UI. Hoje o
+      formulário de orçamento diz "todas as categorias já têm limite neste mês"
+      quando acabam as categorias — o caminho para criar uma nova sai daqui.
 
 ---
 
@@ -102,6 +121,21 @@ Ordenados por risco. Todos verificados no código.
 
 ### Resolvido
 
+- [x] **`upsert` de orçamento nunca funcionou.** Usava `ON CONFLICT` espelhando
+      a unique do Postgres, mas as tabelas locais do PowerSync são **views com
+      triggers `INSTEAD OF`** e o SQLite recusa: `cannot UPSERT a view`. Toda
+      tentativa de salvar limite pelo app falharia — e o teste existente passava
+      porque mocka a conexão e só inspeciona o texto do SQL. Virou
+      select-then-write, com as statements em constantes e um teste de guarda que
+      as roda contra uma view com os mesmos triggers. **Lição transferível:**
+      qualquer SQL novo sobre tabela do PowerSync precisa de um teste que execute
+      de verdade; mock de `SqliteConnection` não distingue SQL válido de SQL que
+      o SQLite recusa.
+- [x] **Vigência de orçamento vazava entre meses.** `budgetUsageProvider`
+      comparava `DateTime` cru, então um limite que começa em 1º de julho em UTC
+      entrava em junho no fuso de Brasília; e incluía toda linha histórica, o que
+      duplicaria a categoria na lista assim que houvesse reorçamento. Agora
+      compara mês a mês e reduz a um orçamento por categoria.
 - [x] **`accounts` sem filtro de espaço** — corrigido na fatia de transações.
       `watchAll()` virou `watchOwned()` (filtra por `owner_id`) mais
       `watchForSpace()` (dono **ou** conta vinculada ao household), com teste
@@ -135,6 +169,14 @@ Ordenados por risco. Todos verificados no código.
 - [ ] **Duplicação de fakes nos testes.** `test/helpers/app_harness.dart`
       centraliza os fakes, mas quatro arquivos de teste anteriores ainda têm a
       sua própria cópia. Vale migrá-los.
+- [ ] **Orçamento semanal existe no schema, não na UI.** `BudgetPeriod.weekly`
+      persiste, mas `budgetUsageProvider` filtra só mensal e a folha grava sempre
+      mensal. Um limite semanal criado por SQL fica invisível no app.
+- [ ] **Remover orçamento apaga a linha, não a vigência.** Se houver limite de
+      junho e de julho para a mesma categoria, remover o de julho faz o de junho
+      voltar a valer (é o mais recente vigente). Coerente com o modelo, mas pode
+      surpreender; quando incomodar, o caminho é uma linha de "sem limite" em vez
+      de `DELETE`.
 
 ### Baixo
 
