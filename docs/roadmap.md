@@ -5,15 +5,31 @@ Documento vivo. O **PRD** define *o quê* e *por quê*; este arquivo registra
 
 - Última atualização: **2026-07-27**
 - Branch de trabalho atual: `feat/transacoes`
-- `main` em `0213d3c` (design system mesclado via PR #10)
 
 ---
 
 ## Estado em uma frase
 
-A **fundação está madura e validada**; o **produto quase não existe**. Auth,
-multi-tenancy por espaços, política de dinheiro, sincronização offline-first e o
-design system completo estão de pé. Nenhuma transação pode ser registrada ainda.
+**O loop central da Fase 0 fecha.** Dá para registrar um gasto em três toques,
+ver a lista do mês agrupada por dia, acompanhar orçamento com alerta em 80% e
+100%, e trocar de espaço. Faltam quatro telas acessórias (abaixo) e o
+onboarding.
+
+## Por onde começar numa sessão nova
+
+1. Leia [`CLAUDE.md`](../CLAUDE.md) — toolchain (sempre `fvm`), comandos Melos e
+   a Definição de Pronto.
+2. Leia este arquivo até o fim: o que está pronto, o que falta, e os débitos.
+3. Antes de mexer em schema, leia o **cabeçalho** da migration
+   `20260727151151_transactions_categories_budgets.sql`. Ele documenta as duas
+   convenções que mais confundem: `amount_minor` positivo com direção em `type`,
+   e cor de categoria como índice de paleta em vez de hex.
+4. Antes de mexer em UI, leia a doc de `AppTokens` em
+   `packages/design_system/lib/src/theme/app_tokens.dart` — a regra "despesa é o
+   estado neutro" é a espinha do sistema visual.
+5. Para rodar: `supabase start` (precisa de Docker) e depois
+   `cd apps/finance && fvm flutter run -d iphone --target lib/main_dev.dart --dart-define-from-file=../../env/dev.json`.
+   Criar conta é passo manual.
 
 ---
 
