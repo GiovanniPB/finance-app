@@ -3,6 +3,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../../home/presentation/space_home_page.dart';
+import '../../profile/presentation/profile_page.dart';
 import '../../spaces/presentation/spaces_page.dart';
 import '../../transactions/presentation/quick_entry_sheet.dart';
 
@@ -49,11 +50,7 @@ class _AppShellState extends ConsumerState<AppShell> {
                 'Amigos, desafios e feed de progresso chegam depois que o '
                 'registro individual estiver redondo.',
           ),
-          _ComingSoon(
-            icon: Icons.person_outline,
-            title: 'Perfil',
-            message: 'Conta, contas bancárias e assinatura ficam aqui.',
-          ),
+          ProfilePage(),
         ],
       ),
     ),

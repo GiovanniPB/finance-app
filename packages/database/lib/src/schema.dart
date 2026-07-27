@@ -42,13 +42,21 @@ const appSchema = Schema([
       Index('user', [IndexedColumn('user_id')]),
     ],
   ),
+  // Conta financeira. Pertence ao dono; `linked_space_id` a torna visível para
+  // os membros de um household (ADR 0004). `current_balance_minor` é sempre
+  // positivo — a direção vem de `account_type`, como em `transactions` vem de
+  // `type` (ver o cabeçalho da migration 20260727210000).
   Table(
     'accounts',
     [
       Column.text('owner_id'),
       Column.text('linked_space_id'),
       Column.text('name'),
+      Column.text('account_type'),
+      Column.text('institution'),
       Column.text('currency'),
+      Column.integer('current_balance_minor'),
+      Column.integer('is_savings_target'),
       Column.text('created_at'),
       Column.text('updated_at'),
     ],

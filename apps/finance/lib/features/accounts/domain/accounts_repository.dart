@@ -18,11 +18,28 @@ abstract interface class AccountsRepository {
   Stream<List<Account>> watchForSpace(String spaceId);
 
   /// Cria uma conta localmente (entra na fila de upload do PowerSync).
+  ///
+  /// [currentBalance] é o saldo que o usuário informa hoje — um snapshot, não
+  /// uma soma de lançamentos (ver [Account]). O sinal é descartado na
+  /// gravação: quem carrega a direção é [type].
   Future<Result<Account, Failure>> create({
     required String name,
-    String currency = 'BRL',
+    AccountType type = AccountType.checking,
+    Money currentBalance = const Money.zero(),
+    bool isSavingsTarget = false,
+    String? institution,
+    String? linkedSpaceId,
   });
 
+  /// Grava as alterações de uma conta existente.
+  ///
+  /// Só o dono edita, mesmo quando a conta está vinculada a um household — é a
+  /// soberania do dono do ADR 0004, garantida pelo RLS no servidor.
+  Future<Result<Account, Failure>> update(Account account);
+
   /// Remove uma conta pelo id.
+  ///
+  /// Os lançamentos que apontavam para ela **não** são apagados: a FK é
+  /// `on delete set null`, então eles ficam sem conta em vez de sumir.
   Future<Result<void, Failure>> delete(String id);
 }
