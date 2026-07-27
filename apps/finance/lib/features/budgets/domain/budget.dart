@@ -58,12 +58,16 @@ abstract class Budget with _$Budget {
     'amount_minor': limit.amountMinor,
     'currency': limit.currency,
     'period': period.db,
-    'starts_at': _dateOnly(startsAt),
+    'starts_at': dateOnly(startsAt),
     'created_at': createdAt.toUtc().toIso8601String(),
     'updated_at': updatedAt.toUtc().toIso8601String(),
   };
 
-  static String _dateOnly(DateTime value) {
+  /// `starts_at` no formato do banco (`date`, sem hora).
+  ///
+  /// Público porque é a chave de negócio do orçamento: a camada `data` compara
+  /// por esta string para achar o orçamento do período.
+  static String dateOnly(DateTime value) {
     final month = value.month.toString().padLeft(2, '0');
     final day = value.day.toString().padLeft(2, '0');
     return '${value.year}-$month-$day';
