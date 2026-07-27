@@ -69,3 +69,14 @@ melos:
       exec: flutter test --coverage
       packageFilters:
         dirExists: test
+
+    integration:
+      description: >-
+        Testes de integração sobre um PowerSync local de verdade. Rodam na
+        máquina (sem device) e não entram na métrica de cobertura: existem
+        justamente para cobrir a glue que ela exclui. O diretório NÃO se chama
+        `integration_test` de propósito — esse nome é reservado pelo Flutter
+        para testes que exigem device conectado.
+      exec: flutter test test_integration
+      packageFilters:
+        dirExists: test_integration

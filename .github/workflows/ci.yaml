@@ -55,6 +55,35 @@ jobs:
           path: "**/coverage/lcov.info"
           if-no-files-found: ignore
 
+  integration:
+    name: Integração (PowerSync local)
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: subosito/flutter-action@v2
+        with:
+          flutter-version: ${{ env.FLUTTER_VERSION }}
+          channel: stable
+          cache: true
+
+      - name: Resolve workspace (pub get)
+        run: flutter pub get
+
+      - name: Activate Melos
+        run: dart pub global activate melos
+
+      - name: Code generation
+        run: dart pub global run melos run gen --no-select
+
+      # Abre um PowerSyncDatabase de verdade num diretório temporário. Não
+      # precisa de device nem de rede: o SDK traz a extensão nativa por
+      # plataforma, e os testes usam o binding comum do flutter_test. Fica em
+      # job separado porque é a única parte do CI que depende de biblioteca
+      # nativa — quando quebrar, quebra sozinho.
+      - name: Testes de integração
+        run: dart pub global run melos run integration --no-select
+
   build-smoke:
     name: Build smoke (web)
     runs-on: ubuntu-latest

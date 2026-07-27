@@ -4,7 +4,7 @@ Documento vivo. O **PRD** define *o quê* e *por quê*; este arquivo registra
 *onde estamos*. Atualize junto com o PR que muda o estado.
 
 - Última atualização: **2026-07-27**
-- Branch de trabalho atual: `feat/conta-no-lancamento`
+- Branch de trabalho atual: `test/integracao`
 
 ---
 
@@ -17,9 +17,10 @@ criar categoria própria, trocar de espaço e agora cadastrar contas (tipo,
 instituição, saldo, alvo de poupança, vínculo a household) — tudo verificado
 rodando no simulador contra Supabase e PowerSync reais.
 
-O lançamento já sabe de que conta saiu. O que falta para a Fase 1 começar sem
-tropeço é **teste de integração** — não existe nenhum, e o gate de cobertura
-exclui a glue de sync justamente contando com eles.
+O lançamento já sabe de que conta saiu, e a camada local tem teste de integração
+rodando no CI contra um PowerSync de verdade. **Nada bloqueia a Fase 1** — a
+próxima decisão é por onde começá-la: Open Finance (infra nova, credenciais
+Pluggy) ou metas de poupança (só cliente, sobre a conta que agora existe).
 
 ## Por onde começar numa sessão nova
 
@@ -58,7 +59,7 @@ exclui a glue de sync justamente contando com eles.
 | Item | Onde |
 |---|---|
 | Monorepo Melos + Pub Workspaces + FVM pinado | raiz, `.fvmrc` |
-| CI: format · analyze (`--fatal-infos`) · testes · gate de cobertura 80% · build smoke web | `.github/workflows/ci.yaml` |
+| CI: format · analyze (`--fatal-infos`) · testes · gate de cobertura 80% · **integração sobre PowerSync real** · build smoke web | `.github/workflows/ci.yaml` |
 | `Result<T, Failure>` e `AppLogger` (redige segredos) | `packages/core` |
 | `Money` — inteiro em unidades mínimas, `allocate()` por maior resto | `packages/core/lib/src/money/money.dart` |
 | `AppEnv` com falha rápida no boot | `packages/core/lib/src/env/app_env.dart` |
@@ -234,6 +235,36 @@ chegando ao Postgres com `account_id`, e o nome da conta aparecendo na linha
 assim que existiu uma segunda conta. A passagem pegou "de Hoje" com maiúscula no
 meio da frase.
 
+### Concluído na fatia de integração (branch `test/integracao`)
+
+| Item | Onde |
+|---|---|
+| 18 testes sobre um `PowerSyncDatabase` real, aberto do `appSchema` em diretório temporário | `apps/finance/test_integration/local_persistence_test.dart` |
+| `LocalStack`: banco real + container do Riverpod com os repositories de verdade | `.../test_integration/helpers/local_stack.dart` |
+| Script `melos run integration` e job próprio no CI | `pubspec.yaml`, `.github/workflows/ci.yaml` |
+| README reescrito: o que cobrem, o que não cobrem, e por que o diretório não se chama `integration_test` | `.../test_integration/README.md` |
+
+**Rodam na máquina, sem device e sem rede.** O SDK do PowerSync traz a extensão
+nativa por plataforma, então a suíte cabe num runner Linux — foi essa descoberta
+que fez a fatia caber no CI em vez de virar um passo manual.
+
+**O diretório não se chama `integration_test` de propósito.** Esse nome é
+reservado pelo Flutter: exige `package:integration_test` e um device conectado.
+No macOS o desktop conta como device e a exigência passa despercebida; foi o CI
+de Linux que a revelou. Se um dia houver teste que precise mesmo de device, aí
+cabe um `integration_test/` ao lado, com job em runner macOS.
+
+Cobrem o que a métrica de cobertura exclui (`di/providers.dart`,
+`powersync_service.dart`) e, principalmente, são o único lugar em que o SQL do
+app encontra as **views com triggers `INSTEAD OF`** de verdade. Há um teste que
+afirma explicitamente que a view recusa `UPSERT`, para a lição do orçamento não
+voltar a ser folclore.
+
+**Fora de escopo, de propósito:** connector, upload e Supabase. Provar a ida ao
+Postgres exige rede, credenciais e conta de teste — a suíte ficaria lenta e
+intermitente, e o CI passaria a depender de serviço externo. Essa prova segue
+manual, no simulador, e cada fatia a registra no PR.
+
 ---
 
 ## Fases 1 a 4 — não iniciadas
@@ -255,6 +286,10 @@ Ordenados por risco. Todos verificados no código.
 
 ### Resolvido
 
+- [x] **Sem testes de integração.** `integration_test/` tinha só um README
+      planejando um teste que dependia de rede e credenciais. Agora são 18
+      testes sobre um PowerSync real, rodando no CI — e a glue que o gate de
+      cobertura exclui deixou de ser um buraco.
 - [x] **Entidade `Account` incompleta.** Tinha 6 campos; agora tem os cinco que
       o PRD §5.2 pedia, `linked_space_id` inclusive (a coluna existia na
       migration e no schema PowerSync desde julho, sem chegar à entidade). Com
@@ -299,9 +334,10 @@ Ordenados por risco. Todos verificados no código.
       `subscription_tier`. Nada é Fase 0, mas `username unique` é o campo mais
       caro de adicionar depois (backfill + escolha de handle para contas
       existentes). Vale decidir se entra no cadastro desde já.
-- [ ] **Sem testes de integração.** `apps/finance/integration_test/` tem só um
-      README. O CLAUDE.md §7 excluí a glue de sync/composição da métrica de
-      cobertura justamente esperando que ela seja coberta por integração.
+- [ ] **O upload ao Postgres não é testado automaticamente.** Os testes de
+      integração param na camada local; provar que a linha sai da fila e chega
+      ao Supabase continua sendo passo manual no simulador. Automatizar exige um
+      projeto Supabase só para teste, com dados descartáveis.
 - [ ] **Golden tests ausentes.** Depende de empacotar as fontes primeiro (abaixo).
 - [ ] **A flag de onboarding é por aparelho e some no logout.** Fica em tabela
       `localOnly`, e `disconnectAndClear()` apaga junto. Consequência: trocar de
