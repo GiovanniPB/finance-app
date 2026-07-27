@@ -1,6 +1,8 @@
 import 'package:core/core.dart';
 import 'package:design_system/design_system.dart';
 import 'package:finance/di/providers.dart';
+import 'package:finance/features/accounts/domain/account.dart';
+import 'package:finance/features/accounts/domain/accounts_repository.dart';
 import 'package:finance/features/budgets/domain/budget.dart';
 import 'package:finance/features/budgets/domain/budgets_repository.dart';
 import 'package:finance/features/categories/domain/categories_repository.dart';
@@ -30,6 +32,67 @@ class FakeSpacesRepository implements SpacesRepository {
   @override
   Stream<Space?> watchById(String id) =>
       Stream.value(spaces.where((s) => s.id == id).firstOrNull);
+}
+
+/// Contas em memória, que também registram o que foi escrito.
+///
+/// Diferente dos outros fakes: as telas de conta são de escrita (criar, editar,
+/// excluir), então lançar em toda escrita esconderia justamente o que há para
+/// testar.
+class FakeAccountsRepository implements AccountsRepository {
+  FakeAccountsRepository([List<Account> accounts = const []])
+    : accounts = [...accounts];
+
+  final List<Account> accounts;
+
+  /// Contas criadas pelo formulário, na ordem.
+  final List<Account> created = [];
+
+  /// Contas salvas pela edição, na ordem.
+  final List<Account> updated = [];
+
+  /// Ids removidos, na ordem.
+  final List<String> deleted = [];
+
+  @override
+  Stream<List<Account>> watchOwned() => Stream.value(accounts);
+
+  @override
+  Stream<List<Account>> watchForSpace(String spaceId) => Stream.value(accounts);
+
+  @override
+  Future<Result<Account, Failure>> create({
+    required String name,
+    AccountType type = AccountType.checking,
+    Money currentBalance = const Money.zero(),
+    bool isSavingsTarget = false,
+    String? institution,
+    String? linkedSpaceId,
+  }) async {
+    final account = testAccount(
+      id: 'acc-${created.length + 1}',
+      name: name,
+      type: type,
+      balanceMinor: currentBalance.amountMinor,
+      isSavingsTarget: isSavingsTarget,
+      institution: institution,
+      linkedSpaceId: linkedSpaceId,
+    );
+    created.add(account);
+    return Ok(account);
+  }
+
+  @override
+  Future<Result<Account, Failure>> update(Account account) async {
+    updated.add(account);
+    return Ok(account);
+  }
+
+  @override
+  Future<Result<void, Failure>> delete(String id) async {
+    deleted.add(id);
+    return const Ok(null);
+  }
 }
 
 class FakeCategoriesRepository implements CategoriesRepository {
@@ -138,6 +201,27 @@ Space personalSpace({String name = 'Pessoal'}) => Space(
   updatedAt: DateTime.utc(2026, 7),
 );
 
+Account testAccount({
+  String id = 'acc-1',
+  String name = 'Conta corrente',
+  AccountType type = AccountType.checking,
+  int balanceMinor = 250000,
+  bool isSavingsTarget = false,
+  String? institution,
+  String? linkedSpaceId,
+}) => Account(
+  id: id,
+  ownerId: 'user-1',
+  name: name,
+  type: type,
+  currentBalance: Money.fromMinor(balanceMinor),
+  isSavingsTarget: isSavingsTarget,
+  createdAt: DateTime.utc(2026, 7),
+  updatedAt: DateTime.utc(2026, 7),
+  institution: institution,
+  linkedSpaceId: linkedSpaceId,
+);
+
 Category testCategory({
   String id = 'cat-1',
   String name = 'Alimentação',
@@ -203,7 +287,9 @@ Budget testBudget({
 /// `pumpAndSettle` nunca converge com animação infinita.
 /// [transactionsRepository] e [budgetsRepository] permitem trocar o fake por um
 /// que registre escritas, para os testes que tocam Salvar ou Excluir — os fakes
-/// padrão só leem e lançam em qualquer escrita.
+/// padrão só leem e lançam em qualquer escrita. [accountsRepository] segue a
+/// mesma ideia, mas o fake padrão de conta já registra escrita (ver
+/// [FakeAccountsRepository]).
 Future<void> pumpScreen(
   WidgetTester tester,
   Widget screen, {
@@ -211,8 +297,10 @@ Future<void> pumpScreen(
   List<Category>? categories,
   List<Transaction> transactions = const [],
   List<Budget> budgets = const [],
+  List<Account> accounts = const [],
   TransactionsRepository? transactionsRepository,
   BudgetsRepository? budgetsRepository,
+  AccountsRepository? accountsRepository,
   OnboardingPreferences? onboardingPreferences,
 
   /// Estado da apresentação no boot. O padrão é `true` — "já viu" — porque é o
@@ -236,6 +324,9 @@ Future<void> pumpScreen(
         ),
         budgetsRepositoryProvider.overrideWithValue(
           budgetsRepository ?? FakeBudgetsRepository(budgets),
+        ),
+        accountsRepositoryProvider.overrideWithValue(
+          accountsRepository ?? FakeAccountsRepository(accounts),
         ),
         onboardingStoreProvider.overrideWithValue(
           onboardingPreferences ?? FakeOnboardingPreferences(),

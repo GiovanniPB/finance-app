@@ -4,21 +4,22 @@ Documento vivo. O **PRD** define *o quê* e *por quê*; este arquivo registra
 *onde estamos*. Atualize junto com o PR que muda o estado.
 
 - Última atualização: **2026-07-27**
-- Branch de trabalho atual: `feat/onboarding`
+- Branch de trabalho atual: `feat/contas`
 
 ---
 
 ## Estado em uma frase
 
-**A Fase 0 está fechada.** Dá para ser apresentado ao produto, registrar um gasto
-em três toques, editar e excluir lançamento, definir e ajustar limite de orçamento
-com alerta em 80% e 100%, criar categoria própria e trocar de espaço — tudo
-verificado rodando no simulador contra Supabase e PowerSync reais.
+**A Fase 0 está fechada e a conta virou uma entidade de verdade.** Dá para ser
+apresentado ao produto, registrar um gasto em três toques, editar e excluir
+lançamento, definir e ajustar limite de orçamento com alerta em 80% e 100%,
+criar categoria própria, trocar de espaço e agora cadastrar contas (tipo,
+instituição, saldo, alvo de poupança, vínculo a household) — tudo verificado
+rodando no simulador contra Supabase e PowerSync reais.
 
-A próxima decisão é de produto, não de código: **começar a Fase 1 (poupança +
-Open Finance) ou pagar débitos antes**. Os candidatos a pagar primeiro estão
-abaixo — os testes de integração ausentes e a entidade `Account` pela metade são
-os que mais atrapalham a Fase 1, porque ela mexe justamente em contas.
+O que falta para a Fase 1 começar sem tropeço: **conta ainda não é escolhível ao
+lançar** (a coluna e o controller existem, a UI não) e **não há teste de
+integração**. Os dois estão nos débitos abaixo.
 
 ## Por onde começar numa sessão nova
 
@@ -164,6 +165,44 @@ Não há mais itens pendentes da Fase 0.
 
 ---
 
+## Preparo para a Fase 1
+
+### Concluído na fatia de contas (branch `feat/contas`)
+
+| Item | Onde |
+|---|---|
+| Migration com `account_type`, `institution`, `current_balance_minor`, `is_savings_target` (+ índice parcial de alvo de poupança) | `supabase/migrations/20260727210000_accounts_profile.sql` |
+| `AccountType` mapeando os subtipos da Pluggy sem caixa "não sei" | `.../accounts/domain/account.dart` |
+| `Account` completa, com `signedBalance` e tolerância a linha anterior à migration | idem |
+| Repository com `create`/`update`/`delete`, statements em `AccountSql` e **teste que roda o SQL contra uma view com triggers `INSTEAD OF`** | `.../accounts/data/accounts_repository_impl.dart` |
+| Aba Perfil de verdade, no lugar do placeholder: contas, total líquido e a promessa das fases seguintes | `.../profile/presentation/profile_page.dart` |
+| Folha de criar/editar/excluir conta, com o mesmo teclado do registro rápido | `.../accounts/presentation/account_form_sheet.dart` |
+| `linkableSpaces` e `accountsNetBalance` | `.../accounts/presentation/accounts_providers.dart` |
+| `FakeAccountsRepository` e `testAccount` no harness de teste | `test/helpers/app_harness.dart` |
+
+Três decisões que não se leem no código:
+
+- **Saldo é snapshot, não soma de lançamento.** O usuário informa quanto tem
+  hoje. Derivar de `transactions` daria um número errado com cara de certo,
+  porque lançamento manual cobre uma fração do extrato. Na Fase 1 a ingestão da
+  Pluggy passa a ser dona dessa coluna nas contas de Open Finance (ADR 0005).
+- **`current_balance_minor` é positivo e a direção vem de `account_type`** —
+  mesma convenção de `amount_minor`. Em cartão o número é a **fatura**, que é
+  também como a Pluggy entrega. O sinal aparece só no domínio, em
+  `Account.signedBalance`.
+- **Vínculo a household não aparece na Fase 0.** `linkableSpaces` filtra
+  `household`, que ainda não existe, então o campo simplesmente não é
+  renderizado — em vez de oferecer uma escolha de um item só.
+
+**As telas foram vistas renderizadas** (iPhone 17 Pro, contra Supabase e
+PowerSync reais): criar → aparecer na lista → editar → excluir, com a linha indo
+e sumindo do Postgres. Foi essa passagem que pegou o cartão sendo pintado de
+vermelho — `MoneyTone.over` é reservado a orçamento estourado, e usar vermelho
+para dívida ordinária é exatamente o "vermelho lê como erro" que o design system
+existe para evitar. Hoje o tom é neutro, com um teste de guarda.
+
+---
+
 ## Fases 1 a 4 — não iniciadas
 
 Nada de código. O que existe é **desenho**, não implementação.
@@ -183,6 +222,11 @@ Ordenados por risco. Todos verificados no código.
 
 ### Resolvido
 
+- [x] **Entidade `Account` incompleta.** Tinha 6 campos; agora tem os cinco que
+      o PRD §5.2 pedia, `linked_space_id` inclusive (a coluna existia na
+      migration e no schema PowerSync desde julho, sem chegar à entidade). Com
+      isso a conta deixa de ser um registro sem uso: dá para cadastrar, editar e
+      excluir pela aba Perfil.
 - [x] **`upsert` de orçamento nunca funcionou.** Usava `ON CONFLICT` espelhando
       a unique do Postgres, mas as tabelas locais do PowerSync são **views com
       triggers `INSTEAD OF`** e o SQLite recusa: `cannot UPSERT a view`. Toda
@@ -207,11 +251,17 @@ Ordenados por risco. Todos verificados no código.
 
 ### Médio
 
-- [ ] **Entidade `Account` incompleta.** Tem 6 campos; o PRD §5.2 pede
-      `account_type`, `institution`, `current_balance_minor`, `is_savings_target`,
-      `linked_space_id`. A coluna `linked_space_id` **já existe** na migration e no
-      schema PowerSync, mas não na entidade nem no repository — implementação pela
-      metade.
+- [ ] **Conta não é escolhível ao lançar.** Agora que dá para cadastrar conta,
+      esta é a lacuna mais visível: `transactions.account_id` existe, o
+      `QuickEntryController` já tem `selectAccount`, e **nenhuma tela chama**.
+      Toda transação nasce sem conta. É a próxima fatia natural — e ela também
+      levanta a pergunta de saldo: hoje o saldo da conta é digitado e não se
+      mexe quando se lança gasto (ver abaixo).
+- [ ] **Saldo de conta não reconcilia com lançamento.** É snapshot por decisão
+      (ver a fatia de contas), mas assim que a conta virar campo do lançamento
+      a divergência fica visível: gastar R$ 50 na conta corrente não muda o
+      saldo mostrado. As saídas são reconciliação pelo Open Finance (Fase 1) ou
+      um "saldo estimado" derivado — decisão de produto, não de código.
 - [ ] **`profiles` sem `username`.** O PRD pede `username` **unique** (handle
       público do grafo social), `pix_key`, `avatar_url`, `phone`,
       `subscription_tier`. Nada é Fase 0, mas `username unique` é o campo mais
@@ -270,6 +320,15 @@ Ordenados por risco. Todos verificados no código.
 - [ ] **A fila de categorias corta o último chip visível** contra o chip "Nova"
       ancorado. Funciona, mas o corte parece defeito de renderização; a saída
       usual é um fade na borda da rolagem.
+- [ ] **A folha de editar conta corta a última fileira do teclado.** Visto no
+      simulador: com o botão "Excluir conta" no rodapé fixo sobra menos altura,
+      e o `0` fica pela metade. Rola até ele, mas um alvo de toque cortado lê
+      como defeito. Mesmo caso do chip acima, e a saída provavelmente é a mesma
+      (fade na borda da rolagem) — vale resolver os dois de uma vez.
+- [ ] **Conta é sempre em BRL.** A entidade e o schema carregam `currency`, mas
+      o formulário não oferece escolha. Só incomoda quando houver conta em outra
+      moeda; até lá, `accountsNetBalance` esconde o total se as moedas
+      divergirem, em vez de somar coisas diferentes.
 
 ---
 
@@ -280,8 +339,8 @@ Ordenados por risco. Todos verificados no código.
 | macOS desktop | ✅ Roda. Entitlement `network.client` corrigida no PR #10. |
 | iOS Simulator | ✅ Xcode 26.1.1. Verificado rodando de fato: `fvm flutter build ios --simulator --debug` + instalar o `Runner.app`. |
 | Supabase local | ✅ Configurado nas portas 553xx (offset +1000, coexiste com `finance-dashboard`). Exige Docker de pé. |
-| **PowerSync** | ✅ Instância Cloud (ambiente Development) ligada ao Supabase da nuvem, com as sync rules do repo publicadas. ⚠️ **Publicar é manual**: o arquivo do repo não sobe sozinho, e regras velhas se manifestam como tabela vazia no cliente sem erro nenhum. |
-| **Supabase (nuvem)** | ✅ Projeto `ivfcypfljxvwkvnvmuum`, 5 migrations aplicadas, 10 categorias de sistema semeadas, 7 tabelas com `REPLICA IDENTITY FULL` na publication `powersync`. É o que o `env/dev.json` usa. |
+| **PowerSync** | ✅ Instância Cloud (ambiente Development) ligada ao Supabase da nuvem, com as sync rules do repo publicadas. ⚠️ **Publicar é manual**: o arquivo do repo não sobe sozinho, e regras velhas se manifestam como tabela vazia no cliente sem erro nenhum. **Coluna nova não exige republicar** — os buckets usam `select *`, e a fatia de contas confirmou isso rodando: as quatro colunas novas chegaram ao SQLite local sem tocar no dashboard. Tabela ou bucket novo, sim. |
+| **Supabase (nuvem)** | ✅ Projeto `ivfcypfljxvwkvnvmuum`, 6 migrations aplicadas, 10 categorias de sistema semeadas, 7 tabelas com `REPLICA IDENTITY FULL` na publication `powersync`. É o que o `env/dev.json` usa. |
 | Web (Chrome) | ⚠️ Compila, mas falta `sqlite3.wasm` + worker em `apps/finance/web/`. `PowerSyncService.open()` falharia. |
 | Android | ⚠️ Três bloqueios: `cmdline-tools` ausente, nenhum AVD criado, e o `env/dev.json` não serve (no emulador o host é `10.0.2.2`, não `127.0.0.1`, e o Android 9+ bloqueia cleartext — o `AndroidManifest.xml` não tem exceção). Precisaria de `env/dev-android.json` + network security config. |
 
