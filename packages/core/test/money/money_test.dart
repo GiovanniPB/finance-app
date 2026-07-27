@@ -114,6 +114,28 @@ void main() {
       expect(const Money.fromMinor(100000000).format(), r'R$ 1.000.000,00');
     });
 
+    test('omite o símbolo quando withSymbol é false', () {
+      const money = Money.fromMinor(123456);
+      expect(money.format(withSymbol: false), '1.234,56');
+      expect(
+        const Money.fromMinor(-1000).format(withSymbol: false),
+        '-10,00',
+      );
+      expect(const Money.fromMinor(5).format(withSymbol: false), '0,05');
+    });
+
+    test('withSymbol não altera o agrupamento nem o sinal', () {
+      const money = Money.fromMinor(-100000000);
+      expect(money.format(), r'-R$ 1.000.000,00');
+      expect(money.format(withSymbol: false), '-1.000.000,00');
+    });
+
+    test('usa o código quando a moeda não tem símbolo conhecido', () {
+      const money = Money.fromMinor(1000, currency: 'JPY');
+      expect(money.format(), 'JPY 10,00');
+      expect(money.format(withSymbol: false), '10,00');
+    });
+
     test('igualdade por valor considera moeda', () {
       expect(const Money.fromMinor(100), const Money.fromMinor(100));
       expect(
