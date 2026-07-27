@@ -11,6 +11,10 @@ environment:
   flutter: ">=1.17.0"
 
 dependencies:
+  # Money é o value object de dinheiro (ADR 0006). O design system depende dele
+  # para que MoneyText seja o único lugar que decide cor/sinal de um valor.
+  core:
+    path: ../core
   flutter:
     sdk: flutter
 

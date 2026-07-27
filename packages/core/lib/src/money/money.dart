@@ -112,13 +112,19 @@ class Money implements Comparable<Money> {
   }
 
   /// Formata no padrão pt-BR (ex.: `R$ 1.234,56`, `-R$ 10,00`).
-  String format() {
-    final symbol = _symbols[currency] ?? currency;
+  ///
+  /// Com [withSymbol] `false`, omite o símbolo da moeda (ex.: `1.234,56`) —
+  /// usado em listas densas, onde a moeda do espaço já está implícita e repetir
+  /// `R$` em cada linha rouba espaço horizontal sem informar nada.
+  String format({bool withSymbol = true}) {
     final cents = amountMinor.abs();
     final major = cents ~/ _minorPerMajor;
     final frac = (cents % _minorPerMajor).toString().padLeft(2, '0');
     final sign = isNegative ? '-' : '';
-    return '$sign$symbol ${_groupThousands(major)},$frac';
+    final digits = '${_groupThousands(major)},$frac';
+    if (!withSymbol) return '$sign$digits';
+    final symbol = _symbols[currency] ?? currency;
+    return '$sign$symbol $digits';
   }
 
   static String _groupThousands(int value) {
