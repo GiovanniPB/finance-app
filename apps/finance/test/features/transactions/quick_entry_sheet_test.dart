@@ -211,6 +211,14 @@ void main() {
       expect(find.text('Alimentação'), findsOneWidget);
     });
 
+    testWidgets('no uso normal não mostra a orientação de primeira vez', (
+      tester,
+    ) async {
+      await pumpSheet(tester, repo: RecordingTransactionsRepository());
+
+      expect(find.text('Comece pelo gasto mais recente.'), findsNothing);
+    });
+
     testWidgets('sem categorias, diz o que sabe e oferece criar', (
       tester,
     ) async {

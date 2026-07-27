@@ -122,4 +122,13 @@ const appSchema = Schema([
       Index('space', [IndexedColumn('space_id')]),
     ],
   ),
+  // Preferências locais do app. **Não sincroniza** (`localOnly`): são escolhas
+  // deste dispositivo, não dado do usuário — e nada aqui deve subir para o
+  // Postgres. O `id` é a chave (ex.: `onboarding_seen`) e o valor vai em
+  // `value`.
+  //
+  // Consequência conhecida: `disconnectAndClear()` no logout apaga isto junto.
+  // Para uma flag de onboarding é aceitável — outra conta no mesmo aparelho vê
+  // a apresentação de novo.
+  Table.localOnly('app_prefs', [Column.text('value')]),
 ]);

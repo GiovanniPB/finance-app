@@ -11,6 +11,8 @@ import '../features/budgets/data/budgets_repository_impl.dart';
 import '../features/budgets/domain/budgets_repository.dart';
 import '../features/categories/data/categories_repository_impl.dart';
 import '../features/categories/domain/categories_repository.dart';
+import '../features/onboarding/data/onboarding_store.dart';
+import '../features/onboarding/domain/onboarding_preferences.dart';
 import '../features/spaces/data/spaces_repository_impl.dart';
 import '../features/spaces/domain/spaces_repository.dart';
 import '../features/transactions/data/transactions_repository_impl.dart';
@@ -67,3 +69,7 @@ TransactionsRepository transactionsRepository(Ref ref) =>
 @Riverpod(keepAlive: true)
 BudgetsRepository budgetsRepository(Ref ref) =>
     BudgetsRepositoryImpl(db: ref.watch(powerSyncServiceProvider).db);
+
+@Riverpod(keepAlive: true)
+OnboardingPreferences onboardingStore(Ref ref) =>
+    OnboardingStore(db: ref.watch(powerSyncServiceProvider).db);
