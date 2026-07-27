@@ -57,4 +57,69 @@ const appSchema = Schema([
       Index('linked_space', [IndexedColumn('linked_space_id')]),
     ],
   ),
+  // Categoria. `space_id` nulo = categoria de sistema (global, RN-1.2).
+  // `color_index` é índice na paleta do design system, não um hex.
+  Table(
+    'categories',
+    [
+      Column.text('space_id'),
+      Column.text('name'),
+      Column.text('icon_key'),
+      Column.integer('color_index'),
+      Column.integer('is_system'),
+      Column.text('parent_category_id'),
+      Column.text('created_at'),
+      Column.text('updated_at'),
+    ],
+    indexes: [
+      Index('space', [IndexedColumn('space_id')]),
+    ],
+  ),
+  // Transação. `amount_minor` é sempre positivo; a direção vem de `type`
+  // (ver o cabeçalho da migration 20260727151151).
+  Table(
+    'transactions',
+    [
+      Column.text('space_id'),
+      Column.text('account_id'),
+      Column.text('created_by'),
+      Column.text('type'),
+      Column.integer('amount_minor'),
+      Column.text('currency'),
+      Column.text('category_id'),
+      Column.text('description'),
+      Column.text('occurred_at'),
+      Column.text('source'),
+      Column.integer('is_shared'),
+      Column.integer('ai_categorized'),
+      Column.text('recurrence_id'),
+      Column.text('created_at'),
+      Column.text('updated_at'),
+    ],
+    indexes: [
+      // Espelha o índice do Postgres: a query da lista é por espaço e data.
+      Index('space_occurred', [
+        IndexedColumn('space_id'),
+        IndexedColumn.descending('occurred_at'),
+      ]),
+      Index('category', [IndexedColumn('category_id')]),
+    ],
+  ),
+  // Orçamento por categoria e período (RN-1.3).
+  Table(
+    'budgets',
+    [
+      Column.text('space_id'),
+      Column.text('category_id'),
+      Column.integer('amount_minor'),
+      Column.text('currency'),
+      Column.text('period'),
+      Column.text('starts_at'),
+      Column.text('created_at'),
+      Column.text('updated_at'),
+    ],
+    indexes: [
+      Index('space', [IndexedColumn('space_id')]),
+    ],
+  ),
 ]);

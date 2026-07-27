@@ -39,17 +39,19 @@ design system completo estão de pé. Nenhuma transação pode ser registrada ai
 | **Design system completo**: tema claro/escuro, tokens, 10 widgets, 118 testes | `packages/design_system` |
 | 6 ADRs (stack, persistência, camadas, multi-tenancy, Pluggy, dinheiro) | `docs/adr/` |
 
+### Concluído na fatia de transações (branch `feat/transacoes`)
+
+| Item | Onde |
+|---|---|
+| Migrations `categories` + `transactions` + `budgets`, com RLS por membership, `replica identity full` e seed de 10 categorias de sistema | `supabase/migrations/20260727151151_*.sql` |
+| Schema PowerSync e sync rules das três tabelas (+ bucket `global` para as categorias de sistema) | `packages/database/lib/src/schema.dart`, `powersync/sync_rules.yaml` |
+| Domain: `Transaction`, `Category`, `Budget`, `BudgetUsage`, `MonthSummary` | `apps/finance/lib/features/{transactions,categories,budgets}/domain` |
+| Data: os três repositories sobre SQL bruto | `.../data` |
+| Providers: mês em foco, transações do mês, resumo, categorias indexadas, uso de orçamento | `.../presentation` |
+| **Escopo de espaço em `accounts` corrigido** (débito de risco alto) | `apps/finance/lib/features/accounts` |
+
 ### Pendente — é isto que fecha a Fase 0
 
-- [ ] **Migration `categories`** — com seed das categorias de sistema
-      (`is_system = true`), `space_id` nulo para as globais, RLS, `parent_category_id`.
-- [ ] **Migration `transactions`** — `amount_minor bigint`, `space_id`,
-      `account_id`, `created_by`, `type`, `category_id`, `occurred_at`, `source`,
-      `is_shared`, `recurrence_id`; RLS por membership; `replica identity full`.
-- [ ] **Migration `budgets`** — por categoria e período (mensal/semanal).
-- [ ] Adicionar as três tabelas ao **schema PowerSync** e às **sync rules**
-      (`by_space.data`).
-- [ ] Domain + data + providers de `transactions` e `categories`.
 - [ ] **Shell de navegação** com `AppBottomNav` (Início · Espaços · + · Social ·
       Perfil), com Social e Perfil como placeholders honestos.
 - [ ] **Tela de registro rápido** — teclado numérico próprio, campos
@@ -81,16 +83,14 @@ Nada de código. O que existe é **desenho**, não implementação.
 
 Ordenados por risco. Todos verificados no código.
 
-### Alto — corrigir na fatia de transações
+### Resolvido
 
-- [ ] **`accounts` sem filtro de espaço.**
-      [`accounts_repository_impl.dart:32`](../apps/finance/lib/features/accounts/data/accounts_repository_impl.dart)
-      faz `SELECT * FROM accounts` sem cláusula alguma, contrariando o
-      [ADR 0004](adr/0004-multi-tenancy-por-espacos.md) ("queries precisam filtrar
-      por `space_id` do espaço ativo"). Inofensivo hoje porque só existe um
-      usuário; no minuto que um household vincular contas, a lista mistura contas
-      de outros donos. **Corrigir antes de o padrão ser copiado para
-      `transactions`.**
+- [x] **`accounts` sem filtro de espaço** — corrigido na fatia de transações.
+      `watchAll()` virou `watchOwned()` (filtra por `owner_id`) mais
+      `watchForSpace()` (dono **ou** conta vinculada ao household), com teste
+      verificando o SQL gerado. Era o débito de risco alto: contrariava o
+      [ADR 0004](adr/0004-multi-tenancy-por-espacos.md) e viraria vazamento
+      entre membros assim que um household vinculasse contas.
 
 ### Médio
 

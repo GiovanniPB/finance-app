@@ -7,8 +7,14 @@ import '../features/accounts/data/accounts_repository_impl.dart';
 import '../features/accounts/domain/accounts_repository.dart';
 import '../features/auth/data/auth_repository_impl.dart';
 import '../features/auth/domain/auth_repository.dart';
+import '../features/budgets/data/budgets_repository_impl.dart';
+import '../features/budgets/domain/budgets_repository.dart';
+import '../features/categories/data/categories_repository_impl.dart';
+import '../features/categories/domain/categories_repository.dart';
 import '../features/spaces/data/spaces_repository_impl.dart';
 import '../features/spaces/domain/spaces_repository.dart';
+import '../features/transactions/data/transactions_repository_impl.dart';
+import '../features/transactions/domain/transactions_repository.dart';
 
 part 'providers.g.dart';
 
@@ -46,3 +52,18 @@ AccountsRepository accountsRepository(Ref ref) => AccountsRepositoryImpl(
 @Riverpod(keepAlive: true)
 SpacesRepository spacesRepository(Ref ref) =>
     SpacesRepositoryImpl(db: ref.watch(powerSyncServiceProvider).db);
+
+@Riverpod(keepAlive: true)
+CategoriesRepository categoriesRepository(Ref ref) =>
+    CategoriesRepositoryImpl(db: ref.watch(powerSyncServiceProvider).db);
+
+@Riverpod(keepAlive: true)
+TransactionsRepository transactionsRepository(Ref ref) =>
+    TransactionsRepositoryImpl(
+      db: ref.watch(powerSyncServiceProvider).db,
+      supabase: ref.watch(supabaseClientProvider),
+    );
+
+@Riverpod(keepAlive: true)
+BudgetsRepository budgetsRepository(Ref ref) =>
+    BudgetsRepositoryImpl(db: ref.watch(powerSyncServiceProvider).db);
