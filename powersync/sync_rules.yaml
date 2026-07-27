@@ -13,6 +13,13 @@
 # `by_space.data` conforme forem criadas (transactions, categories, budgets…).
 # =========================================================================
 bucket_definitions:
+  # Bucket global (sem parameters): dado idêntico para todo mundo. As categorias
+  # de sistema (space_id nulo) são as "fixas prontas" do RN-1.2 e não pertencem
+  # a espaço nenhum, então precisam de um bucket fora do by_space.
+  global:
+    data:
+      - select * from categories where space_id is null
+
   user_owned:
     parameters: select request.user_id() as user_id
     data:
@@ -28,3 +35,6 @@ bucket_definitions:
       - select * from spaces where id = bucket.space_id
       - select * from space_members where space_id = bucket.space_id
       - select * from accounts where linked_space_id = bucket.space_id
+      - select * from categories where space_id = bucket.space_id
+      - select * from transactions where space_id = bucket.space_id
+      - select * from budgets where space_id = bucket.space_id

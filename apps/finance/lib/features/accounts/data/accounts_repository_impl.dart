@@ -28,9 +28,32 @@ class AccountsRepositoryImpl implements AccountsRepository {
   final AppLogger _log;
 
   @override
-  Stream<List<Account>> watchAll() => db
-      .watch('SELECT * FROM accounts ORDER BY created_at DESC')
-      .map((results) => results.map(Account.fromRow).toList());
+  Stream<List<Account>> watchOwned() {
+    final userId = supabase.auth.currentUser?.id;
+    // Sem sessão não há conta a exibir; evita vazar o banco local inteiro.
+    if (userId == null) return Stream.value(const []);
+
+    return db
+        .watch(
+          'SELECT * FROM accounts WHERE owner_id = ? ORDER BY created_at DESC',
+          parameters: [userId],
+        )
+        .map((results) => results.map(Account.fromRow).toList());
+  }
+
+  @override
+  Stream<List<Account>> watchForSpace(String spaceId) {
+    final userId = supabase.auth.currentUser?.id;
+    if (userId == null) return Stream.value(const []);
+
+    return db
+        .watch(
+          'SELECT * FROM accounts WHERE owner_id = ? OR linked_space_id = ? '
+          'ORDER BY created_at DESC',
+          parameters: [userId, spaceId],
+        )
+        .map((results) => results.map(Account.fromRow).toList());
+  }
 
   @override
   Future<Result<Account, Failure>> create({

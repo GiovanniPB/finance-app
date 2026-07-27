@@ -38,28 +38,89 @@ void main() {
     when(() => supabase.auth).thenReturn(auth);
   });
 
-  group('watchAll', () {
-    test('mapeia linhas do PowerSync para Account', () async {
-      final rs = ResultSet(
-        ['id', 'owner_id', 'name', 'currency', 'created_at', 'updated_at'],
-        List<String?>.filled(6, null),
-        [
-          [
-            'acc-1',
-            'user-1',
-            'Carteira',
-            'BRL',
-            '2026-07-14T12:00:00.000Z',
-            '2026-07-14T12:00:00.000Z',
-          ],
-        ],
-      );
-      when(() => db.watch(any())).thenAnswer((_) => Stream.value(rs));
+  ResultSet oneAccountRow() => ResultSet(
+    ['id', 'owner_id', 'name', 'currency', 'created_at', 'updated_at'],
+    List<String?>.filled(6, null),
+    [
+      [
+        'acc-1',
+        'user-1',
+        'Carteira',
+        'BRL',
+        '2026-07-14T12:00:00.000Z',
+        '2026-07-14T12:00:00.000Z',
+      ],
+    ],
+  );
 
-      final accounts = await buildRepo().watchAll().first;
+  void stubSession(String userId) {
+    final user = MockUser();
+    when(() => auth.currentUser).thenReturn(user);
+    when(() => user.id).thenReturn(userId);
+  }
+
+  group('watchOwned', () {
+    test('mapeia linhas do PowerSync para Account', () async {
+      stubSession('user-1');
+      when(
+        () => db.watch(any(), parameters: any(named: 'parameters')),
+      ).thenAnswer((_) => Stream.value(oneAccountRow()));
+
+      final accounts = await buildRepo().watchOwned().first;
       expect(accounts, hasLength(1));
       expect(accounts.single.name, 'Carteira');
       expect(accounts.single.ownerId, 'user-1');
+    });
+
+    test('filtra por owner_id — ADR 0004, não vaza conta de outro membro', () {
+      stubSession('user-1');
+      when(
+        () => db.watch(any(), parameters: any(named: 'parameters')),
+      ).thenAnswer((_) => Stream.value(oneAccountRow()));
+
+      buildRepo().watchOwned();
+
+      final captured = verify(
+        () => db.watch(
+          captureAny(),
+          parameters: captureAny(named: 'parameters'),
+        ),
+      ).captured;
+      expect(captured[0], contains('owner_id = ?'));
+      expect(captured[1], ['user-1']);
+    });
+
+    test('sem sessão devolve lista vazia', () async {
+      when(() => auth.currentUser).thenReturn(null);
+
+      expect(await buildRepo().watchOwned().first, isEmpty);
+      verifyNever(() => db.watch(any(), parameters: any(named: 'parameters')));
+    });
+  });
+
+  group('watchForSpace', () {
+    test('inclui as contas vinculadas ao household', () {
+      stubSession('user-1');
+      when(
+        () => db.watch(any(), parameters: any(named: 'parameters')),
+      ).thenAnswer((_) => Stream.value(oneAccountRow()));
+
+      buildRepo().watchForSpace('space-1');
+
+      final captured = verify(
+        () => db.watch(
+          captureAny(),
+          parameters: captureAny(named: 'parameters'),
+        ),
+      ).captured;
+      expect(captured[0], contains('owner_id = ? OR linked_space_id = ?'));
+      expect(captured[1], ['user-1', 'space-1']);
+    });
+
+    test('sem sessão devolve lista vazia', () async {
+      when(() => auth.currentUser).thenReturn(null);
+
+      expect(await buildRepo().watchForSpace('space-1').first, isEmpty);
     });
   });
 

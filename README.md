@@ -34,7 +34,8 @@ powersync/           sync_rules.yaml (buckets por usuário)
 tool/                Scripts (ex.: gate de cobertura)
 ```
 
-Decisões de arquitetura em [`docs/adr/`](docs/adr).
+Decisões de arquitetura em [`docs/adr/`](docs/adr). Estado do projeto, o que já
+está pronto e o que falta em [`docs/roadmap.md`](docs/roadmap.md).
 
 ## Pré-requisitos
 
@@ -98,7 +99,16 @@ bash tool/check_coverage.sh 80                  # gate de cobertura (>= 80%)
 
 ## Próximos passos
 
-- Provisionar PowerSync e escrever o teste de integração offline→online em
-  `apps/finance/integration_test/` (inserir conta offline → reconectar →
-  verificar no Postgres, respeitando RLS).
-- Construir a UI das features sobre o `design_system`.
+Fase atual: **fechar a Fase 0** — `categories`, `transactions` e `budgets`, mais
+as telas de registro rápido, lista e home sobre o `design_system`.
+
+O inventário completo (concluído, pendente, débitos técnicos e questões abertas)
+está em [`docs/roadmap.md`](docs/roadmap.md).
+
+Dois itens de ambiente que continuam bloqueando:
+
+- **PowerSync não provisionado** — `POWERSYNC_URL` em `env/dev.json` ainda é um
+  placeholder. Sem isso não há sincronização, e o teste de integração
+  offline→online (inserir offline → reconectar → verificar no Postgres com RLS)
+  não pode ser escrito.
+- **Fontes não empacotadas** — destrava os golden tests do design system.
