@@ -8,5 +8,10 @@
 	<true/>
 	<key>com.apple.security.network.server</key>
 	<true/>
+	<!-- Requisições de saída (Supabase, PowerSync). O `flutter create` só
+	     adiciona network.server (para o hot reload); sem network.client o app
+	     sandboxed falha silenciosamente em toda chamada de rede. -->
+	<key>com.apple.security.network.client</key>
+	<true/>
 </dict>
 </plist>
