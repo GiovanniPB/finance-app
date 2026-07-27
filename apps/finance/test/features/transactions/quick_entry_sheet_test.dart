@@ -153,9 +153,9 @@ void main() {
     testWidgets('abre com valor zerado e Salvar desabilitado', (tester) async {
       await pumpSheet(tester, repo: RecordingTransactionsRepository());
 
-      expect(find.byKey(const Key('quick_entry_amount')), findsOneWidget);
+      expect(find.byKey(AmountDisplay.valueKey), findsOneWidget);
       expect(
-        tester.widget<Text>(find.byKey(const Key('quick_entry_amount'))).data,
+        tester.widget<Text>(find.byKey(AmountDisplay.valueKey)).data,
         '0,00',
       );
 
@@ -170,14 +170,14 @@ void main() {
 
       await tapKey(tester, '1');
       expect(
-        tester.widget<Text>(find.byKey(const Key('quick_entry_amount'))).data,
+        tester.widget<Text>(find.byKey(AmountDisplay.valueKey)).data,
         '0,01',
       );
 
       await tapKey(tester, '4');
       await tapKey(tester, '2');
       expect(
-        tester.widget<Text>(find.byKey(const Key('quick_entry_amount'))).data,
+        tester.widget<Text>(find.byKey(AmountDisplay.valueKey)).data,
         '1,42',
       );
     });
@@ -200,7 +200,7 @@ void main() {
       await tester.pump();
 
       expect(
-        tester.widget<Text>(find.byKey(const Key('quick_entry_amount'))).data,
+        tester.widget<Text>(find.byKey(AmountDisplay.valueKey)).data,
         '0,01',
       );
     });

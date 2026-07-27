@@ -37,37 +37,25 @@ abstract class QuickEntryState with _$QuickEntryState {
 
 /// Controller do registro rápido.
 ///
-/// ## Por que o valor é um acumulador de centavos
-///
-/// Cada dígito entra pela direita (`1` → `0,01`; `1`,`4` → `0,14`; …). Isso
-/// elimina a tecla de vírgula que o mockup previa — e com ela o erro de
-/// posicionar o separador decimal, que é o erro mais comum em campo de valor.
-/// Uma tecla menos e um caso de erro menos.
+/// O valor é um acumulador de centavos ([MinorDigits]): cada dígito entra pela
+/// direita, o que elimina a tecla de vírgula que o mockup previa — e com ela o
+/// erro de posicionar o separador decimal.
 @riverpod
 class QuickEntryController extends _$QuickEntryController {
-  /// Dez dígitos: até R$ 99.999.999,99. Acima disso é erro de digitação, não
-  /// caso de uso — e evita estourar o `int`.
-  static const _maxDigits = 10;
-
   @override
   QuickEntryState build() => const QuickEntryState();
 
   /// Acrescenta um dígito pela direita.
-  void pressDigit(int digit) {
-    if (state.amountMinor.toString().length >= _maxDigits) return;
-    state = state.copyWith(
-      amountMinor: state.amountMinor * 10 + digit,
-      errorMessage: null,
-    );
-  }
+  void pressDigit(int digit) => state = state.copyWith(
+    amountMinor: MinorDigits.append(state.amountMinor, digit),
+    errorMessage: null,
+  );
 
   /// Remove o último dígito.
-  void pressBackspace() {
-    state = state.copyWith(
-      amountMinor: state.amountMinor ~/ 10,
-      errorMessage: null,
-    );
-  }
+  void pressBackspace() => state = state.copyWith(
+    amountMinor: MinorDigits.removeLast(state.amountMinor),
+    errorMessage: null,
+  );
 
   /// Alterna entre despesa e receita.
   void selectType(TransactionType type) => state = state.copyWith(type: type);

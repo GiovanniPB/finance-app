@@ -4,6 +4,8 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../../budgets/domain/budget.dart';
+import '../../budgets/presentation/budget_form_sheet.dart';
+import '../../budgets/presentation/budgets_page.dart';
 import '../../budgets/presentation/budgets_providers.dart';
 import '../../categories/domain/category.dart';
 import '../../categories/presentation/categories_providers.dart';
@@ -53,13 +55,26 @@ class SpaceHomePage extends ConsumerWidget {
           ),
         ),
         if (usage.isNotEmpty) ...[
-          const _SectionTitle(title: 'Orçamento do mês'),
+          _SectionTitle(
+            title: 'Orçamento do mês',
+            actionLabel: 'Gerenciar',
+            onAction: () => _openBudgets(context),
+          ),
           Padding(
             padding: const EdgeInsets.symmetric(
               horizontal: AppSpacing.screenGutter,
             ),
-            child: _BudgetCard(usage: usage, categoriesById: categoriesById),
+            child: _BudgetCard(
+              usage: usage,
+              categoriesById: categoriesById,
+              onTap: () => _openBudgets(context),
+            ),
           ),
+          const SizedBox(height: AppSpacing.xxl),
+        ] else if (transactions.isNotEmpty) ...[
+          // Só convida a orçar quem já registra: com a lista vazia a home já é
+          // um estado vazio, e dois convites competindo diluem os dois.
+          const _BudgetInvite(),
           const SizedBox(height: AppSpacing.xxl),
         ],
         if (transactions.isEmpty)
@@ -95,6 +110,10 @@ class SpaceHomePage extends ConsumerWidget {
   /// Legenda do saldo: entradas e saídas em texto, sem competir com o valor.
   String _entriesCaption(Money income, Money outflow) =>
       'Entradas ${income.format()} · Saídas ${outflow.format()}';
+
+  static void _openBudgets(BuildContext context) => Navigator.of(context).push(
+    MaterialPageRoute<void>(builder: (_) => const BudgetsPage()),
+  );
 }
 
 class _Header extends StatelessWidget {
@@ -194,32 +213,99 @@ class _SectionTitle extends StatelessWidget {
 }
 
 class _BudgetCard extends StatelessWidget {
-  const _BudgetCard({required this.usage, required this.categoriesById});
+  const _BudgetCard({
+    required this.usage,
+    required this.categoriesById,
+    this.onTap,
+  });
 
   final List<BudgetUsage> usage;
   final Map<String, Category> categoriesById;
+  final VoidCallback? onTap;
 
   @override
-  Widget build(BuildContext context) => Container(
-    padding: const EdgeInsets.all(AppSpacing.lg),
-    decoration: BoxDecoration(
-      color: context.colors.surfaceContainerLow,
+  Widget build(BuildContext context) => Material(
+    color: context.colors.surfaceContainerLow,
+    borderRadius: AppRadii.brXl,
+    child: InkWell(
+      onTap: onTap,
       borderRadius: AppRadii.brXl,
-      border: Border.all(color: context.tokens.hairline),
-      boxShadow: context.tokens.cardShadow,
+      child: Container(
+        padding: const EdgeInsets.all(AppSpacing.lg),
+        decoration: BoxDecoration(
+          borderRadius: AppRadii.brXl,
+          border: Border.all(color: context.tokens.hairline),
+          boxShadow: context.tokens.cardShadow,
+        ),
+        child: Column(
+          children: [
+            for (var i = 0; i < usage.length; i++) ...[
+              if (i > 0) const SizedBox(height: AppSpacing.lg),
+              BudgetProgress(
+                category:
+                    categoriesById[usage[i].categoryId]?.name ??
+                    'Sem categoria',
+                spent: usage[i].spent,
+                limit: usage[i].budget.limit,
+              ),
+            ],
+          ],
+        ),
+      ),
     ),
-    child: Column(
-      children: [
-        for (var i = 0; i < usage.length; i++) ...[
-          if (i > 0) const SizedBox(height: AppSpacing.lg),
-          BudgetProgress(
-            category:
-                categoriesById[usage[i].categoryId]?.name ?? 'Sem categoria',
-            spent: usage[i].spent,
-            limit: usage[i].budget.limit,
+  );
+}
+
+/// Convite discreto para definir o primeiro limite.
+///
+/// Fica em superfície de poço, sem sombra e sem acento: é sugestão, não o
+/// próximo passo obrigatório. O momento alto da home continua sendo o saldo.
+class _BudgetInvite extends StatelessWidget {
+  const _BudgetInvite();
+
+  @override
+  Widget build(BuildContext context) => Padding(
+    padding: const EdgeInsets.symmetric(horizontal: AppSpacing.screenGutter),
+    child: Material(
+      color: context.tokens.surfaceSunken,
+      borderRadius: AppRadii.brXl,
+      child: InkWell(
+        key: const Key('budget_invite'),
+        onTap: () => BudgetFormSheet.show(context),
+        borderRadius: AppRadii.brXl,
+        child: Padding(
+          padding: const EdgeInsets.all(AppSpacing.lg),
+          child: Row(
+            children: [
+              Icon(
+                Icons.pie_chart_outline,
+                size: 20,
+                color: context.tokens.textMuted,
+              ),
+              const SizedBox(width: AppSpacing.md),
+              Expanded(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Text('Definir um limite', style: context.texts.titleSmall),
+                    Text(
+                      'Acompanhe quanto ainda cabe em cada categoria.',
+                      style: context.texts.bodySmall?.copyWith(
+                        color: context.tokens.textMuted,
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+              Icon(
+                Icons.chevron_right,
+                size: 20,
+                color: context.tokens.textMuted,
+              ),
+            ],
           ),
-        ],
-      ],
+        ),
+      ),
     ),
   );
 }
@@ -256,25 +342,4 @@ class _WaitingSync extends StatelessWidget {
       ],
     ),
   );
-}
-
-/// Nome do mês em pt-BR, com o ano quando não é o corrente.
-String monthLabel(DateTime month, {DateTime? today}) {
-  const names = [
-    'janeiro',
-    'fevereiro',
-    'março',
-    'abril',
-    'maio',
-    'junho',
-    'julho',
-    'agosto',
-    'setembro',
-    'outubro',
-    'novembro',
-    'dezembro',
-  ];
-  final name = names[month.month - 1];
-  final currentYear = (today ?? DateTime.now()).year;
-  return month.year == currentYear ? name : '$name de ${month.year}';
 }

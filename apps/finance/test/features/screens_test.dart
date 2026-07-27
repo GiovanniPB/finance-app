@@ -10,29 +10,6 @@ import 'package:flutter_test/flutter_test.dart';
 import '../helpers/app_harness.dart';
 
 void main() {
-  group('monthLabel', () {
-    test('mês corrente aparece sem o ano', () {
-      expect(
-        monthLabel(DateTime(2026, 7), today: DateTime(2026, 7, 27)),
-        'julho',
-      );
-    });
-
-    test('outro ano ganha o ano', () {
-      expect(
-        monthLabel(DateTime(2025, 3), today: DateTime(2026, 7, 27)),
-        'março de 2025',
-      );
-    });
-
-    test('cobre os doze meses', () {
-      final today = DateTime(2026, 7, 27);
-      for (var m = 1; m <= 12; m++) {
-        expect(monthLabel(DateTime(2026, m), today: today), isNotEmpty);
-      }
-    });
-  });
-
   group('SpaceHomePage', () {
     testWidgets('espera a sincronização quando não há espaço', (tester) async {
       await pumpScreen(
@@ -296,7 +273,7 @@ void main() {
       await tester.pumpAndSettle();
 
       expect(find.text('Salvar'), findsOneWidget);
-      expect(find.byKey(const Key('quick_entry_amount')), findsOneWidget);
+      expect(find.byKey(AmountDisplay.valueKey), findsOneWidget);
     });
   });
 }

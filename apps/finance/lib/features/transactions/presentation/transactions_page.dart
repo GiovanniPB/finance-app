@@ -4,7 +4,6 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../../categories/presentation/categories_providers.dart';
-import '../../home/presentation/space_home_page.dart' show monthLabel;
 import '../domain/transaction.dart';
 import 'quick_entry_sheet.dart';
 import 'transaction_list.dart';
