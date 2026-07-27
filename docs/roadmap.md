@@ -239,14 +239,20 @@ meio da frase.
 
 | Item | Onde |
 |---|---|
-| 18 testes sobre um `PowerSyncDatabase` real, aberto do `appSchema` em diretório temporário | `apps/finance/integration_test/local_persistence_test.dart` |
-| `LocalStack`: banco real + container do Riverpod com os repositories de verdade | `.../integration_test/helpers/local_stack.dart` |
+| 18 testes sobre um `PowerSyncDatabase` real, aberto do `appSchema` em diretório temporário | `apps/finance/test_integration/local_persistence_test.dart` |
+| `LocalStack`: banco real + container do Riverpod com os repositories de verdade | `.../test_integration/helpers/local_stack.dart` |
 | Script `melos run integration` e job próprio no CI | `pubspec.yaml`, `.github/workflows/ci.yaml` |
-| README do `integration_test/` reescrito: o que cobrem e o que não cobrem | `.../integration_test/README.md` |
+| README reescrito: o que cobrem, o que não cobrem, e por que o diretório não se chama `integration_test` | `.../test_integration/README.md` |
 
-**Rodam na máquina, sem simulador e sem rede.** O SDK do PowerSync traz a
-extensão nativa por plataforma, então a suíte cabe num runner Linux — foi essa
-descoberta que fez a fatia caber no CI em vez de virar um passo manual.
+**Rodam na máquina, sem device e sem rede.** O SDK do PowerSync traz a extensão
+nativa por plataforma, então a suíte cabe num runner Linux — foi essa descoberta
+que fez a fatia caber no CI em vez de virar um passo manual.
+
+**O diretório não se chama `integration_test` de propósito.** Esse nome é
+reservado pelo Flutter: exige `package:integration_test` e um device conectado.
+No macOS o desktop conta como device e a exigência passa despercebida; foi o CI
+de Linux que a revelou. Se um dia houver teste que precise mesmo de device, aí
+cabe um `integration_test/` ao lado, com job em runner macOS.
 
 Cobrem o que a métrica de cobertura exclui (`di/providers.dart`,
 `powersync_service.dart`) e, principalmente, são o único lugar em que o SQL do

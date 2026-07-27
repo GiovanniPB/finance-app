@@ -5,7 +5,6 @@ import 'package:finance/features/accounts/domain/account.dart';
 import 'package:finance/features/categories/domain/category.dart';
 import 'package:finance/features/transactions/domain/transaction.dart';
 import 'package:flutter_test/flutter_test.dart';
-import 'package:integration_test/integration_test.dart';
 
 import 'helpers/local_stack.dart';
 
@@ -22,7 +21,12 @@ import 'helpers/local_stack.dart';
 /// suíte lenta e intermitente. A fronteira de sessão entra como mock; o que se
 /// prova aqui é que a escrita local funciona e que o `watch` reage.
 void main() {
-  IntegrationTestWidgetsFlutterBinding.ensureInitialized();
+  // Binding comum, e **não** `IntegrationTestWidgetsFlutterBinding`: aquele
+  // exige um device conectado, e estes testes não precisam de um. O que eles
+  // precisam é do banco real, que abre na própria máquina. Foi o CI de Linux
+  // que mostrou a diferença — no macOS o desktop conta como device e a
+  // exigência passava despercebida.
+  TestWidgetsFlutterBinding.ensureInitialized();
 
   group('Schema local', () {
     test('cria uma tabela consultável para cada tabela do appSchema', () async {

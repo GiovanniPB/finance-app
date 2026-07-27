@@ -7,9 +7,22 @@ diretório temporário a partir do `appSchema` — e não contra dublês.
 fvm dart run melos run integration --no-select
 ```
 
-Não precisa de simulador, de Docker nem de rede: o SDK do PowerSync traz a
-extensão nativa por plataforma, e a suíte roda na própria máquina. É por isso
-que ela cabe no CI (job **Integração (PowerSync local)**).
+Não precisa de device, de Docker nem de rede: o SDK do PowerSync traz a extensão
+nativa por plataforma, e a suíte roda na própria máquina. É por isso que ela
+cabe no CI (job **Integração (PowerSync local)**).
+
+## Por que o diretório não se chama `integration_test`
+
+Porque esse nome é **reservado pelo Flutter**: `flutter test integration_test`
+exige uma dependência em `package:integration_test` e um **device conectado**.
+Estes testes não precisam de device — precisam de um banco real, que abre na
+própria máquina com o binding comum do `flutter_test`.
+
+A diferença passa despercebida no macOS, onde o desktop conta como device; foi
+o CI de Linux que a revelou, falhando com "No devices are connected". Se um dia
+houver teste que precise mesmo de device (fluxo completo do app num simulador),
+aí sim vale um `integration_test/` ao lado deste, com a dependência e um job de
+CI em runner macOS.
 
 ## Por que existem
 
