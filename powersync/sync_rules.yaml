@@ -38,3 +38,8 @@ bucket_definitions:
       - select * from categories where space_id = bucket.space_id
       - select * from transactions where space_id = bucket.space_id
       - select * from budgets where space_id = bucket.space_id
+      - select * from savings_goals where space_id = bucket.space_id
+      # `savings_contributions.space_id` é denormalizado justamente para caber
+      # aqui: sync rule não faz join, então a contribuição precisa carregar o
+      # próprio espaço. No Postgres um trigger o mantém igual ao da meta.
+      - select * from savings_contributions where space_id = bucket.space_id

@@ -1,5 +1,6 @@
 import 'package:design_system/design_system.dart';
 import 'package:finance/features/home/presentation/space_home_page.dart';
+import 'package:finance/features/savings/presentation/savings_page.dart';
 import 'package:finance/features/shell/presentation/app_shell.dart';
 import 'package:finance/features/spaces/presentation/spaces_page.dart';
 import 'package:finance/features/transactions/domain/transaction.dart';
@@ -257,13 +258,18 @@ void main() {
       expect(find.byType(SpacesPage), findsOneWidget);
     });
 
-    testWidgets('as abas futuras avisam o que vem', (tester) async {
+    testWidgets('a terceira aba é Poupança, e não mais um placeholder', (
+      tester,
+    ) async {
+      // O rótulo "Social" prometia feed e amigos, que são Fase 3. A aba agora
+      // diz o que de fato existe do Pilar 3: metas.
       await pumpScreen(tester, const AppShell(), wrapInScaffold: false);
 
-      await tester.tap(find.text('Social'));
+      expect(find.text('Social'), findsNothing);
+      await tester.tap(find.text('Poupança'));
       await tester.pumpAndSettle();
 
-      expect(find.byType(AppEmptyState), findsWidgets);
+      expect(find.byType(SavingsPage), findsOneWidget);
     });
 
     testWidgets('a ação central abre o registro rápido', (tester) async {

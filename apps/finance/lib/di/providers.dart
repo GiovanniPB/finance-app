@@ -13,6 +13,8 @@ import '../features/categories/data/categories_repository_impl.dart';
 import '../features/categories/domain/categories_repository.dart';
 import '../features/onboarding/data/onboarding_store.dart';
 import '../features/onboarding/domain/onboarding_preferences.dart';
+import '../features/savings/data/savings_repository_impl.dart';
+import '../features/savings/domain/savings_repository.dart';
 import '../features/spaces/data/spaces_repository_impl.dart';
 import '../features/spaces/domain/spaces_repository.dart';
 import '../features/transactions/data/transactions_repository_impl.dart';
@@ -24,6 +26,15 @@ part 'providers.g.dart';
 @Riverpod(keepAlive: true)
 AppEnv appEnv(Ref ref) =>
     throw UnimplementedError('appEnvProvider é sobrescrito no bootstrap');
+
+/// Relógio da aplicação, injetável.
+///
+/// Os repositories já recebem `now` no construtor; isto é o equivalente para a
+/// camada de apresentação, onde há cálculo que depende de "hoje" — o ritmo de
+/// uma meta contra o prazo, por exemplo. Sem um relógio substituível, um teste
+/// desses só passaria no dia em que foi escrito.
+@Riverpod(keepAlive: true)
+DateTime Function() clock(Ref ref) => DateTime.now;
 
 /// Cliente Supabase (inicializado no `bootstrap` via Supabase.initialize).
 @Riverpod(keepAlive: true)
@@ -69,6 +80,12 @@ TransactionsRepository transactionsRepository(Ref ref) =>
 @Riverpod(keepAlive: true)
 BudgetsRepository budgetsRepository(Ref ref) =>
     BudgetsRepositoryImpl(db: ref.watch(powerSyncServiceProvider).db);
+
+@Riverpod(keepAlive: true)
+SavingsRepository savingsRepository(Ref ref) => SavingsRepositoryImpl(
+  db: ref.watch(powerSyncServiceProvider).db,
+  supabase: ref.watch(supabaseClientProvider),
+);
 
 @Riverpod(keepAlive: true)
 OnboardingPreferences onboardingStore(Ref ref) =>

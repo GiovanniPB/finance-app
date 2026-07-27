@@ -23,5 +23,7 @@ export 'src/widgets/budget_progress.dart';
 export 'src/widgets/category_chip.dart';
 export 'src/widgets/category_swatch.dart';
 export 'src/widgets/money_text.dart';
+export 'src/widgets/savings_progress.dart';
+export 'src/widgets/scroll_edge_fade.dart';
 export 'src/widgets/sheet_grab_handle.dart';
 export 'src/widgets/transaction_tile.dart';
