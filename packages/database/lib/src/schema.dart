@@ -133,6 +133,56 @@ const appSchema = Schema([
       Index('space', [IndexedColumn('space_id')]),
     ],
   ),
+  // Meta de poupança (RN-3.1). Cada tipo usa um subconjunto das colunas — ver o
+  // check de forma no cabeçalho da migration 20260727235500. **Não há
+  // `current_amount`**: o progresso é derivado das contribuições confirmadas,
+  // porque uma coluna que precisa ser igual a uma soma desincroniza offline.
+  Table(
+    'savings_goals',
+    [
+      Column.text('space_id'),
+      Column.text('created_by'),
+      Column.text('goal_type'),
+      Column.text('name'),
+      Column.integer('target_amount_minor'),
+      Column.text('currency'),
+      Column.text('target_date'),
+      Column.integer('percentage'),
+      Column.text('linked_account_id'),
+      Column.text('status'),
+      Column.text('created_at'),
+      Column.text('updated_at'),
+    ],
+    indexes: [
+      Index('space', [IndexedColumn('space_id')]),
+    ],
+  ),
+  // Contribuição para uma meta (RN-3.2). `space_id` é denormalizado porque sync
+  // rule não faz join; no Postgres um trigger o mantém igual ao da meta.
+  // `confirmed` é coluna do usuário: só o que ele confirmou entra no progresso.
+  Table(
+    'savings_contributions',
+    [
+      Column.text('goal_id'),
+      Column.text('space_id'),
+      Column.text('created_by'),
+      Column.integer('amount_minor'),
+      Column.text('currency'),
+      Column.text('detected_via'),
+      Column.integer('confirmed'),
+      Column.text('contributed_at'),
+      Column.text('created_at'),
+      Column.text('updated_at'),
+    ],
+    indexes: [
+      // Espelha o índice do Postgres: a query do detalhe é por meta e data.
+      Index('goal_contributed', [
+        IndexedColumn('goal_id'),
+        IndexedColumn.descending('contributed_at'),
+      ]),
+      Index('space', [IndexedColumn('space_id')]),
+    ],
+  ),
   // Preferências locais do app. **Não sincroniza** (`localOnly`): são escolhas
   // deste dispositivo, não dado do usuário — e nada aqui deve subir para o
   // Postgres. O `id` é a chave (ex.: `onboarding_seen`) e o valor vai em

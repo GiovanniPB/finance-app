@@ -66,12 +66,9 @@ abstract class Budget with _$Budget {
   /// `starts_at` no formato do banco (`date`, sem hora).
   ///
   /// Público porque é a chave de negócio do orçamento: a camada `data` compara
-  /// por esta string para achar o orçamento do período.
-  static String dateOnly(DateTime value) {
-    final month = value.month.toString().padLeft(2, '0');
-    final day = value.day.toString().padLeft(2, '0');
-    return '${value.year}-$month-$day';
-  }
+  /// por esta string para achar o orçamento do período. Delega para [isoDate]
+  /// em `package:core`, a mesma necessidade de toda coluna `date`.
+  static String dateOnly(DateTime value) => isoDate(value);
 }
 
 /// Orçamento cruzado com o gasto acumulado do período.

@@ -4,6 +4,8 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../../home/presentation/space_home_page.dart';
 import '../../profile/presentation/profile_page.dart';
+import '../../savings/presentation/goal_icons.dart';
+import '../../savings/presentation/savings_page.dart';
 import '../../spaces/presentation/spaces_page.dart';
 import '../../transactions/presentation/quick_entry_sheet.dart';
 
@@ -27,10 +29,15 @@ class AppShell extends ConsumerStatefulWidget {
 class _AppShellState extends ConsumerState<AppShell> {
   int _index = 0;
 
+  /// A terceira aba se chama **Poupança**, e não "Social" como previa o mapa de
+  /// navegação do PRD (§11.1): ela é a entrada do Pilar 3, e o que existe dele
+  /// hoje são metas. Feed, amigos e desafios são Fase 3 — um rótulo que promete
+  /// o que não existe é justamente o que os pilares 2 e 3 do onboarding evitam
+  /// de propósito. Quando a camada social chegar, ela entra nesta mesma aba.
   static const _destinations = [
     AppNavDestination(icon: Icons.home_outlined, label: 'Início'),
     AppNavDestination(icon: Icons.workspaces_outline, label: 'Espaços'),
-    AppNavDestination(icon: Icons.people_outline, label: 'Social'),
+    AppNavDestination(icon: GoalIcons.tab, label: 'Poupança'),
     AppNavDestination(icon: Icons.person_outline, label: 'Perfil'),
   ];
 
@@ -43,13 +50,7 @@ class _AppShellState extends ConsumerState<AppShell> {
         children: const [
           SpaceHomePage(),
           SpacesPage(),
-          _ComingSoon(
-            icon: Icons.people_outline,
-            title: 'Social',
-            message:
-                'Amigos, desafios e feed de progresso chegam depois que o '
-                'registro individual estiver redondo.',
-          ),
+          SavingsPage(),
           ProfilePage(),
         ],
       ),
@@ -59,30 +60,6 @@ class _AppShellState extends ConsumerState<AppShell> {
       currentIndex: _index,
       onSelected: (index) => setState(() => _index = index),
       onCentralAction: () => QuickEntrySheet.show(context),
-    ),
-  );
-}
-
-/// Placeholder honesto para as abas de fases futuras.
-///
-/// Diz o que vai existir e por que ainda não existe, em vez de mostrar uma tela
-/// vazia sem explicação.
-class _ComingSoon extends StatelessWidget {
-  const _ComingSoon({
-    required this.icon,
-    required this.title,
-    required this.message,
-  });
-
-  final IconData icon;
-  final String title;
-  final String message;
-
-  @override
-  Widget build(BuildContext context) => Padding(
-    padding: const EdgeInsets.all(AppSpacing.screenGutter),
-    child: Center(
-      child: AppEmptyState(icon: icon, title: title, message: message),
     ),
   );
 }

@@ -6,6 +6,32 @@ import 'package:flutter_test/flutter_test.dart';
 import '../helpers/pump_themed.dart';
 
 void main() {
+  group('AppEmptyState', () {
+    testWidgets('mede pelo conteúdo, não pelo espaço disponível', (
+      tester,
+    ) async {
+      // Num `Center` de tela inteira o card esticava até a borda e lia como
+      // caixa de placeholder. Só parecia certo dentro de `ListView`, que
+      // oferece altura infinita.
+      await pumpThemed(
+        tester,
+        const Center(
+          child: AppEmptyState(
+            icon: Icons.savings_outlined,
+            title: 'Nenhuma meta ainda',
+            message: 'Uma frase curta.',
+            actionLabel: 'Criar',
+          ),
+        ),
+      );
+
+      final card = tester.getRect(find.byType(AppEmptyState));
+      final screen = tester.getRect(find.byType(Scaffold));
+
+      expect(card.height, lessThan(screen.height / 2));
+    });
+  });
+
   group('BalanceHeader', () {
     testWidgets('usa o momento alto de 40px', (tester) async {
       await pumpThemed(

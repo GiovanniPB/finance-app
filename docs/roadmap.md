@@ -4,23 +4,23 @@ Documento vivo. O **PRD** define *o quê* e *por quê*; este arquivo registra
 *onde estamos*. Atualize junto com o PR que muda o estado.
 
 - Última atualização: **2026-07-27**
-- Branch de trabalho atual: `test/integracao`
+- Branch de trabalho atual: `feat/metas-poupanca`
 
 ---
 
 ## Estado em uma frase
 
-**A Fase 0 está fechada e a conta virou uma entidade de verdade.** Dá para ser
-apresentado ao produto, registrar um gasto em três toques, editar e excluir
-lançamento, definir e ajustar limite de orçamento com alerta em 80% e 100%,
-criar categoria própria, trocar de espaço e agora cadastrar contas (tipo,
-instituição, saldo, alvo de poupança, vínculo a household) — tudo verificado
-rodando no simulador contra Supabase e PowerSync reais.
+**A Fase 1 começou pelo Pilar 3: metas de poupança existem.** A Fase 0 está
+fechada (apresentação, gasto em três toques, edição, orçamento com alerta em 80%
+e 100%, categoria própria, troca de espaço, contas completas), o lançamento sabe
+de que conta saiu, e a camada local tem 27 testes de integração rodando no CI
+contra um PowerSync de verdade.
 
-O lançamento já sabe de que conta saiu, e a camada local tem teste de integração
-rodando no CI contra um PowerSync de verdade. **Nada bloqueia a Fase 1** — a
-próxima decisão é por onde começá-la: Open Finance (infra nova, credenciais
-Pluggy) ou metas de poupança (só cliente, sobre a conta que agora existe).
+Agora dá para **criar meta por objetivo, valor fixo mensal ou percentual da
+renda, guardar valor e ver progresso** numa aba própria (Poupança, no lugar do
+placeholder Social). A detecção automática de contribuição fica pendente do Open
+Finance — o resto da Fase 1 é Open Finance (infra nova, credenciais Pluggy),
+streaks/badges e categorização por IA.
 
 ## Por onde começar numa sessão nova
 
@@ -33,13 +33,18 @@ Pluggy) ou metas de poupança (só cliente, sobre a conta que agora existe).
    e cor de categoria como índice de paleta em vez de hex.
 4. Antes de mexer em UI, leia a doc de `AppTokens` em
    `packages/design_system/lib/src/theme/app_tokens.dart` — a regra "despesa é o
-   estado neutro" é a espinha do sistema visual.
-5. Para rodar: **não precisa de Docker.** O `env/dev.json` aponta para um
+   estado neutro" é a espinha do sistema visual. Se a UI mostra **progresso**,
+   leia também a doc de `SavingsProgress`: barra de meta e barra de orçamento
+   têm a mesma forma e significados opostos, e o que as separa está lá.
+5. Antes de criar coluna que guarde um total, leia
+   [ADR 0007](adr/0007-agregado-derivado-vs-coluna.md). Agregado neste app é
+   derivado; coluna é só para fato informado.
+6. Para rodar: **não precisa de Docker.** O `env/dev.json` aponta para um
    Supabase e um PowerSync **na nuvem** (o `supabase start` local existe para
    testar migrations, não para rodar o app).
    `cd apps/finance && fvm flutter run -d iphone --target lib/main_dev.dart --dart-define-from-file=../../env/dev.json`.
    Criar conta é passo manual.
-6. **Se as telas ficarem vazias ou o registro rápido travar em "nenhuma
+7. **Se as telas ficarem vazias ou o registro rápido travar em "nenhuma
    categoria", suspeite das sync rules publicadas.** O arquivo
    `powersync/sync_rules.yaml` do repo **não é publicado automaticamente**: toda
    vez que ele muda, é preciso colar o conteúdo no editor de Sync Rules do
@@ -69,7 +74,7 @@ Pluggy) ou metas de poupança (só cliente, sobre a conta que agora existe).
 | Sync rules espelhando o RLS (buckets por usuário e por espaço) | `powersync/sync_rules.yaml` |
 | PowerSync: schema local, connector, serviço | `packages/database` |
 | **Design system completo**: tema claro/escuro, tokens, 10 widgets, 118 testes | `packages/design_system` |
-| 6 ADRs (stack, persistência, camadas, multi-tenancy, Pluggy, dinheiro) | `docs/adr/` |
+| 7 ADRs (stack, persistência, camadas, multi-tenancy, Pluggy, dinheiro, agregados) | `docs/adr/` |
 
 ### Concluído na fatia de transações (branch `feat/transacoes`)
 
@@ -267,13 +272,76 @@ manual, no simulador, e cada fatia a registra no PR.
 
 ---
 
-## Fases 1 a 4 — não iniciadas
+## Fase 1 — Poupança + Open Finance (em andamento)
+
+### Concluído na fatia de metas de poupança (branch `feat/metas-poupanca`)
+
+| Item | Onde |
+|---|---|
+| Migration `savings_goals` + `savings_contributions`, com RLS por membership, check de forma por tipo e trigger que herda o espaço da meta | `supabase/migrations/20260727235500_savings_goals.sql` |
+| Schema PowerSync e sync rules das duas tabelas | `packages/database/lib/src/schema.dart`, `powersync/sync_rules.yaml` |
+| Domain: `SavingsGoal`, `SavingsContribution`, `GoalProgress` (a regra de progresso) | `apps/finance/lib/features/savings/domain/` |
+| Data: repository sobre SQL bruto, statements em `SavingsSql`, exclusão de meta em transação com as contribuições | `.../savings/data/savings_repository_impl.dart` |
+| Providers: progresso por meta, contribuições por meta, total guardado, total do mês, pendentes | `.../savings/presentation/savings_providers.dart` |
+| Aba **Poupança** no lugar do placeholder Social | `.../shell/presentation/app_shell.dart`, `.../savings/presentation/savings_page.dart` |
+| Folha de criar/editar meta em **dois passos** (tipo → campos daquele tipo) | `.../savings/presentation/goal_form_sheet.dart` |
+| Detalhe da meta: progresso, projeção em prosa, histórico de contribuições | `.../savings/presentation/goal_detail_page.dart` |
+| Folha "Guardei um valor" (caminho manual da RN-3.2) | `.../savings/presentation/contribution_sheet.dart` |
+| `SavingsProgress`, `CompletionSeal` e `ScrollEdgeFade` promovidos | `packages/design_system` |
+| `isoDate` promovido para `package:core` (`Budget.dateOnly` delega) | `packages/core/lib/src/format/iso_date.dart` |
+| `GoalCopy`: as frases das metas num lugar só, para lista e detalhe não discordarem | `.../savings/presentation/goal_copy.dart` |
+| 111 testes da fatia + 12 do design system + 12 de integração | `apps/finance/test/features/savings/`, `test_integration/savings_persistence_test.dart` |
+
+**Rodada 3 do design foi aprovada antes de virar Dart** (guideline de progresso +
+3 telas no projeto `Finance App — Design System`).
+
+Quatro decisões que não se leem no código:
+
+- **Não existe coluna `current_amount`.** O PRD §5.2 a lista, mas a RN-3.3 a
+  define como "a soma das contribuições confirmadas" — uma agregação, não um
+  fato. Offline, uma coluna que precisa ser igual a uma soma desincroniza em
+  silêncio: dois aparelhos gravam verdades diferentes e o último upload ganha. O
+  progresso é derivado, como `BudgetUsage` já faz sobre `transactions`.
+- **Barra de meta e barra de orçamento têm significados opostos**, e dois sinais
+  as separam: meta **nunca** usa âmbar nem vermelho (atraso é informação, não
+  erro — a mesma razão pela qual despesa não é vermelha), e só meta tem **marca
+  de ritmo** (um tick mostrando onde o prazo diria que se estaria hoje). Sem
+  prazo, sem tick. Trilho de meta é 8px; de orçamento, 5px.
+- **A renda da meta percentual é derivada dos lançamentos `income` do mês**, e a
+  tela diz de onde o número saiu. É a resposta à questão aberta #1 do PRD, sem
+  campo declarado que envelheceria calado. O custo: quem não lança receita não
+  tem base — e aí a tela diz isso em vez de mostrar 0%.
+- **`savings_contributions.space_id` é denormalizado** porque **sync rule não faz
+  join**: um bucket é `where space_id = bucket.space_id`. Um trigger no Postgres
+  o mantém igual ao da meta, então o cliente não precisa acertá-lo e não
+  consegue mentir nele.
+
+**O quarto tipo de meta do PRD (`recurring_challenge`) ficou fora**, do banco
+inclusive: mede hábito em vez de valor acumulado, precisa de outra tela de
+progresso e se sobrepõe ao conceito de `challenges` da Fase 3.
+
+**A detecção automática de contribuição (RN-3.2, ramo 1) não existe** — depende
+da ingestão da Pluggy. O schema já nasce com `detected_via`/`confirmed`, a UI já
+sabe mostrar e confirmar uma linha pendente, e a ingestão só precisará gravar.
+
+### O que falta na Fase 1
+
+| Item | Estado |
+|---|---|
+| Open Finance (limitado no grátis) | Pipeline Pluggy **inteiramente desenhado** em [ADR 0005](adr/0005-open-finance-pluggy-server-side.md) — zero linhas escritas. Nenhuma Edge Function existe. |
+| Detecção/confirmação automática de contribuição | Metade pronta: schema e UI existem; falta quem crie a linha (ingestão Pluggy) |
+| Streaks e badges básicos | Nada. Agora há histórico de contribuição para derivá-los |
+| Categorização por IA (premium) | Nada |
+| `recurring_challenge` como quarto tipo de meta | Fora de escopo por decisão (ver acima) |
+
+---
+
+## Fases 2 a 4 — não iniciadas
 
 Nada de código. O que existe é **desenho**, não implementação.
 
 | Fase | Escopo (PRD §14) | Estado |
 |---|---|---|
-| **1 — Poupança + Open Finance** | Open Finance limitado no grátis, metas de poupança (4 tipos), detecção/confirmação de contribuição, streaks, badges, categorização por IA | Pipeline Pluggy **inteiramente desenhado** em [ADR 0005](adr/0005-open-finance-pluggy-server-side.md) — zero linhas escritas. Nenhuma Edge Function existe. |
 | **2 — Colaboração** | Espaços `group` (split, saldos, liquidação Pix) e `household` (transparência total, contas vinculadas), convites, matriz de papéis | Schema de espaços e papéis **já pronto**. `Money.allocate()` já resolve a matemática do split (RN-2.1). Falta tudo de UI, `expense_splits`, `settlements`. |
 | **3 — Social + gamificação** | `friendships`, feed, reações, desafios com ranking, push | Nada. |
 | **4 — Monetização + escala** | Paywall premium, relatórios com IA, widget | Nada. `profiles` não tem `subscription_tier`. |
@@ -317,8 +385,52 @@ Ordenados por risco. Todos verificados no código.
       [ADR 0004](adr/0004-multi-tenancy-por-espacos.md) e viraria vazamento
       entre membros assim que um household vinculasse contas.
 
+- [x] **O app inteiro mostrava widget do Material em inglês.** Não havia
+      `localizationsDelegates`, então todo texto que vem do Flutter (e não do
+      nosso código) saía em inglês: o seletor de data do prazo da meta aparecia
+      como "Fri, Jan 1 / January 2027 / Cancel / OK" no meio de um app em
+      português. Nenhuma revisão de código pegaria — o texto não está no repo. Só
+      rodar e olhar. Corrigido com `flutter_localizations` e `pt_BR` como único
+      idioma declarado.
+- [x] **`AppEmptyState` esticava até a borda da tela.** O `Column` não tinha
+      `mainAxisSize.min`, então o card só ficava do tamanho certo dentro de um
+      `ListView` (que dá altura infinita). Num `Center` de tela cheia — o caso da
+      aba Poupança vazia, e também do "Sincronizando" da home — ele virava uma
+      moldura do tamanho da tela e lia como caixa de placeholder.
+- [x] **`AmountDisplay` estourava com valor de cinco dígitos.** A partir de
+      `R$ 8.000,00`, 40px mono não cabia na largura de uma folha em tela de
+      390px, e o Flutter pintava a faixa de overflow — em **qualquer** folha que
+      usasse o widget, registro rápido e orçamento incluídos. Ninguém tinha
+      notado porque nenhum teste digitava um valor grande. Agora um `FittedBox`
+      reduz a escala em vez de vazar. **Lição transferível:** teste de entrada de
+      valor precisa de um valor grande, não só de `R$ 12,34`.
+
 ### Médio
 
+- [ ] **A meta não sabe que o gasto aconteceu.** Guardar valor é um evento
+      próprio (`savings_contributions`), e registrar um lançamento
+      `TransactionType.savings` **não** cria contribuição nenhuma — são dois
+      caminhos que hoje não se falam. Quem usa os dois vê o dinheiro sair na
+      lista e a meta não andar. As saídas são fazer o lançamento de poupança
+      oferecer a meta no momento do registro, ou derivar contribuição de
+      lançamento com conta alvo de poupança. É decisão de produto: o segundo
+      caminho é o que a RN-3.2 chama de detecção, e ela foi desenhada para o
+      Open Finance, não para lançamento manual.
+- [ ] **Meta pausada não tem como ser pausada pela UI.**
+      `SavingsGoalStatus.paused` existe no schema e no domínio, os providers já a
+      excluem da lista, mas a folha só grava `active`. Uma meta que incomoda hoje
+      só sai por exclusão, que apaga o histórico junto.
+- [ ] **Excluir contribuição não existe na UI.** O repository tem
+      `deleteContribution` (com teste), mas nenhuma tela chama: um valor digitado
+      errado só sai excluindo a meta inteira. O desenho pendente é o gesto —
+      arrastar a linha ou tocar e confirmar.
+- [ ] **`GoalProgress` descarta silenciosamente aporte em outra moeda.** Somar
+      BRL com USD lançaria e derrubaria a lista toda por causa de uma linha, e
+      por isso a linha é ignorada. Não acontece hoje (o formulário só cria na
+      moeda da meta), mas quando a Pluggy trouxer conta em outra moeda o valor
+      vai desaparecer do progresso **sem aviso**. Mesma família do débito de
+      moeda em `accountsNetBalance`, e a saída provavelmente é a mesma: dizer na
+      tela que há valor fora da moeda em vez de omiti-lo.
 - [ ] **Saldo de conta não reconcilia com lançamento.** É snapshot por decisão,
       e agora a divergência é visível: gastar R$ 50 na conta corrente não muda
       o saldo mostrado. Mitigado por `balance_as_of` — a tela diz de quando o
@@ -386,13 +498,14 @@ Ordenados por risco. Todos verificados no código.
       Visto no simulador. Vale passar pela rodada de design em vez de eu
       arbitrar.
 - [ ] **A fila de categorias corta o último chip visível** contra o chip "Nova"
-      ancorado. Funciona, mas o corte parece defeito de renderização; a saída
-      usual é um fade na borda da rolagem.
+      ancorado. Funciona, mas o corte parece defeito de renderização. **A saída
+      agora existe**: `ScrollEdgeFade`, criado na fatia de metas, é exatamente
+      isso — falta aplicá-lo aqui.
 - [ ] **A folha de editar conta corta a última fileira do teclado.** Visto no
       simulador: com o botão "Excluir conta" no rodapé fixo sobra menos altura,
-      e o `0` fica pela metade. Rola até ele, mas um alvo de toque cortado lê
-      como defeito. Mesmo caso do chip acima, e a saída provavelmente é a mesma
-      (fade na borda da rolagem) — vale resolver os dois de uma vez.
+      e o `0` fica pela metade. A folha de meta resolveu o mesmo problema com
+      **campos rolando e ações em rodapé fixo** (mais a divisão em dois passos);
+      aplicar o mesmo desenho aqui fecha este débito e o de cima.
 - [ ] **Conta é sempre em BRL.** A entidade e o schema carregam `currency`, mas
       o formulário não oferece escolha. Só incomoda quando houver conta em outra
       moeda; até lá, `accountsNetBalance` esconde o total se as moedas
@@ -418,11 +531,11 @@ Ordenados por risco. Todos verificados no código.
 
 | # | Questão | Status |
 |---|---|---|
-| 1 | Regime de renda para metas percentuais | Aberta — decidir na Fase 1 |
+| 1 | Regime de renda para metas percentuais | ✅ **Respondida** — a renda é a soma dos lançamentos `income` do mês em foco, e a tela mostra de onde o número saiu. Nada é declarado à parte, então nada envelhece calado; o custo é que sem receita lançada não há base, e a tela diz isso em vez de exibir 0% |
 | 2 | Algoritmo de simplificação de dívidas | Aberta. `Money.allocate()` já resolve o **split** de uma despesa (RN-2.1); a minimização de transferências entre membros (RN-2.2) é problema distinto e segue em aberto |
 | 3 | Provedor de Open Finance | ✅ **Respondida** — Pluggy, server-side ([ADR 0005](adr/0005-open-finance-pluggy-server-side.md)). O PRD está desatualizado neste ponto |
 | 4 | IA de categorização: modelo próprio vs. API | Aberta |
-| 5 | Detecção de poupança — falsos positivos | Aberta |
+| 5 | Detecção de poupança — falsos positivos | Aberta, e agora com meia resposta no schema: `confirmed=false` existe para a detecção **propor** sem contar, e só o sim do usuário move o progresso. A heurística de detecção em si segue em aberto e é da ingestão Pluggy |
 | 6 | Limite do Open Finance no grátis (1 ou 2 contas) | Aberta — depende de dados de conversão |
 | 7 | Household com 3+ pessoas | Aberta. O schema **já suporta** (`space_members`); é decisão de UX |
 | 8 | Moderação de feed/comentários | Aberta — Fase 3 |
@@ -435,7 +548,11 @@ Ordenados por risco. Todos verificados no código.
 
 - [`CLAUDE.md`](../CLAUDE.md) — como trabalhar no repo (toolchain, comandos,
   Definição de Pronto, fluxo git)
-- [`docs/adr/`](adr) — decisões de arquitetura e seus porquês
+- [`docs/adr/`](adr) — decisões de arquitetura e seus porquês. O mais recente é
+  o [0007](adr/0007-agregado-derivado-vs-coluna.md): agregado é derivado, não
+  coluna
+- **PRD**: `PRD.pdf` na raiz (git-ignored — 11,7 MB). É a fonte de *o quê* e
+  *por quê*; este arquivo é o *onde estamos*
 - [`docs/pluggy-api-reference.md`](pluggy-api-reference.md) — referência da API do
   agregador
 - Design system visual: projeto `Finance App — Design System` no Claude Design.
