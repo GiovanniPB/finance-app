@@ -184,6 +184,9 @@ Budget testBudget({
 ///
 /// [settle] deve ser `false` quando a tela mostra um indicador de progresso: o
 /// `pumpAndSettle` nunca converge com animação infinita.
+/// [transactionsRepository] e [budgetsRepository] permitem trocar o fake por um
+/// que registre escritas, para os testes que tocam Salvar ou Excluir — os fakes
+/// padrão só leem e lançam em qualquer escrita.
 Future<void> pumpScreen(
   WidgetTester tester,
   Widget screen, {
@@ -191,6 +194,8 @@ Future<void> pumpScreen(
   List<Category>? categories,
   List<Transaction> transactions = const [],
   List<Budget> budgets = const [],
+  TransactionsRepository? transactionsRepository,
+  BudgetsRepository? budgetsRepository,
   bool dark = false,
   bool wrapInScaffold = true,
   bool settle = true,
@@ -205,10 +210,10 @@ Future<void> pumpScreen(
           FakeCategoriesRepository(categories ?? [testCategory()]),
         ),
         transactionsRepositoryProvider.overrideWithValue(
-          FakeTransactionsRepository(transactions),
+          transactionsRepository ?? FakeTransactionsRepository(transactions),
         ),
         budgetsRepositoryProvider.overrideWithValue(
-          FakeBudgetsRepository(budgets),
+          budgetsRepository ?? FakeBudgetsRepository(budgets),
         ),
       ],
       child: MaterialApp(
