@@ -97,6 +97,33 @@ void main() {
     });
   });
 
+  group('pluggyBridgeScript', () {
+    test('aponta o objeto do React Native para o canal do Flutter', () {
+      // A página do Connect publica eventos em
+      // `window.ReactNativeWebView.postMessage` — ela é escrita para React
+      // Native WebView. Sem este shim a chamada morre sem erro: o usuário
+      // atravessa o fluxo, vê "dados coletados com sucesso", e nada é gravado.
+      // Aconteceu de verdade na primeira passagem no simulador.
+      expect(pluggyBridgeScript, contains('window.ReactNativeWebView'));
+      expect(pluggyBridgeScript, contains('postMessage'));
+    });
+
+    test('usa exatamente o nome do canal registrado', () {
+      // Se os dois saírem de sincronia, o fluxo fica **mudo**: nenhuma
+      // exceção, nenhum log, só silêncio. É por isso que esta asserção existe.
+      expect(pluggyBridgeScript, contains('window.$pluggyChannelName'));
+      expect(pluggyChannelName, 'pluggyConnectHandler');
+    });
+
+    test('é JavaScript de uma expressão só, sem depender de bundler', () {
+      // Injeção acontece por `runJavaScript`, que avalia texto cru: qualquer
+      // sintaxe de módulo (import/export) falharia em silêncio.
+      expect(pluggyBridgeScript, isNot(contains('import ')));
+      expect(pluggyBridgeScript, isNot(contains('export ')));
+      expect(pluggyBridgeScript.trim(), isNotEmpty);
+    });
+  });
+
   group('parseMessageType', () {
     test('reconhece os três tipos do contrato da Pluggy', () {
       expect(parseMessageType('OAUTH_OPEN'), PluggyMessageType.oauthOpen);

@@ -9,6 +9,8 @@ import 'package:finance/features/categories/domain/categories_repository.dart';
 import 'package:finance/features/categories/domain/category.dart';
 import 'package:finance/features/onboarding/domain/onboarding_preferences.dart';
 import 'package:finance/features/onboarding/presentation/onboarding_providers.dart';
+import 'package:finance/features/open_finance/domain/open_finance_connection.dart';
+import 'package:finance/features/open_finance/domain/open_finance_repository.dart';
 import 'package:finance/features/savings/domain/savings_contribution.dart';
 import 'package:finance/features/savings/domain/savings_goal.dart';
 import 'package:finance/features/savings/domain/savings_repository.dart';
@@ -19,6 +21,84 @@ import 'package:finance/features/transactions/domain/transactions_repository.dar
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
+
+/// Conexões de Open Finance em memória.
+///
+/// [connectToken] é o que `requestConnectToken` devolve; troque por nulo para
+/// exercitar o caminho de falha (a tela mostra o estado de erro com "Tentar de
+/// novo"). Nada aqui toca rede: a Edge Function é fronteira, e teste de widget
+/// não deve depender dela.
+class FakeOpenFinanceRepository implements OpenFinanceRepository {
+  FakeOpenFinanceRepository({
+    List<OpenFinanceConnection> connections = const [],
+    this.connectToken = 'token-de-teste',
+  }) : connections = [...connections];
+
+  final List<OpenFinanceConnection> connections;
+  final String? connectToken;
+
+  /// Conexões gravadas, na ordem.
+  final List<String> saved = [];
+
+  /// Ids removidos, na ordem.
+  final List<String> deleted = [];
+
+  /// `itemId` recebido em cada pedido de token — nulo quando é conexão nova.
+  final List<String?> tokenRequests = [];
+
+  @override
+  Stream<List<OpenFinanceConnection>> watchAll() => Stream.value(connections);
+
+  @override
+  Future<Result<String, Failure>> requestConnectToken({
+    String? updateItemId,
+  }) async {
+    tokenRequests.add(updateItemId);
+    final token = connectToken;
+    return token == null
+        ? const Err(NetworkFailure('Falha de teste ao pedir o token.'))
+        : Ok(token);
+  }
+
+  @override
+  Future<Result<OpenFinanceConnection, Failure>> save({
+    required String itemId,
+    int? connectorId,
+    String? connectorName,
+  }) async {
+    saved.add(itemId);
+    final connection = testConnection(
+      id: 'conn-${saved.length}',
+      itemId: itemId,
+      connectorName: connectorName,
+    );
+    connections.add(connection);
+    return Ok(connection);
+  }
+
+  @override
+  Future<Result<void, Failure>> delete(String id) async {
+    deleted.add(id);
+    connections.removeWhere((c) => c.id == id);
+    return const Ok(null);
+  }
+}
+
+/// Conexão de exemplo para os testes.
+OpenFinanceConnection testConnection({
+  String id = 'conn-1',
+  String itemId = 'item-1',
+  String? connectorName = 'Banco de Teste',
+  ConnectionStatus status = ConnectionStatus.active,
+}) => OpenFinanceConnection(
+  id: id,
+  ownerId: 'user-1',
+  itemId: itemId,
+  status: status,
+  connectorName: connectorName,
+  createdAt: testNow,
+  updatedAt: testNow,
+);
 
 /// Fakes e monta-tela compartilhados pelos testes de widget das telas.
 ///
@@ -408,6 +488,9 @@ Account testAccount({
   String? institution,
   String? linkedSpaceId,
   DateTime? balanceAsOf,
+
+  /// Conexão de Open Finance que alimenta a conta. Nulo = conta digitada.
+  String? connectionId,
 }) => Account(
   id: id,
   ownerId: 'user-1',
@@ -416,6 +499,7 @@ Account testAccount({
   currentBalance: Money.fromMinor(balanceMinor),
   balanceAsOf: balanceAsOf ?? DateTime.utc(2026, 7),
   isSavingsTarget: isSavingsTarget,
+  connectionId: connectionId,
   createdAt: DateTime.utc(2026, 7),
   updatedAt: DateTime.utc(2026, 7),
   institution: institution,
@@ -490,7 +574,27 @@ final testNow = DateTime(2026, 7, 27, 10);
 /// Vive aqui porque quatro arquivos de teste mantinham a mesma cópia: as folhas
 /// são mais altas que o viewport do teste (valor, campos, teclado e as ações),
 /// então o rodapé começa fora da tela e um `tap` cru cairia no vazio.
+/// Rola a lista até [finder] existir e estar visível.
+///
+/// Diferente de `ensureVisible`, funciona com item que o `ListView` ainda **não
+/// construiu** — que é o caso de qualquer coisa fora do viewport numa lista
+/// longa. A aba Perfil passou a precisar disto quando ganhou a quarta seção
+/// (bancos conectados): `find.text` de uma seção abaixo da dobra encontrava
+/// zero widgets, e a falha lia como "a seção sumiu" quando ela apenas não
+/// tinha sido construída.
+Future<void> scrollTo(WidgetTester tester, Finder finder) async {
+  await tester.scrollUntilVisible(
+    finder,
+    200,
+    scrollable: find.byType(Scrollable).first,
+  );
+  await tester.pumpAndSettle();
+}
+
 Future<void> tapVisible(WidgetTester tester, Finder finder) async {
+  if (finder.evaluate().isEmpty) {
+    await scrollTo(tester, finder);
+  }
   await tester.ensureVisible(finder);
   await tester.pumpAndSettle();
   await tester.tap(finder);
@@ -588,6 +692,7 @@ Future<void> pumpScreen(
   AccountsRepository? accountsRepository,
   SavingsRepository? savingsRepository,
   CategoriesRepository? categoriesRepository,
+  OpenFinanceRepository? openFinanceRepository,
   OnboardingPreferences? onboardingPreferences,
 
   /// Estado da apresentação no boot. O padrão é `true` — "já viu" — porque é o
@@ -618,6 +723,11 @@ Future<void> pumpScreen(
         ),
         savingsRepositoryProvider.overrideWithValue(
           savingsRepository ?? FakeSavingsRepository(),
+        ),
+        // Sem este override, qualquer tela que leia conexões cai no provider
+        // real, que depende do PowerSync e lança no boot de teste.
+        openFinanceRepositoryProvider.overrideWithValue(
+          openFinanceRepository ?? FakeOpenFinanceRepository(),
         ),
         // Relógio fixo: as telas de meta calculam ritmo e projeção contra hoje.
         clockProvider.overrideWithValue(() => testNow),

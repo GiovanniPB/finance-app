@@ -94,3 +94,35 @@ PluggyMessageType parseMessageType(String? type) => switch (type) {
   'LOCATION' => PluggyMessageType.location,
   _ => PluggyMessageType.unknown,
 };
+
+/// Nome do canal JavaScript que recebe as mensagens da página do Connect.
+///
+/// Precisa casar **exatamente** com o nome usado dentro de
+/// [pluggyBridgeScript]; um deles fora de sincronia mata o fluxo em silêncio.
+const pluggyChannelName = 'pluggyConnectHandler';
+
+/// A ponte entre a página do Connect e o Dart.
+///
+/// **Por que isto é obrigatório, e não um detalhe.** A página do Pluggy Connect
+/// é escrita para React Native WebView: ela publica os eventos chamando
+/// `window.ReactNativeWebView.postMessage(...)`. Num WebView do Flutter esse
+/// objeto não existe, então a chamada morre sem erro visível — o usuário
+/// atravessa o fluxo inteiro, vê "dados coletados com sucesso", e **nenhum
+/// evento chega ao app**. Foi o que aconteceu na primeira passagem no
+/// simulador: o fluxo funcionou na tela e a conexão não foi gravada.
+///
+/// O `shim` abaixo cria esse objeto apontando para o canal do Flutter. Precisa
+/// ser injetado **a cada carga de página** (`onPageFinished`), porque cada
+/// navegação dentro do fluxo cria um contexto JS novo e o objeto se perde.
+///
+/// Este é o pedaço mais frágil da integração, e o que menos se enxerga:
+/// nenhuma exceção, nenhum log, só silêncio. O teste de guarda existe para o
+/// nome do canal não sair de sincronia com [pluggyChannelName].
+const pluggyBridgeScript =
+    '''
+window.ReactNativeWebView = {
+  postMessage: function (message) {
+    window.$pluggyChannelName.postMessage(message);
+  }
+};
+''';
