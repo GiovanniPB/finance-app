@@ -93,6 +93,54 @@ não precisar forjar.
 Fica: header secreto **obrigatório** (sem ele, 401), IP fora da lista **logado**
 com aviso e processado.
 
+### O header secreto do webhook **não existe** neste caminho
+
+A revisão acima manteve "header secreto obrigatório". Ao implementar o webhook,
+isso se mostrou **impossível**: a referência da Pluggy (§8.5) diz que `headers`
+customizados só se configuram ao criar uma **instância de webhook** por
+`POST /webhooks`. O nosso `webhookUrl` vai no Connect Token, e por esse caminho a
+Pluggy envia o POST **sem header algum**. Exigir o header recusaria 100% dos
+webhooks — falha total e silenciosa, precisamente o que a revisão queria evitar.
+
+A autoridade passa a vir de três outros lugares, e nenhum deles depende de quem
+chama:
+
+1. **O payload nunca é confiado** — ele diz apenas *que algo mudou, em qual
+   item*. Todo dado vem do `GET /items/{id}` autenticado com a nossa apiKey,
+   como este ADR já mandava.
+2. **Só item que já é nosso é aceito.** `itemId` fora de
+   `open_finance_connections` é descartado (com 2xx, para a Pluggy não re-tentar
+   nove vezes algo que nunca vamos querer).
+3. **`event_id` é `unique`** — reenvio e repetição colidem no banco.
+
+O que resta de exposição é ruído: um terceiro pode disparar re-buscas de itens
+que já são nossos. Custa chamada à Pluggy, não vaza dado e não escreve nada que a
+Pluggy não confirme. Quando existir uma instância registrada com header, ela
+**é** validada — o código aceita os dois mundos, e a variável
+`PLUGGY_WEBHOOK_SECRET` liga a exigência.
+
+**Descartado explicitamente: segredo na URL.** Seria o jeito fácil de ter algo
+compartilhado neste caminho, e coloca credencial em log de acesso, histórico e
+métrica — para proteger um endpoint que, pelas três razões acima, já não é um
+vetor de escrita.
+
+### pgmq não entrou; `webhook_events` é a fila
+
+O ADR previa pgmq. Quando o worker foi escrito, a tabela de idempotência já tinha
+tudo o que uma fila precisa: `processed_at`, `attempts`, `last_error` e índice
+parcial em não-processados. pgmq guardaria **os mesmos fatos num segundo lugar**,
+criando duas verdades para reconciliar ("na fila e não no log", "processado no log
+e ainda na fila").
+
+O que se perde: visibility timeout e dead-letter. O substituto é `attempts` — ao
+esgotar as tentativas, o evento é encerrado com o erro gravado em vez de girar
+para sempre. E o que torna a ausência de trava aceitável é **idempotência**: dois
+workers no mesmo evento reescrevem as mesmas linhas com os mesmos valores, porque
+conta e transação são casadas por id externo.
+
+Se o volume crescer ao ponto de a varredura pesar, pgmq volta à mesa — mas então
+como **substituto** da varredura, não como segunda cópia dela.
+
 ### `provider_id` e `external_id` viram uma coluna só
 
 O ADR listava as duas. Viraram `transactions.external_id`, porque o próprio
