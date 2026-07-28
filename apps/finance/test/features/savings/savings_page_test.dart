@@ -1,4 +1,5 @@
 import 'package:design_system/design_system.dart';
+import 'package:finance/features/savings/domain/savings_contribution.dart';
 import 'package:finance/features/savings/domain/savings_goal.dart';
 import 'package:finance/features/savings/presentation/savings_page.dart';
 import 'package:finance/features/transactions/domain/transaction.dart';
@@ -235,6 +236,72 @@ void main() {
       // Sem o momento alto zerado: "R$ 0,00" em 40px anunciaria fracasso antes
       // de haver o que medir.
       expect(find.byType(BalanceHeader), findsNothing);
+    });
+  });
+
+  group('aporte detectado pelo Open Finance', () {
+    testWidgets('o card anuncia que há algo a confirmar', (tester) async {
+      // Sem esta linha, o aporte que a ingestão detectou só existiria para quem
+      // abrisse a meta certa por conta própria — a confirmação mora no detalhe.
+      await pumpScreen(
+        tester,
+        const SavingsPage(),
+        savingsRepository: FakeSavingsRepository(
+          goals: [testGoal()],
+          contributions: [
+            testContribution(
+              id: 'c1',
+              minor: 50000,
+              source: ContributionSource.openFinance,
+              isConfirmed: false,
+            ),
+          ],
+        ),
+      );
+
+      expect(find.byKey(const Key('goal_card_pending')), findsOneWidget);
+      expect(find.text('1 aporte detectado a confirmar'), findsOneWidget);
+    });
+
+    testWidgets('o valor detectado não entra no total guardado', (
+      tester,
+    ) async {
+      // RN-3.3: só o sim do usuário move o número grande. Um pendente somado
+      // aqui faria a meta andar sozinha.
+      await pumpScreen(
+        tester,
+        const SavingsPage(),
+        savingsRepository: FakeSavingsRepository(
+          goals: [testGoal()],
+          contributions: [
+            testContribution(id: 'c1', minor: 100000),
+            testContribution(
+              id: 'c2',
+              minor: 50000,
+              source: ContributionSource.openFinance,
+              isConfirmed: false,
+            ),
+          ],
+        ),
+      );
+
+      // Duas vezes: o total no topo e o acumulado do card. O que importa é que
+      // nenhum dos dois virou R$ 1.500,00.
+      expect(find.text(r'R$ 1.000,00'), findsNWidgets(2));
+      expect(find.text(r'R$ 1.500,00'), findsNothing);
+    });
+
+    testWidgets('meta sem pendente não mostra a linha', (tester) async {
+      await pumpScreen(
+        tester,
+        const SavingsPage(),
+        savingsRepository: FakeSavingsRepository(
+          goals: [testGoal()],
+          contributions: [testContribution(id: 'c1', minor: 100000)],
+        ),
+      );
+
+      expect(find.byKey(const Key('goal_card_pending')), findsNothing);
     });
   });
 

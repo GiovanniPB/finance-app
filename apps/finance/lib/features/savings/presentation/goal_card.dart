@@ -21,6 +21,7 @@ class GoalCard extends StatelessWidget {
   Widget build(BuildContext context) {
     final tokens = context.tokens;
     final goal = progress.goal;
+    final pending = GoalCopy.pending(progress);
 
     return Material(
       color: context.colors.surfaceContainerLow,
@@ -107,9 +108,61 @@ class GoalCard extends StatelessWidget {
                       : tokens.textMuted,
                 ),
               ),
+              if (pending != null) ...[
+                const SizedBox(height: AppSpacing.md),
+                _PendingBanner(label: pending),
+              ],
             ],
           ),
         ),
+      ),
+    );
+  }
+}
+
+/// "Há aporte detectado esperando o seu sim", no card da meta.
+///
+/// **Superfície de poço, nunca âmbar** — a mesma escolha da linha pendente no
+/// detalhe da meta: âmbar é atenção de orçamento (RN-1.3), e aqui não há nada
+/// errado, só algo a decidir. Sem essa linha o aporte detectado só existiria
+/// para quem abrisse a meta certa por conta própria.
+class _PendingBanner extends StatelessWidget {
+  const _PendingBanner({required this.label});
+
+  final String label;
+
+  @override
+  Widget build(BuildContext context) {
+    final tokens = context.tokens;
+
+    return Container(
+      key: const Key('goal_card_pending'),
+      width: double.infinity,
+      padding: const EdgeInsets.symmetric(
+        horizontal: AppSpacing.md,
+        vertical: AppSpacing.sm,
+      ),
+      decoration: BoxDecoration(
+        color: tokens.surfaceSunken,
+        borderRadius: AppRadii.brMd,
+      ),
+      child: Row(
+        children: [
+          Icon(
+            Icons.done_all,
+            size: AppSpacing.md,
+            color: tokens.textMuted,
+          ),
+          const SizedBox(width: AppSpacing.sm),
+          Expanded(
+            child: Text(
+              label,
+              style: context.texts.labelSmall?.copyWith(
+                color: tokens.textMuted,
+              ),
+            ),
+          ),
+        ],
       ),
     );
   }

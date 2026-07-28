@@ -256,4 +256,66 @@ void main() {
       expect(GoalCopy.requiredMonthly(progressOf(testGoal())), isNull);
     });
   });
+
+  group('aportes a confirmar', () {
+    SavingsContribution detected(String id) => testContribution(
+      id: id,
+      minor: 50000,
+      source: ContributionSource.openFinance,
+      isConfirmed: false,
+    );
+
+    test('sem aporte detectado a frase não existe', () {
+      expect(
+        GoalCopy.pending(
+          progressOf(
+            testGoal(),
+            contributions: [testContribution(minor: 1000)],
+          ),
+        ),
+        isNull,
+      );
+    });
+
+    test('um aporte detectado é anunciado no singular', () {
+      expect(
+        GoalCopy.pending(
+          progressOf(testGoal(), contributions: [detected('c1')]),
+        ),
+        '1 aporte detectado a confirmar',
+      );
+    });
+
+    test('mais de um concorda no plural', () {
+      expect(
+        GoalCopy.pending(
+          progressOf(
+            testGoal(),
+            contributions: [detected('c1'), detected('c2')],
+          ),
+        ),
+        '2 aportes detectados a confirmar',
+      );
+    });
+
+    test('aporte confirmado deixa de ser anunciado', () {
+      // O sim do usuário move o valor para o progresso; continuar pedindo
+      // confirmação depois disso seria pedir duas vezes a mesma decisão.
+      expect(
+        GoalCopy.pending(
+          progressOf(
+            testGoal(),
+            contributions: [
+              testContribution(
+                id: 'c1',
+                minor: 50000,
+                source: ContributionSource.openFinance,
+              ),
+            ],
+          ),
+        ),
+        isNull,
+      );
+    });
+  });
 }

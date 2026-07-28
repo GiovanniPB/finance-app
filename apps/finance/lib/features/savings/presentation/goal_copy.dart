@@ -64,6 +64,23 @@ abstract final class GoalCopy {
     return '$missing · até $until';
   }
 
+  /// Aportes detectados pelo Open Finance esperando o sim (RN-3.2). Nula quando
+  /// não há nenhum.
+  ///
+  /// Fica **fora** de [status] de propósito: as duas frases respondem a coisas
+  /// diferentes ("como vai a meta" e "há algo para você decidir"), e fundi-las
+  /// faria a de decisão sumir toda vez que a de progresso tivesse algo a dizer.
+  ///
+  /// O verbo é "confirmar", não "revisar": o valor já está na lista da meta, e
+  /// o que falta é só o sim que o faz contar.
+  static String? pending(GoalProgress progress) {
+    final count = progress.pendingCount;
+    if (count < 1) return null;
+    return count == 1
+        ? '1 aporte detectado a confirmar'
+        : '$count aportes detectados a confirmar';
+  }
+
   /// Explica a marca de ritmo, no detalhe. Nula quando não há prazo.
   static String? pace(GoalProgress progress) {
     final pace = progress.paceRatio;
