@@ -4,9 +4,10 @@ Documento vivo. O **PRD** define *o quê* e *por quê*; este arquivo registra
 *onde estamos*. Atualize junto com o PR que muda o estado.
 
 - Última atualização: **2026-07-28**
-- Branch de trabalho atual: `chore/debitos-de-open-finance`, a partir da `main`.
-  **A pilha do Open Finance e a correção da ingestão estão mergeadas** (PRs #27,
-  #28, #29 e #30). ⚠️ Fica registrada a armadilha que a pilha revelou:
+- Branch de trabalho atual: `feat/deteccao-de-poupanca`, a partir da `main`.
+  **A pilha do Open Finance, a correção da ingestão, os débitos e a correção do
+  mês estão mergeadas** (PRs #27 a #32). ⚠️ Fica registrada a armadilha que a
+  pilha revelou:
   **PR empilhado não tem CI**, porque o workflow dispara só em `pull_request` para
   `main` — o #26 nunca teve check, e a verificação dele foi local, o que não é a
   mesma coisa. Os únicos PRs abertos são quatro do dependabot (#1, #2, #8, #9),
@@ -36,9 +37,12 @@ a contribuição e o lançamento `savings` nascem juntos, então o valor sai do 
 gastável, entra no total de saídas do mês e aparece na lista. Meta pode ser
 pausada e retomada, e contribuição digitada errado pode ser removida.
 
-A detecção automática de contribuição fica pendente do Open Finance — o resto da
-Fase 1 é Open Finance (infra nova, credenciais Pluggy), streaks/badges e
-categorização por IA.
+A **detecção automática de contribuição fechou o circuito no código**: entrada
+numa conta marcada como alvo de poupança, com uma meta ativa apontando para ela,
+vira contribuição `confirmed=false` ligada ao lançamento importado, e o card da
+meta anuncia que há algo a confirmar. Ainda **não foi vista rodando** — o worker
+precisa ser deployado. O que resta da Fase 1 é streaks/badges e categorização
+por IA.
 
 ## Por onde começar numa sessão nova
 
@@ -76,7 +80,13 @@ categorização por IA.
    foi tirada de **um** conector. A tabela-verdade medida nos dois está lá, com
    teste (`node --test 'supabase/functions/_shared/*.test.ts'`), inclusive o caso
    do sandbox que fica errado de propósito. Não "conserte" esse caso.
-10. **Se as telas ficarem vazias ou o registro rápido travar em "nenhuma
+10. **Antes de mexer na detecção de poupança, leia `detectSavingsContribution`
+    em `_shared/ingest.ts` e o item 5 do cabeçalho do worker.** Duas escolhas
+    parecem defeito e não são: a regra propõe rendimento como aporte de
+    propósito (a proposta não move dinheiro; o sim do usuário move), e só linha
+    **recém-inserida** é proposta — reprocessar não repropõe, porque recusar uma
+    proposta é apagá-la.
+11. **Se as telas ficarem vazias ou o registro rápido travar em "nenhuma
     categoria", suspeite das sync rules publicadas.** O arquivo
     `powersync/sync_rules.yaml` do repo **não é publicado automaticamente**: toda
     vez que ele muda, é preciso colar o conteúdo no editor de Sync Rules do
@@ -308,7 +318,26 @@ manual, no simulador, e cada fatia a registra no PR.
 
 Estado em 2026-07-28, fim da sessão:
 
-0. **Desconectar foi exercitado de verdade** (2026-07-28, iPhone 17 Pro). A
+0. **A detecção de poupança está escrita e não foi vista rodando.** É a dívida
+   mais fresca e a mais fácil de pagar errado. Para exercitá-la:
+
+   1. deployar o worker (comando na seção da fatia; `functions deploy` é passo
+      do usuário);
+   2. no app, marcar uma conta conectada como **alvo de poupança** e criar uma
+      meta **ativa** apontando para ela (a folha de meta oferece todas as contas
+      no seletor "onde o dinheiro fica");
+   3. provocar uma sincronização e conferir por SQL o `payload` do evento — os
+      contadores `propostos`, `semMeta`, `metaAmbigua` e `moedaDivergente` dizem
+      o que a regra decidiu, e `semMeta` alto é o sintoma de a meta não estar
+      ligada à conta certa;
+   4. ver no app a linha "1 aporte detectado a confirmar" no card da meta, e o
+      progresso **não** se mover até o toque em Confirmar.
+
+   Lembre que só **extrato novo** é proposto: os 2.083 lançamentos já ingeridos
+   não viram proposta nenhuma, por decisão (ver o débito do backfill). Se nada
+   aparecer, essa é a primeira hipótese — não um defeito da regra.
+
+1. **Desconectar foi exercitado de verdade** (2026-07-28, iPhone 17 Pro). A
    `pluggy-disconnect` está deployada, e a passagem provou o que teste nenhum
    prova:
 
@@ -330,7 +359,7 @@ Estado em 2026-07-28, fim da sessão:
    que o dado de sandbox pôde ser limpo. Numa conta ainda importada o botão não
    existe.
 
-1. **A home foi vista com 2.083 lançamentos, e achou dois bugs** (fatia acima):
+2. **A home foi vista com 2.083 lançamentos, e achou dois bugs** (fatia acima):
    o dia 1º invisível e `transfer` somado como receita. O que **ainda não** foi
    visto é a **lista do mês** — 145 linhas em julho, com o rótulo
    "Transferência", o total do dia e o cabeçalho de saldo. `MoneyText` não tem
@@ -347,7 +376,7 @@ Estado em 2026-07-28, fim da sessão:
    categorias" no Perfil; o desvanecimento na fila de categorias; e a mensagem de
    erro de login em português (digite a senha errada e leia a frase).
 
-2. **O reparo da ingestão está feito e medido**, e o que a primeira ingestão
+3. **O reparo da ingestão está feito e medido**, e o que a primeira ingestão
    real ensinou vale relido antes de mexer em `_shared/ingest.ts`:
 
    **A convenção de sinal depende do tipo de conta.** Em conta corrente,
@@ -394,20 +423,20 @@ Estado em 2026-07-28, fim da sessão:
    instrumentação rodou e não houve como ler o resultado. Toda observação nova
    vai para o banco.
 
-3. **A exposição das funções está fechada, e o advisor caiu de 10 WARN para 1.**
+4. **A exposição das funções está fechada, e o advisor caiu de 10 WARN para 1.**
    O único que sobrou é o toggle de **proteção de senha vazada** no dashboard —
    um clique, sem código nem migration. Nada mais de segurança pende no repo.
    O advisor também passou a mostrar **1 INFO** (`rls_enabled_no_policy` em
    `webhook_events`), que é o desenho pretendido e não um defeito: RLS ligada com
    zero policies é justamente como se diz "server-only". Não "conserte"
    adicionando policy.
-4. **A cadeia de migrations continua sem ter sido replicada do zero.** A nova
+5. **A cadeia de migrations continua sem ter sido replicada do zero.** A nova
    `20260728030625` rodou num Postgres de verdade (`supabase db push`, e a
    verificação como papel `authenticated` passou), mas `supabase db reset` — as
    **dez** em sequência num banco vazio — segue pendente por exigir Docker. É o
    débito médio mais antigo e o único que ainda separa "aplica sobre o schema
    atual" de "o repo descreve o banco".
-5. **Fora do repo, pendente com o usuário:** o toggle de proteção de senha
+6. **Fora do repo, pendente com o usuário:** o toggle de proteção de senha
    vazada, e **rotacionar as credenciais de Postgres, Redis e partnr** que um
    `claude mcp list` imprimiu em texto claro na sessão de 2026-07-28. Esta
    segunda é a mais urgente das duas e não depende do projeto.
@@ -877,6 +906,72 @@ Duas coisas que valem para além destes dois bugs:
   evitando a fronteira, o outro afirmando o resultado errado. Teste verde prova
   que o código faz o que o teste diz, não que o teste diz a coisa certa.
 
+### Concluído na fatia de detecção de poupança (branch `feat/deteccao-de-poupanca`)
+
+A metade que faltava da RN-3.2: quem **cria** a linha não confirmada. O schema, o
+contrato e a UI de confirmar já existiam desde a fatia de metas — o que não
+existia era a ingestão produzindo o que eles esperavam.
+
+| Item | Onde |
+|---|---|
+| `detectSavingsContribution` — a regra pura, com os motivos de recusa nomeados | `supabase/functions/_shared/ingest.ts` |
+| 8 testes da regra, em `node --test` (sem Deno, sem Docker, sem rede) | `supabase/functions/_shared/ingest.test.ts` |
+| `activeGoalsByAccount` — metas ativas do espaço, indexadas por conta, uma leitura por evento | `pluggy-sync-worker/index.ts` |
+| `IngestedAccount.isSavingsTarget`, lido e **nunca escrito** pela ingestão | idem |
+| `insertResilient` devolve `id` por `external_id` — é o que liga a contribuição ao lançamento | idem |
+| `proposeSavings` — grava a contribuição pendente, `23505` contado em vez de engolido | idem |
+| Contadores de poupança no `payload` do evento (propostos, semMeta, metaAmbigua, moedaDivergente) | idem |
+| `GoalCopy.pending` + linha no card da meta | `.../savings/presentation/{goal_copy,goal_card}.dart` |
+| 7 testes novos no app (4 do texto, 3 da tela) | `test/features/savings/{goal_copy,savings_page}_test.dart` |
+
+**O sinal é unilateral: só a entrada na conta alvo.** Uma transferência entre
+contas próprias chega em duas linhas — a saída na corrente e a entrada na
+poupança —, e casar as duas exigiria heurística de valor-e-data que a questão #5
+do PRD deixa aberta. A entrada basta, e não depende de a conta de origem estar
+conectada. Custo: com só a corrente conectada, não há linha na conta alvo para
+detectar, e nada é proposto.
+
+**A regra pode ser generosa porque a proposta não move dinheiro.** Rendimento da
+poupança também vira proposta, de propósito: a contribuição nasce
+`confirmed=false`, e o falso-positivo custa um toque em "não", não progresso
+errado. É o que dispensa acertar a heurística antes de ter dado real para
+calibrá-la — e é a razão de `confirmed` ser do usuário e nunca do provedor.
+
+**O que a regra se recusa a fazer é escolher meta.** Com duas metas ativas na
+mesma conta a detecção devolve `metaAmbigua` e não propõe: confirmar move o valor
+para a meta que a detecção apontou, e a UI não oferece trocá-la. Desempatar seria
+adivinhar em nome do usuário.
+
+**Só linha recém-inserida é proposta.** O caminho do UPDATE — reprocessamento —
+nunca repropõe, e é isso que respeita o "não": recusar uma proposta é apagá-la, e
+sem essa regra o mesmo extrato a traria de volta a cada sincronização. O preço
+está anotado como débito: os **2.083 lançamentos ingeridos antes desta fatia
+nunca são propostos**, e um backfill é ação à parte justamente porque reabre esse
+"não".
+
+**Dois contadores existiam e não eram renderizados.** `GoalProgress.pendingCount`
+e `pendingContributionsCountProvider` foram escritos na fatia de metas "para a
+tela já saber somar quando isso acontecer" — e nenhuma tela lia. Sem a linha no
+card, a detecção gravaria dado que só apareceria para quem abrisse a meta certa
+por conta própria. A linha usa superfície de poço, **nunca âmbar**: âmbar é
+atenção de orçamento, e aqui não há nada errado, só algo a decidir.
+
+⚠️ **Não foi exercitado rodando.** Typecheck (`deno check`), 29 testes de regra e
+666 do app passam; o que nenhum deles prova é a ingestão gravando contribuição
+contra a Pluggy real. Falta deployar a função e ver a proposta aparecer no app —
+e o roadmap já registra duas vezes em que teste verde e dado certo não foram a
+mesma coisa nesta mesma função.
+
+O deploy é **passo do usuário** (`functions deploy` é bloqueado no agente):
+
+```bash
+supabase functions deploy pluggy-sync-worker --project-ref ivfcypfljxvwkvnvmuum
+```
+
+Nenhuma migration nova, e **sync rules não precisam ser republicadas**:
+`savings_contributions` já é bucketizada por `space_id` com `select *`, e nenhuma
+coluna foi adicionada.
+
 ### O que falta na Fase 1
 
 | Item | Estado |
@@ -887,7 +982,7 @@ Duas coisas que valem para além destes dois bugs:
 | Open Finance — widget Connect | ✅ Internalizado, com 28 testes das partes puras, e **rodou num device**: o canal JS conversa, a allowlist não bloqueia o fluxo legítimo e o `SUCCESS` chega com `item_id`. |
 | Open Finance — caminho no app | ✅ Percorrido de ponta a ponta no iPhone 17 Pro, com sandbox e com conta real, e o dado reparado está no Postgres. Falta **ver as 1.750 linhas no app** — a lista do mês, o resumo e o rótulo "Transferência" com dado de banco de verdade. |
 | Open Finance — desconectar | ✅ Deployada e **exercitada rodando**: 3 conexões viraram 1, as contas do banco removido sobreviveram com o histórico órfão, e os nomes editados não foram sobrescritos. |
-| Detecção/confirmação automática de contribuição | Metade pronta: schema e UI existem; falta quem crie a linha (ingestão Pluggy). O `transaction_id` já espera por ela: a detecção pode ligar a contribuição ao lançamento importado |
+| Detecção/confirmação automática de contribuição | ✅ Escrita e testada (fatia acima): entrada em conta alvo com uma meta ativa vira contribuição `confirmed=false`, ligada ao lançamento importado. ⚠️ **Não exercitada rodando** — falta deployar o worker e ver a proposta chegar ao app |
 | Streaks e badges básicos | Nada. Agora há histórico de contribuição para derivá-los |
 | Categorização por IA (premium) | Nada |
 | `recurring_challenge` como quarto tipo de meta | Fora de escopo por decisão (ver acima) |
@@ -1102,6 +1197,24 @@ Ordenados por risco. Todos verificados no código.
 
 ### Médio
 
+- [ ] **O histórico ingerido antes da detecção nunca é proposto.** A detecção de
+      poupança só olha linha **recém-inserida**, para reprocessar não ressuscitar
+      uma proposta que o usuário recusou. A consequência é que os 2.083
+      lançamentos que já estavam no banco — inclusive qualquer transferência para
+      conta alvo — não viram contribuição nenhuma. Um backfill resolveria de uma
+      vez, e é ação deliberada e à parte por reabrir exatamente o "não" que a
+      regra protege: teria de rodar uma vez só, sobre uma janela escolhida, e não
+      a cada sincronização. Enquanto não existir, a detecção só se manifesta em
+      extrato novo.
+
+      **Decidido em 2026-07-28: não fazer por enquanto.** A detecção será
+      exercitada com extrato novo mesmo. Fica registrado que "nada apareceu" é o
+      sintoma esperado sobre dado antigo, não defeito da regra.
+- [ ] **`pendingContributionsCount` continua sem tela.** O contador de pendentes
+      do espaço inteiro é calculado e testado, e agora que a detecção existe o
+      único lugar que anuncia pendência é o card da meta — dentro da aba
+      Poupança. Quem não abrir a aba não fica sabendo. O caminho natural é um
+      marcador na bottom nav, que é mudança de `AppShell` e não desta fatia.
 - [ ] **A cadeia de migrations nunca foi replicada do zero.** As duas mais
       recentes (`20260728030625` e `20260728033219`) subiram para a nuvem por
       `supabase db push`, então o SQL **rodou** num Postgres de verdade e foi
@@ -1313,7 +1426,7 @@ arquivo só, e os cabeçalhos delas são documentação de verdade.
 | 2 | Algoritmo de simplificação de dívidas | Aberta. `Money.allocate()` já resolve o **split** de uma despesa (RN-2.1); a minimização de transferências entre membros (RN-2.2) é problema distinto e segue em aberto |
 | 3 | Provedor de Open Finance | ✅ **Respondida** — Pluggy, server-side ([ADR 0005](adr/0005-open-finance-pluggy-server-side.md)). O PRD está desatualizado neste ponto |
 | 4 | IA de categorização: modelo próprio vs. API | Aberta |
-| 5 | Detecção de poupança — falsos positivos | Aberta, e agora com meia resposta no schema: `confirmed=false` existe para a detecção **propor** sem contar, e só o sim do usuário move o progresso. A heurística de detecção em si segue em aberto e é da ingestão Pluggy |
+| 5 | Detecção de poupança — falsos positivos | ✅ **Respondida por desenho, não por heurística**: o sinal é a **entrada numa conta alvo com uma meta ativa apontando para ela**, e a proposta nasce `confirmed=false`. A regra é generosa de propósito (rendimento também vira proposta) porque o falso-positivo custa um toque em "não", não progresso errado — o que dispensa calibrar heurística antes de ter dado real. O que a regra recusa é escolher entre duas metas na mesma conta. Falta exercitar rodando |
 | 6 | Limite do Open Finance no grátis (1 ou 2 contas) | Aberta — depende de dados de conversão |
 | 7 | Household com 3+ pessoas | Aberta. O schema **já suporta** (`space_members`); é decisão de UX |
 | 8 | Moderação de feed/comentários | Aberta — Fase 3 |

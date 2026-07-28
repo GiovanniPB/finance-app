@@ -17,6 +17,7 @@ import { describe, it } from 'node:test';
 import {
   chunk,
   dedupeByExternalId,
+  detectSavingsContribution,
   directionByType,
   resolveDirection,
 } from './ingest.ts';
@@ -104,6 +105,99 @@ describe('directionByType — o cruzamento', () => {
   it('devolve null sem type, para não confundir com concordância', () => {
     assert.equal(directionByType(undefined, 'checking'), null);
     assert.equal(directionByType('OTHER', 'checking'), null);
+  });
+});
+
+describe('detectSavingsContribution', () => {
+  const meta = { id: 'meta-1', currency: 'BRL' };
+  const entradaNaContaAlvo = {
+    direction: 'income' as const,
+    accountIsSavingsTarget: true,
+    currency: 'BRL',
+    goals: [meta],
+  };
+
+  it('entrada em conta alvo com uma meta ativa vira aporte', () => {
+    assert.deepEqual(detectSavingsContribution(entradaNaContaAlvo), {
+      verdict: 'aporte',
+      goalId: 'meta-1',
+    });
+  });
+
+  it('conta que não é alvo de poupança não propõe nada', () => {
+    const result = detectSavingsContribution({
+      ...entradaNaContaAlvo,
+      accountIsSavingsTarget: false,
+    });
+
+    assert.equal(result.verdict, 'contaNaoEhAlvo');
+    assert.equal(result.goalId, null);
+  });
+
+  it('saída da conta alvo não é aporte — o dinheiro foi embora', () => {
+    assert.equal(
+      detectSavingsContribution({
+        ...entradaNaContaAlvo,
+        direction: 'expense',
+      }).verdict,
+      'naoEhEntrada',
+    );
+  });
+
+  it('transferência não é aporte, mesmo em conta alvo', () => {
+    // É a direção do abatimento de fatura: cartão marcado como alvo de poupança
+    // não faz sentido, e o caso é coberto por totalidade, não por expectativa.
+    assert.equal(
+      detectSavingsContribution({
+        ...entradaNaContaAlvo,
+        direction: 'transfer',
+      }).verdict,
+      'naoEhEntrada',
+    );
+  });
+
+  it('conta alvo sem meta apontando para ela não propõe', () => {
+    assert.equal(
+      detectSavingsContribution({ ...entradaNaContaAlvo, goals: [] }).verdict,
+      'semMeta',
+    );
+  });
+
+  it('duas metas na mesma conta: recusa em vez de escolher por ela', () => {
+    // Confirmar move o valor para a meta que a detecção apontou, e a UI não
+    // oferece trocá-la. Propor aqui seria adivinhar em nome do usuário.
+    const result = detectSavingsContribution({
+      ...entradaNaContaAlvo,
+      goals: [meta, { id: 'meta-2', currency: 'BRL' }],
+    });
+
+    assert.equal(result.verdict, 'metaAmbigua');
+    assert.equal(result.goalId, null);
+  });
+
+  it('meta em outra moeda não recebe o aporte', () => {
+    // `GoalProgress` descartaria a linha em silêncio; propor seria oferecer um
+    // sim que não move o progresso.
+    const result = detectSavingsContribution({
+      ...entradaNaContaAlvo,
+      currency: 'USD',
+    });
+
+    assert.equal(result.verdict, 'moedaDivergente');
+    assert.equal(result.goalId, null);
+  });
+
+  it('a conta é conferida antes da direção, para "não é alvo" não virar '
+    + '"não é entrada" na contagem', () => {
+    assert.equal(
+      detectSavingsContribution({
+        direction: 'expense',
+        accountIsSavingsTarget: false,
+        currency: 'BRL',
+        goals: [],
+      }).verdict,
+      'contaNaoEhAlvo',
+    );
   });
 });
 

@@ -67,7 +67,24 @@
 // `last_error` que a causa acima apareceu; até então ela era palpite.
 //
 // ─────────────────────────────────────────────────────────────────────────
-// 5. O QUE ESTA FATIA NÃO FAZ
+// 5. DETECÇÃO DE POUPANÇA: SÓ LINHA NOVA, E SÓ PROPOSTA
+//
+// Entrada numa conta marcada como alvo de poupança, com **uma** meta ativa
+// apontando para ela, vira `savings_contribution` com `confirmed=false`
+// (RN-3.2). A regra está em `detectSavingsContribution`; aqui fica o efeito.
+//
+// **A detecção roda só sobre o que foi inserido nesta passada.** Linha já
+// conhecida — o caminho do UPDATE — nunca é reproposta, e essa escolha é o que
+// respeita o "não" do usuário: recusar uma proposta é apagá-la, e reprocessar o
+// mesmo extrato a traria de volta a cada sincronização. O preço é que o
+// histórico ingerido **antes** desta fatia nunca é proposto; um backfill é ação
+// à parte, e deliberada, justamente porque reabre esse "não".
+//
+// `confirmed` é do usuário, nunca do provedor: a ingestão escreve `false` e não
+// volta a tocar na coluna. É o que permite propor sem mover o progresso da meta.
+//
+// ─────────────────────────────────────────────────────────────────────────
+// 6. O QUE ESTA FATIA NÃO FAZ
 //
 //  * `transactions/deleted` — a Pluggy apaga transação depois de merge. Aqui o
 //    evento é registrado e **não** apaga nada: apagar lançamento que o usuário
@@ -93,8 +110,11 @@ import {
 import {
   chunk,
   dedupeByExternalId,
+  detectSavingsContribution,
   type Direction,
   directionByType,
+  type LinkedGoal,
+  type SavingsVerdict,
   resolveDirection,
 } from '../_shared/ingest.ts';
 
@@ -262,6 +282,47 @@ async function personalSpaceId(
 }
 
 /**
+ * Metas **ativas** do espaço que apontam para alguma conta, indexadas por conta.
+ *
+ * Lida uma vez por evento, e não por página: são poucas linhas por espaço, e
+ * repetir a consulta a cada página de 500 transações trocaria uma ida por
+ * dezenas sem mudar a resposta.
+ *
+ * O filtro por `space_id` não é decoração. A conta pertence ao **dono**, e o
+ * lançamento importado vai para o espaço **pessoal** dele (ver
+ * [personalSpaceId]); uma meta de household apontando para a mesma conta
+ * receberia aporte de dinheiro que nunca entrou naquele espaço. Só meta `active`
+ * entra: meta pausada ou concluída não deve voltar a andar sozinha.
+ */
+async function activeGoalsByAccount(
+  supabase: SupabaseClient,
+  spaceId: string,
+): Promise<Map<string, LinkedGoal[]>> {
+  const { data, error } = await supabase
+    .from('savings_goals')
+    .select('id, currency, linked_account_id')
+    .eq('space_id', spaceId)
+    .eq('status', 'active')
+    .not('linked_account_id', 'is', null);
+
+  // Lança pelo mesmo motivo das outras leituras (item 4): um mapa vazio por
+  // falha é indistinguível de "não há meta", e a diferença é dinheiro que
+  // deixaria de ser proposto sem ninguém saber.
+  if (error) {
+    throw new Error(`Falha ao ler as metas de poupança: ${error.message}`);
+  }
+
+  const byAccount = new Map<string, LinkedGoal[]>();
+  for (const row of data ?? []) {
+    const accountId = row.linked_account_id as string;
+    const goals = byAccount.get(accountId) ?? [];
+    goals.push({ id: row.id as string, currency: row.currency as string });
+    byAccount.set(accountId, goals);
+  }
+  return byAccount;
+}
+
+/**
  * Marca a conexão como removida na Pluggy.
  *
  * Um caminho só para os dois jeitos de descobrir isso — o evento
@@ -400,6 +461,13 @@ interface IngestedAccount {
   /// tipo de conta: numa conta corrente o dinheiro sai; num cartão a compra
   /// aumenta a dívida. Ver `logDirectionConvention`.
   readonly accountType: string;
+  /// Se a conta é destino de meta de poupança (RN-3.2). É a chave da detecção
+  /// automática de aporte — ver `detectSavingsContribution`.
+  ///
+  /// **A ingestão nunca escreve esta coluna**, só a lê: marcar uma conta como
+  /// alvo de poupança é escolha do usuário, e conta recém-importada nasce com o
+  /// `false` do schema. Mesma regra de propriedade que protege `name`.
+  readonly isSavingsTarget: boolean;
 }
 
 /**
@@ -422,7 +490,7 @@ async function syncAccounts(
 
   const { data: existing, error: readError } = await supabase
     .from('accounts')
-    .select('id, external_id')
+    .select('id, external_id, is_savings_target')
     .eq('connection_id', connection.id);
 
   // Lança pelo mesmo motivo da leitura de transações (item 4): devolver o mapa
@@ -430,10 +498,16 @@ async function syncAccounts(
   if (readError) {
     throw new Error(`Falha ao ler as contas existentes: ${readError.message}`);
   }
-  const existingByExternal = new Map<string, string>(
+  const existingByExternal = new Map<
+    string,
+    { id: string; isSavingsTarget: boolean }
+  >(
     (existing ?? [])
       .filter((row) => typeof row.external_id === 'string')
-      .map((row) => [row.external_id as string, row.id as string]),
+      .map((row) => [
+        row.external_id as string,
+        { id: row.id as string, isSavingsTarget: row.is_savings_target === true },
+      ]),
   );
 
   const now = new Date().toISOString();
@@ -455,15 +529,16 @@ async function syncAccounts(
           current_balance_minor: balanceMinor,
           balance_as_of: now,
         })
-        .eq('id', known);
+        .eq('id', known.id);
       if (error) {
         throw new Error(
           `Falha ao atualizar conta importada: ${error.message}`,
         );
       }
       byExternalId.set(account.id, {
-        id: known,
+        id: known.id,
         accountType: mapAccountType(account),
+        isSavingsTarget: known.isSavingsTarget,
       });
       continue;
     }
@@ -490,6 +565,9 @@ async function syncAccounts(
       byExternalId.set(account.id, {
         id: inserted.id as string,
         accountType: mapAccountType(account),
+        // Conta nova nasce com o `false` do schema: alvo de poupança é escolha
+        // do usuário, não fato que a Pluggy informe.
+        isSavingsTarget: false,
       });
     }
   }
@@ -506,6 +584,7 @@ async function syncTransactions(
   account: IngestedAccount,
   spaceId: string,
   eventRowId: string,
+  goals: readonly LinkedGoal[],
 ): Promise<number> {
   let path: string | null =
     `/v2/transactions?accountId=${encodeURIComponent(externalAccountId)}`;
@@ -519,7 +598,7 @@ async function syncTransactions(
     pages += 1;
 
     const transactions = (page.results ?? []).filter(
-      // `PENDING` fica de fora: ver o item 4 do cabeçalho.
+      // `PENDING` fica de fora: ver o item 6 do cabeçalho.
       (transaction) => transaction.status !== 'PENDING',
     );
 
@@ -540,6 +619,7 @@ async function syncTransactions(
           connection,
           account,
           spaceId,
+          goals,
         );
         await recordConvention(supabase, eventRowId, {
           ...observation,
@@ -595,6 +675,30 @@ interface WriteOutcome {
   readonly perdidas: number;
   /// Linhas cujo sinal discordou do `type` declarado.
   readonly direcaoEmDuvida: number;
+  /// O que a detecção de poupança fez com esta página.
+  ///
+  /// **Ausente quando a conta não é alvo de poupança** — que é o caso da imensa
+  /// maioria. A ausência é a informação: um objeto com `contaNaoEhAlvo: 500` em
+  /// toda página afogaria o payload no caso desinteressante.
+  readonly poupanca?: SavingsOutcome;
+}
+
+/// O que a detecção de poupança produziu numa página (RN-3.2).
+///
+/// Cada recusa é contada em separado porque as perguntas são diferentes:
+/// `semMeta` diz que ninguém ligou a conta a uma meta (configuração), enquanto
+/// `metaAmbigua` diz que alguém ligou duas (conflito que só o usuário desfaz).
+interface SavingsOutcome {
+  /// Contribuições pendentes inseridas.
+  readonly propostos: number;
+  /// Recusadas pela `unique (transaction_id)`: o lançamento já tinha
+  /// contribuição. Deve ser sempre zero — a detecção só olha linha recém-
+  /// inserida —, e deixar de ser significa que há um segundo caminho de escrita.
+  readonly jaExistiam: number;
+  readonly naoEhEntrada: number;
+  readonly semMeta: number;
+  readonly metaAmbigua: number;
+  readonly moedaDivergente: number;
 }
 
 /**
@@ -603,6 +707,9 @@ interface WriteOutcome {
  * Ver o item 3 do cabeçalho: o UPDATE das linhas conhecidas carrega só colunas
  * da Pluggy; `description` e `category_id` nunca aparecem nele. E o item 4:
  * falha de escrita **lança** em vez de virar um número que parece sucesso.
+ *
+ * [goals] são as metas ativas que apontam para **esta** conta. A detecção de
+ * aporte (item 5) roda só sobre o que foi inserido agora.
  */
 async function writeTransactions(
   supabase: SupabaseClient,
@@ -610,6 +717,7 @@ async function writeTransactions(
   connection: ConnectionRow,
   account: IngestedAccount,
   spaceId: string,
+  goals: readonly LinkedGoal[],
 ): Promise<WriteOutcome> {
   const disagreements = { count: 0 };
 
@@ -651,6 +759,9 @@ async function writeTransactions(
   );
 
   const toInsert: Record<string, unknown>[] = [];
+  /// Só o que foi **inserido agora** é candidato a aporte. Ver o item 5 do
+  /// cabeçalho: linha já conhecida nunca é reproposta.
+  const candidates: SavingsCandidate[] = [];
   let updated = 0;
 
   for (const { externalId, value } of keyed) {
@@ -697,9 +808,35 @@ async function writeTransactions(
       // nunca mais a toca.
       description: transaction.description?.trim() || descriptionRaw,
     });
+
+    // A conta é sempre a mesma na página, então a detecção só é interessante
+    // quando ela é alvo — ver `SavingsOutcome`.
+    if (account.isSavingsTarget) {
+      candidates.push({
+        externalId,
+        direction: type,
+        amountMinor: amountMinor as number,
+        currency: transaction.currencyCode ?? 'BRL',
+        occurredAt: occurredAt as string,
+      });
+    }
   }
 
-  const { inserted, duplicated } = await insertResilient(supabase, toInsert);
+  const { inserted, duplicated, idByExternalId } = await insertResilient(
+    supabase,
+    toInsert,
+  );
+
+  const poupanca = account.isSavingsTarget
+    ? await proposeSavings(
+      supabase,
+      candidates,
+      idByExternalId,
+      goals,
+      connection,
+      spaceId,
+    )
+    : undefined;
 
   return {
     ...empty,
@@ -709,6 +846,112 @@ async function writeTransactions(
     duplicadas: duplicated,
     perdidas: toInsert.length - inserted - duplicated,
     direcaoEmDuvida: disagreements.count,
+    ...(poupanca ? { poupanca } : {}),
+  };
+}
+
+/// Uma linha recém-inserida, reduzida ao que a detecção de poupança precisa.
+interface SavingsCandidate {
+  readonly externalId: string;
+  readonly direction: Direction;
+  readonly amountMinor: number;
+  readonly currency: string;
+  readonly occurredAt: string;
+}
+
+/**
+ * Grava as contribuições **pendentes** das linhas que acabaram de entrar.
+ *
+ * Ver o item 5 do cabeçalho para o porquê de só olhar linha nova. Duas
+ * propriedades que o código precisa preservar:
+ *
+ *  * **`confirmed` nunca é escrito como `true` aqui.** A coluna é do usuário
+ *    (cabeçalho da migration `20260727235500`): a ingestão propõe, o sim
+ *    confirma. Um `true` daqui faria a meta andar sozinha.
+ *  * **`23505` é benigno e contado.** A `unique (transaction_id)` é a rede: se
+ *    duas execuções simultâneas pegarem o mesmo evento (item 2), a segunda
+ *    recusa em vez de duplicar o aporte. Contado, e não engolido — ver
+ *    `SavingsOutcome.jaExistiam`.
+ */
+async function proposeSavings(
+  supabase: SupabaseClient,
+  candidates: readonly SavingsCandidate[],
+  idByExternalId: Map<string, string>,
+  goals: readonly LinkedGoal[],
+  connection: ConnectionRow,
+  spaceId: string,
+): Promise<SavingsOutcome> {
+  const tally: Record<SavingsVerdict, number> = {
+    aporte: 0,
+    naoEhEntrada: 0,
+    contaNaoEhAlvo: 0,
+    semMeta: 0,
+    metaAmbigua: 0,
+    moedaDivergente: 0,
+  };
+  const rows: Record<string, unknown>[] = [];
+
+  for (const candidate of candidates) {
+    const transactionId = idByExternalId.get(candidate.externalId);
+    // Sem lançamento não há o que ligar: a linha colidiu ou não entrou, e os
+    // contadores de `WriteOutcome` já a explicam.
+    if (!transactionId) continue;
+
+    const { verdict, goalId } = detectSavingsContribution({
+      direction: candidate.direction,
+      accountIsSavingsTarget: true,
+      currency: candidate.currency,
+      goals,
+    });
+    tally[verdict] += 1;
+    if (verdict !== 'aporte' || goalId == null) continue;
+
+    rows.push({
+      goal_id: goalId,
+      // O trigger `savings_contributions_inherit_space` derruba este valor pelo
+      // da meta. Vai explícito porque a coluna é `not null` e depender do
+      // trigger para satisfazer a constraint esconde a intenção.
+      space_id: spaceId,
+      created_by: connection.owner_id,
+      amount_minor: candidate.amountMinor,
+      currency: candidate.currency,
+      detected_via: 'open_finance',
+      confirmed: false,
+      contributed_at: candidate.occurredAt,
+      transaction_id: transactionId,
+    });
+  }
+
+  let jaExistiam = 0;
+  let propostos = 0;
+
+  // Linha a linha, e não em lote: o INSERT é atômico, e uma colisão de
+  // `transaction_id` derrubaria os outros aportes da página. É o mesmo estrago
+  // que `insertResilient` evita — aqui o volume é pequeno o bastante para não
+  // valer a divisão em pedaços.
+  for (const row of rows) {
+    const { error } = await supabase
+      .from('savings_contributions')
+      .insert(row);
+
+    if (error == null) {
+      propostos += 1;
+    } else if (error.code === '23505') {
+      jaExistiam += 1;
+    } else {
+      throw new Error(
+        `Falha ao propor contribuição detectada: ${error.message}`,
+      );
+    }
+  }
+
+  return {
+    propostos,
+    jaExistiam,
+    naoEhEntrada: tally.naoEhEntrada,
+    semMeta: tally.semMeta,
+    metaAmbigua: tally.metaAmbigua,
+    moedaDivergente: tally.moedaDivergente,
   };
 }
 
@@ -774,13 +1017,29 @@ async function readExisting(
  * A degradação para linha a linha só acontece no pedaço que colidiu, e é o que
  * transforma "página perdida" em "N linhas duplicadas, contadas". Essa contagem
  * é o dado que diz se `providerId` é único por transação de verdade.
+ *
+ * Devolve também `id` por `external_id`, e o casamento é pela **coluna**, não
+ * pela ordem em que o PostgREST respondeu: é esse mapa que liga a contribuição
+ * detectada ao lançamento que a produziu, e confiar na ordem faria a
+ * contribuição apontar para a linha errada sem nada estourar.
  */
 async function insertResilient(
   supabase: SupabaseClient,
   rows: Record<string, unknown>[],
-): Promise<{ inserted: number; duplicated: number }> {
+): Promise<{
+  inserted: number;
+  duplicated: number;
+  idByExternalId: Map<string, string>;
+}> {
   let inserted = 0;
   let duplicated = 0;
+  const idByExternalId = new Map<string, string>();
+
+  const remember = (row: { id?: unknown; external_id?: unknown }): void => {
+    if (typeof row.id === 'string' && typeof row.external_id === 'string') {
+      idByExternalId.set(row.external_id, row.id);
+    }
+  };
 
   for (const batch of chunk(rows, INSERT_CHUNK)) {
     // O `select` devolve **só o que entrou**: é como a contagem passa a ser
@@ -788,10 +1047,11 @@ async function insertResilient(
     const { data, error } = await supabase
       .from('transactions')
       .insert(batch)
-      .select('id');
+      .select('id, external_id');
 
     if (error == null) {
       inserted += data?.length ?? 0;
+      for (const row of data ?? []) remember(row);
       continue;
     }
     // `23505` = alguma linha do lote já existe. Só ela deveria ficar de fora, e
@@ -803,11 +1063,14 @@ async function insertResilient(
     }
 
     for (const row of batch) {
-      const { error: rowError } = await supabase
+      const { data: one, error: rowError } = await supabase
         .from('transactions')
-        .insert(row);
+        .insert(row)
+        .select('id, external_id')
+        .maybeSingle();
       if (rowError == null) {
         inserted += 1;
+        if (one) remember(one);
       } else if (rowError.code === '23505') {
         duplicated += 1;
       } else {
@@ -818,7 +1081,7 @@ async function insertResilient(
     }
   }
 
-  return { inserted, duplicated };
+  return { inserted, duplicated, idByExternalId };
 }
 
 /** Processa um evento. Lança para o chamador registrar a tentativa. */
@@ -877,7 +1140,7 @@ async function processEvent(
   await syncConnection(supabase, connection as ConnectionRow, item);
 
   if (event.event_type === 'transactions/deleted') {
-    // Ver o item 4 do cabeçalho: não apagamos lançamento por conta própria.
+    // Ver o item 6 do cabeçalho: não apagamos lançamento por conta própria.
     console.warn('transactions/deleted recebido; nada é apagado nesta versão');
     return;
   }
@@ -894,6 +1157,10 @@ async function processEvent(
     throw new Error('Sem espaço pessoal para o dono da conexão');
   }
 
+  // Uma leitura por evento, e não por conta: são poucas linhas, e o mapa
+  // responde para todas as contas do item.
+  const goalsByAccount = await activeGoalsByAccount(supabase, spaceId);
+
   let total = 0;
   for (const [externalAccountId, account] of accounts) {
     total += await syncTransactions(
@@ -904,6 +1171,7 @@ async function processEvent(
       account,
       spaceId,
       event.id,
+      goalsByAccount.get(account.id) ?? [],
     );
   }
   console.log('Ingestão concluída', {

@@ -91,6 +91,106 @@ export function directionByType(
   return isCreditCard(accountType) ? 'transfer' : 'income';
 }
 
+// -------------------------------------------------------------------------
+// Detecção de poupança (RN-3.2, caminho 2)
+// -------------------------------------------------------------------------
+
+/// Uma meta ativa que aponta para a conta que recebeu o dinheiro.
+///
+/// A moeda vem junto porque é critério de decisão, não detalhe de escrita:
+/// `GoalProgress` **descarta em silêncio** aporte em moeda diferente da meta, e
+/// propor uma contribuição que o progresso vai ignorar seria oferecer um sim que
+/// não muda nada.
+export interface LinkedGoal {
+  readonly id: string;
+  readonly currency: string;
+}
+
+/// O que a detecção decidiu sobre uma linha importada.
+///
+/// Os motivos de recusa são nomeados um a um, e não colapsados num `false`,
+/// porque cada um é gravado no `payload` do evento: "não propôs" e "propôs
+/// errado" precisam ser distinguíveis por SQL, que é a lição do item 4 do
+/// cabeçalho do worker.
+export type SavingsVerdict =
+  /// Propor contribuição pendente.
+  | 'aporte'
+  /// Dinheiro não entrou nesta conta (saída, ou abatimento de fatura).
+  | 'naoEhEntrada'
+  /// A conta não está marcada como alvo de poupança.
+  | 'contaNaoEhAlvo'
+  /// Conta alvo, e nenhuma meta ativa do espaço aponta para ela.
+  | 'semMeta'
+  /// Mais de uma meta ativa disputa a conta — a detecção se recusa a escolher.
+  | 'metaAmbigua'
+  /// A única meta candidata está em outra moeda.
+  | 'moedaDivergente';
+
+export interface SavingsDetection {
+  readonly verdict: SavingsVerdict;
+  /// Preenchido só quando [verdict] é `aporte`.
+  readonly goalId: string | null;
+}
+
+/**
+ * Decide se uma linha importada deve virar contribuição **pendente**.
+ *
+ * ─────────────────────────────────────────────────────────────────────────
+ * O SINAL É UNILATERAL, DE PROPÓSITO
+ *
+ * A RN-3.2 fala em "transferência para conta marcada como `is_savings_target`".
+ * Uma transferência entre contas próprias chega em **duas** linhas — a saída na
+ * corrente e a entrada na poupança — e casar as duas exigiria heurística de
+ * valor-e-data que a questão #5 do PRD deixa em aberto.
+ *
+ * Aqui só a **entrada na conta alvo** é considerada. Ela basta: é a linha que
+ * diz que o dinheiro chegou onde a meta guarda, e não depende de a conta de
+ * origem estar conectada. Custo aceito: se só a corrente estiver conectada, a
+ * transferência não é detectada — não há linha na conta alvo para detectar.
+ *
+ * ─────────────────────────────────────────────────────────────────────────
+ * POR QUE A REGRA PODE SER GENEROSA
+ *
+ * Rendimento da poupança também chega como entrada, e vira proposta. Isso é
+ * **intencional**: a contribuição nasce `confirmed=false`, e é o sim do usuário
+ * que a faz contar (RN-3.3). O falso-positivo que a questão #5 teme custa um
+ * toque em "não", não dinheiro errado no progresso — o que dispensa acertar a
+ * heurística antes de ter dado real para calibrá-la.
+ *
+ * O que a regra **não** pode fazer é escolher entre metas. Confirmar move o
+ * valor para a meta que a detecção apontou, e a UI não oferece trocá-la: com
+ * duas metas ativas na mesma conta, propor seria adivinhar em nome do usuário.
+ * Daí `metaAmbigua` recusar em vez de desempatar.
+ *
+ * Cartão de crédito nunca chega aqui como entrada: `resolveDirection` devolve
+ * `transfer` para o abatimento de fatura, nunca `income`. A checagem de
+ * [accountIsSavingsTarget] cobre o resto por totalidade.
+ */
+export function detectSavingsContribution(args: {
+  readonly direction: Direction;
+  readonly accountIsSavingsTarget: boolean;
+  readonly currency: string;
+  readonly goals: readonly LinkedGoal[];
+}): SavingsDetection {
+  const { direction, accountIsSavingsTarget, currency, goals } = args;
+
+  if (!accountIsSavingsTarget) {
+    return { verdict: 'contaNaoEhAlvo', goalId: null };
+  }
+  if (direction !== 'income') {
+    return { verdict: 'naoEhEntrada', goalId: null };
+  }
+  if (goals.length === 0) return { verdict: 'semMeta', goalId: null };
+  if (goals.length > 1) return { verdict: 'metaAmbigua', goalId: null };
+
+  const goal = goals[0];
+  if (goal.currency !== currency) {
+    return { verdict: 'moedaDivergente', goalId: null };
+  }
+
+  return { verdict: 'aporte', goalId: goal.id };
+}
+
 /// Uma linha da Pluggy reduzida ao que a dedup precisa.
 export interface Keyed<T> {
   readonly externalId: string;
