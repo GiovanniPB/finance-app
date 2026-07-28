@@ -103,6 +103,13 @@ estabilizam (não crie um pacote por feature prematuramente).
   (`owner_id = auth.uid()`), trigger de `updated_at`. Adicione ao schema local
   do PowerSync em `packages/database/lib/src/schema.dart` (a coluna `id` é
   implícita — não declarar).
+- **Policy nova chama `private.is_space_member` / `private.has_space_role` /
+  `private.is_space_owner`** — não `public.…`. As três vivem no schema `private`
+  desde a migration `20260728030625` justamente para não virarem endpoint REST
+  (o PostgREST expõe `public`, e função `SECURITY DEFINER` ali é chamável por
+  `anon`). Função de apoio de RLS nasce em `private`; função de trigger pode
+  ficar em `public`, mas com `revoke execute … from anon, authenticated, public`
+  e `set search_path = ''`.
 - Migrations: `supabase migration new <nome>` → editar SQL → `supabase db reset`
   para validar do zero. Rode `get_advisors` (segurança) após mudanças de schema.
 - A publication `powersync` é `FOR ALL TABLES`; garanta `REPLICA IDENTITY FULL`
