@@ -4,15 +4,16 @@ Documento vivo. O **PRD** define *o quê* e *por quê*; este arquivo registra
 *onde estamos*. Atualize junto com o PR que muda o estado.
 
 - Última atualização: **2026-07-28**
-- Branch de trabalho atual: `feat/open-finance-fundacao`. O PR #24 (segurança e
-  idioma) está **mergeado**. Os únicos outros PRs abertos são quatro do
+- Branch de trabalho atual: `feat/open-finance-cliente`, empilhada sobre
+  `feat/open-finance-fundacao` (PR #25, verde e aguardando merge). O PR #24
+  (segurança e idioma) está **mergeado**. Os únicos outros PRs abertos são quatro do
   dependabot (#1, #2, #8, #9), deixados para depois por decisão; os dois de pub
   (`sqlite3`, `sqlite_async`) tocam a camada do PowerSync e merecem uma passada
   pelos testes de integração.
-- ⚠️ **Pendência operacional que bloqueia o Open Finance no cliente:** as sync
-  rules ganharam `open_finance_connections` e **não foram publicadas** no
-  dashboard do PowerSync. Tabela nova exige publicação manual, e o sintoma de
-  esquecer é tabela vazia **sem erro nenhum**.
+- ✅ **Sync rules publicadas** e **segredos da Pluggy configurados** (confirmado
+  por `supabase secrets list`, que mostra só os digests). A Edge Function
+  `pluggy-connect-token` está **deployada e no ar**: `POST` sem `Authorization`
+  devolve 401 no gateway.
 
 ---
 
@@ -297,11 +298,13 @@ manual, no simulador, e cada fatia a registra no PR.
 
 Estado em 2026-07-28, fim da sessão:
 
-0. **Publicar as sync rules no dashboard do PowerSync.** É o primeiro passo da
-   próxima sessão, e sem ele o resto do Open Finance não tem como funcionar no
-   cliente: `open_finance_connections` é **tabela nova**, e tabela nova não sobe
-   sozinha. Cole o `powersync/sync_rules.yaml` no editor de Sync Rules e faça
-   Deploy. Para conferir depois, inspecione `ps_buckets` no SQLite local do app.
+0. **Percorrer o fluxo de conectar banco no simulador** — é o único passo que
+   falta para o Open Finance sair de "escrito" para "funciona". Tudo já está no
+   lugar: schema na nuvem, sync rules publicadas, segredos configurados, função
+   deployada, e a aba Perfil com "Conectar banco". Os conectores de **sandbox**
+   (Pluggy Bank) estão ligados fora de produção, então dá para percorrer sem
+   banco real. É aí que se descobre se o canal JS conversa e se o salto para o
+   OAuth volta — nada disso tem prova ainda.
 1. **A exposição das funções está fechada, e o advisor caiu de 10 WARN para 1.**
    O único que sobrou é o toggle de **proteção de senha vazada** no dashboard —
    um clique, sem código nem migration. Nada mais de segurança pende no repo.
@@ -580,15 +583,63 @@ Três coisas que não se leem no código:
   tratava `FormatException`, deixando o `ArgumentError` de percent-encoding
   inválido subir até a tela.
 
+### Concluído na fatia do cliente de Open Finance (branch `feat/open-finance-cliente`)
+
+| Item | Onde |
+|---|---|
+| `OpenFinanceConnection` + `ConnectionStatus` (com `unknown` tolerante) | `.../open_finance/domain/open_finance_connection.dart` |
+| Interface e implementação do repository: `watchAll`, `requestConnectToken`, `save`, `delete` | `.../open_finance/{domain,data}/` |
+| Providers: conexões, contagem de contas por conexão, conexões que pedem ação | `.../open_finance/presentation/open_finance_providers.dart` |
+| Tela cheia do fluxo, com espera, falha e "Tentar de novo" | `.../open_finance/presentation/connect_bank_page.dart` |
+| `ConnectionTile` espelhando a `AccountTile` | `.../open_finance/presentation/connection_tile.dart` |
+| Seção "Bancos conectados" no Perfil, com re-consentimento por toque | `.../profile/presentation/profile_page.dart` |
+| `Account.connectionId` / `externalId` / `isFromOpenFinance` — fecha o débito | `.../accounts/domain/account.dart` |
+| `FakeOpenFinanceRepository`, `testConnection` e o helper `scrollTo` no harness | `test/helpers/app_harness.dart` |
+| 33 testes novos (17 do repository, 10 da seção, 6 da tela) | `test/features/open_finance/` |
+
+Cinco decisões que não se leem no código:
+
+- **`ConnectionStatus.unknown` existe, e `AccountType.fromDb` lança.** A diferença
+  é deliberada: quem escreve `status` é o **servidor**, e a tabela local é view —
+  o `check` do Postgres não vale nela. Uma versão nova do servidor gravando um
+  status novo faria a lista de bancos estourar num app antigo. Ele nunca é
+  **escrito**: só existe na leitura.
+- **A contagem de contas por conexão é derivada**, não guardada. Contador que
+  precisa ser igual a uma contagem desincroniza offline — a mesma razão pela qual
+  não existe `savings_goals.current_amount` (ADR 0007).
+- **Só conexão que precisa de ação responde ao toque**, e o que ela abre é o
+  re-consentimento. Um detalhe que apenas repetisse a linha seria toque sem
+  resposta.
+- **A distinção de estado na linha não é por cor.** Âmbar pertence ao orçamento e
+  vermelho a limite estourado; usar qualquer um faria conexão parada ler como
+  dinheiro em risco. Separam-na a forma do ícone e a frase da segunda linha.
+- **Tela cheia, não folha** — a única do app. Quem desenha aqui é a Pluggy, com
+  várias etapas e teclado; uma folha a meia altura obrigaria a rolar dentro de um
+  WebView que já rola.
+
+**`connection_id` e `external_id` entram na leitura de `Account` mas não no
+`toColumns`**: são colunas da ingestão (ADR 0005), e um UPDATE do cliente que as
+incluísse apagaria o vínculo na primeira edição de nome.
+
+**O export condicional passou a ser exercitado de verdade.** Antes nada
+alcançável importava o widget, então o build web nem o tocava. Agora
+`ProfilePage → ConnectBankPage → pluggy_connect_view` está no grafo, e o build web
+passa escolhendo o stub.
+
+**Quatro testes do Perfil precisaram de scroll**: a quarta seção empurrou as
+outras para fora do viewport, e `find.text` de item que o `ListView` não construiu
+falhava como se a seção tivesse sumido. Virou o helper `scrollTo`, e `tapVisible`
+agora rola sozinho quando o alvo ainda não existe.
+
 ### O que falta na Fase 1
 
 | Item | Estado |
 |---|---|
 | Open Finance — schema | ✅ Fundação pronta e na nuvem (fatia acima). |
-| Open Finance — `pluggy-connect-token` | Escrita, **não deployada e nunca exercitada contra a Pluggy**. Deno não está instalado, então o TS também não foi typecheckado: o primeiro `deploy` será a primeira compilação. |
+| Open Finance — `pluggy-connect-token` | ✅ Deployada e no ar (401 sem `Authorization` verificado). **Nunca exercitada contra a Pluggy de verdade**: o caminho 200 exige JWT de usuário e só acontece pelo app. |
 | Open Finance — `pluggy-webhook` e `pluggy-sync-worker` | Não existem. O webhook precisa de `verify_jwt = false` e do header secreto; o worker é quem faz `GET /items` → `/accounts` → `/v2/transactions` e o UPSERT com as regras de propriedade de coluna. |
-| Open Finance — widget Connect | ✅ Internalizado, com 28 testes das partes puras. **Nunca rodou num device**: nenhuma tela o instancia ainda. |
-| Open Finance — caminho no app | Falta o que liga as pontas: domínio, dados e providers de conexão; a chamada à Edge Function; o botão "Conectar banco" no Perfil; e gravar `open_finance_connections` no `onEvent` de sucesso. |
+| Open Finance — widget Connect | ✅ Internalizado, com 28 testes das partes puras. **Nunca rodou num device.** |
+| Open Finance — caminho no app | ✅ Domínio, dados, providers, tela e a seção no Perfil. **O fluxo nunca foi percorrido de ponta a ponta** — é o item zero de "Onde retomar". |
 | Detecção/confirmação automática de contribuição | Metade pronta: schema e UI existem; falta quem crie a linha (ingestão Pluggy). O `transaction_id` já espera por ela: a detecção pode ligar a contribuição ao lançamento importado |
 | Streaks e badges básicos | Nada. Agora há histórico de contribuição para derivá-los |
 | Categorização por IA (premium) | Nada |
@@ -749,17 +800,32 @@ Ordenados por risco. Todos verificados no código.
       dos `if exists` — num banco vazio ela encontra as três em `public` (criadas
       pela `20260717120000`) e move; num banco já migrado, não faz nada. Rodar do
       zero é o que prova as duas metades.
-- [ ] **As sync rules com `open_finance_connections` não foram publicadas.**
-      O arquivo do repo mudou; o dashboard do PowerSync, não. Até publicar, a
-      tabela existe no Postgres e no schema local e **nunca recebe linha** — sem
-      erro em lugar nenhum. É a pendência que bloqueia todo o resto do Open
-      Finance no cliente.
-- [ ] **A Edge Function nunca foi compilada nem exercitada.** Deno não está
-      instalado na máquina e `supabase functions serve` exige Docker, então o
-      primeiro `supabase functions deploy` será a primeira compilação do
-      `index.ts`. Os contratos seguem `docs/pluggy-api-reference.md` §3.3 e §3.4,
-      mas nenhuma chamada real à Pluggy aconteceu. Mesma família da lição do
-      `UPSERT` de orçamento: código que nunca rodou não é código que funciona.
+- [ ] **A Edge Function nunca falou com a Pluggy de verdade.** Ela compilou e
+      subiu (`functions deploy`), e o 401 sem `Authorization` foi verificado — mas
+      o caminho 200 exige JWT de usuário, então `POST /auth` e
+      `POST /connect_token` **nunca foram chamados**. Os contratos seguem
+      `docs/pluggy-api-reference.md` §3.3 e §3.4 e nada mais que isso os garante.
+      Mesma família da lição do `UPSERT` de orçamento: código que nunca rodou não
+      é código que funciona.
+- [ ] **O fluxo de conectar banco nunca foi percorrido.** Cada peça tem teste,
+      e nenhuma prova existe do conjunto: se o token que a função emite é aceito
+      pelo widget, se o canal JS conversa, se a allowlist não bloqueia algo
+      legítimo do fluxo real, se o salto para o OAuth do banco volta, e se o
+      `SUCCESS` chega com `item_id`. É o item zero de "Onde retomar", e os
+      conectores de sandbox permitem fazê-lo sem banco real.
+- [ ] **Remover conexão existe no repository e não na UI.** `delete` está
+      implementado e testado, mas nenhuma tela o chama — a linha só responde ao
+      toque quando precisa de re-consentimento. Falta decidir onde a ação mora e
+      o que ela diz: remover a conexão **não** apaga contas nem lançamentos (a FK
+      é `on delete set null`), e a confirmação precisa dizer isso. Também não
+      revoga nada na Pluggy: `DELETE /items/{id}` exige API Key e é trabalho do
+      worker.
+- [ ] **Conta de Open Finance ainda é editável como qualquer outra.**
+      `Account.isFromOpenFinance` já existe, mas a folha de conta não a usa: dá
+      para editar à mão o saldo de uma conta cuja dona é a Pluggy, e a próxima
+      sincronização desfaria. É o mesmo desenho que a folha de lançamento já
+      aplica para poupança (detecta o vínculo e vira leitura) — falta trazê-lo
+      para cá.
 - [ ] **O protocolo do widget Connect é contrato interno da Pluggy.** Os tipos de
       mensagem (`OAUTH_OPEN`, `LINK_OPEN`, `LOCATION`) e os nomes de evento na
       query (`SUCCESS`, `ERROR`, `CLOSE`, `LOGIN_SUCCESS`…) **não são
@@ -773,12 +839,6 @@ Ordenados por risco. Todos verificados no código.
       não há prova de que o canal JS conversa, de que a allowlist não bloqueia
       algo legítimo do fluxo real, nem de que o salto para o OAuth do banco
       volta. Fecha junto com o caminho no app.
-- [ ] **`Account` não conhece as colunas novas.** `connection_id` e `external_id`
-      existem no Postgres e no schema PowerSync, mas não na entidade — então a UI
-      não tem como distinguir conta importada de conta digitada, e a regra do ADR
-      0005 (em conta de Open Finance o saldo é da Pluggy, não snapshot do
-      usuário) não é aplicável ainda. É a versão pequena do débito de "entidade
-      incompleta" já fechado, e fecha junto com a fatia do cliente.
 - [ ] **O vínculo depende do cliente para não desincronizar no local.** No
       Postgres o `on delete cascade` garante que apagar o lançamento apaga a
       contribuição. As tabelas locais do PowerSync são views e não cascateiam:
