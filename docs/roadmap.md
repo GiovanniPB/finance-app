@@ -21,8 +21,9 @@ Documento vivo. O **PRD** define *o quê* e *por quê*; este arquivo registra
 
 ## Estado em uma frase
 
-**O pipeline de Open Finance ingere dado de banco real — e foi conferir esse
-dado que achou os dois bugs que teste nenhum acharia.** A Fase 0
+**O pipeline de Open Finance ingere dado de banco real: 2.076 lançamentos de
+duas contas e dois cartões, com a direção conferida contra a fatura.** Foram os
+dados — não os testes — que acharam os dois bugs da primeira passagem. A Fase 0
 está fechada (apresentação, gasto em três toques, edição, orçamento com alerta
 em 80% e 100%, categoria própria, troca de espaço, contas completas), o
 lançamento sabe de que conta saiu, e a camada local tem 31 testes de integração
@@ -307,23 +308,22 @@ manual, no simulador, e cada fatia a registra no PR.
 
 Estado em 2026-07-28, fim da sessão:
 
-0. **Deployar o worker corrigido e reprocessar.** É o único passo pendente da
-   fatia atual, e depende de permissão: o `supabase functions deploy` foi
-   bloqueado pelo classificador de permissões nesta sessão.
+0. **O reparo está feito e medido.** O worker corrigido está deployado (versão
+   8), a fila está vazia, zero erro pendente, e **zero duplicata**:
 
-   ```bash
-   supabase functions deploy pluggy-sync-worker
-   ```
+   | Conta | Antes | Depois |
+   |---|---|---|
+   | cartão real (`ultraviolet-black`) | 317 linhas: 305 receita, 12 despesa | **1.750** linhas: 1.658 despesa, 92 transferência, **zero receita** |
+   | corrente real (Nu Pagamentos) | 299: 218 despesa, 81 receita | 300: 219 / 81 |
+   | cartão sandbox | 9 despesa | 9 transferência (custo conhecido — ver os débitos) |
 
-   Depois, reprocessar os dois items (o worker drena a fila; o SQL e o `curl`
-   estão em `supabase/functions/README.md`, seção Diagnóstico) e conferir:
+   Total importado: **2.076** lançamentos. As três páginas que sumiam entraram
+   (429 + 500 + 500), e o diagnóstico por página fecha em todas as somas:
+   `perdidas` = 0, `duplicadas` = 0, `colididas` = 0, `direcaoEmDuvida` = 0.
 
-   | O que conferir | Esperado |
-   |---|---|
-   | cartão `ultraviolet-black` | 305 compras viram **despesa**; os 12 créditos viram **transferência** |
-   | contagem de linhas do cartão | sai de 317 para ~1.750, se a perda de página estava na colisão de `external_id` |
-   | `payload -> '_convencao' -> N -> 'escrita'` | `colididas` diz se `providerId` colapsa parcela; `erro` diz o que falhou |
-   | cartão do sandbox | as 9 compras viram **transferência** — é o custo conhecido e documentado (ver abaixo) |
+   Os dois últimos merecem destaque, porque **corrigem suposições**: o
+   `providerId` do ADR 0005 é único por transação (parcela não colapsa), e sinal
+   e `type` concordam nas 2.050 linhas de conta real, nos dois tipos de conta.
 
 1. **A ingestão gravou dinheiro errado duas vezes, e a segunda medição é a que
    vale.** O que a primeira ingestão real provou, e que teste nenhum pegaria:
@@ -349,21 +349,23 @@ Estado em 2026-07-28, fim da sessão:
    R$ 10.139,02 apareceria como receita do mês. Custo aceito: estorno também fica
    invisível no resumo.
 
-   **1.433 lançamentos sumiram em silêncio.** O worker buscou 4 páginas de um
-   cartão (1.750 transações) e só a última virou linha. O código engolia `23505`
-   como benigno e devolvia `toInsert.length` mesmo com o INSERT falhando — e um
-   INSERT de várias linhas é **atômico**, então uma colisão derruba as outras 499.
-   O evento foi marcado como processado com sucesso. Agora falha de escrita
-   **lança**, o INSERT vai em pedaços de 100 com recuo linha a linha no pedaço que
-   colidir, a contagem vem do `select` do que entrou de verdade, e o resultado de
-   cada página é gravado no `payload` do evento.
+   **1.433 lançamentos sumiram em silêncio, e a causa era a leitura.** O worker
+   buscou 4 páginas de um cartão (1.750 transações) e só a última virou linha. Um
+   `in.()` com 433 ou 500 UUIDs monta URL de 17 a 20 mil caracteres, e o `fetch`
+   de dentro da Edge Function não consegue enviá-la; o erro virava `return 0`, que
+   significa "nada a fazer", e a página era descartada contando-se como escrita.
+   Hoje a leitura vai em pedaços de 100 (`READ_CHUNK`), o INSERT também, toda
+   falha **lança**, e o resultado de cada página é gravado no `payload` do evento.
 
-   **`ON CONFLICT DO NOTHING` foi tentado e não serve** — descoberto
-   reprocessando, não lendo: a `unique (account_id, external_id)` é **parcial**,
-   e o Postgres só infere índice parcial se o `ON CONFLICT` repetir o predicado,
-   o que o `onConflict` do PostgREST (só colunas, sem `where`) não expressa. Erro
-   medido: *"there is no unique or exclusion constraint matching the ON CONFLICT
-   specification"* — em toda tentativa, antes de haver colisão alguma.
+   **Duas explicações erradas antes da certa, e as duas por método.** A primeira:
+   testei `in.()` com 500 UUIDs **do laptop**, deu HTTP 200 e descartei a hipótese
+   certa — quem recusa não é o Kong, é o cliente HTTP do runtime da função. A
+   segunda: com a hipótese boa descartada, culpei colisão de `external_id`, e
+   `ON CONFLICT DO NOTHING` nem chega a rodar aqui — a `unique` é **parcial**, e o
+   Postgres não infere índice parcial sem o predicado repetido, coisa que o
+   `onConflict` do PostgREST não expressa (*"there is no unique or exclusion
+   constraint matching the ON CONFLICT specification"*, em toda tentativa). As
+   duas passaram por typecheck, lint e testes; o que as matou foi rodar.
 
    **`console.log` de Edge Function não é diagnóstico.** A saída não é legível
    por SQL nem pelo CLI desta versão, só pelo dashboard — a primeira
@@ -750,11 +752,19 @@ Cinco coisas que não se leem no código:
 - **O erro do sandbox está escrito no teste como esperado.** Compra lá chega
   como `CREDIT` negativa, que é a assinatura exata de um pagamento de fatura —
   indistinguível. Documentar o caso errado é o que impede a terceira inversão.
-- **Um INSERT de várias linhas é atômico**, e era esse o mecanismo da perda: uma
-  colisão de `external_id` derrubava a página de 500 inteira, `23505` era tratado
-  como benigno sem log, e a função devolvia `toInsert.length` de qualquer forma.
-  Três falhas pequenas compondo uma perda de 1.433 lançamentos que se reportou
-  como sucesso.
+- **A perda era a leitura, não a escrita — e eu construí a explicação errada
+  primeiro.** Um `in.()` com 433 ou 500 UUIDs monta URL de 17 a 20 mil
+  caracteres, e o `fetch` de dentro da Edge Function não consegue enviá-la:
+  `TypeError: error sending request`. A versão antiga respondia a isso com
+  `return 0` — que significa "nada a fazer" — e descartava a página contando-a
+  como escrita.
+
+  O erro de método vale mais que o bug: eu **testei** `in.()` com 500 UUIDs e deu
+  HTTP 200, e descartei a hipótese. Testei do laptop contra o Kong; quem recusa é
+  o cliente HTTP do runtime da função. Um teste do lugar errado produz uma
+  conclusão com a forma de evidência, e ela me levou a uma segunda explicação
+  (colisão de `external_id`) que passou por typecheck, lint e 16 testes antes de
+  morrer no primeiro contato com o banco.
 - **`ON CONFLICT DO NOTHING` não dá, e o motivo é o índice ser parcial.** Ele
   não seria o `upsert` que o ADR proíbe (não atualiza coluna nenhuma), mas o
   Postgres não infere índice parcial sem o predicado repetido no `ON CONFLICT`, e
@@ -762,10 +772,11 @@ Cinco coisas que não se leem no código:
   linha — dá o mesmo resultado e ainda **conta** as colisões, que o
   `DO NOTHING` engoliria. Descoberto reprocessando: a suposição de que daria
   passou pelo typecheck, pelo lint e por 16 testes.
-- **A contagem de colisão é o próximo dado a ler.** Se `colididas` vier alto, o
-  `providerId` do ADR 0005 está colapsando lançamentos distintos (parcela é o
-  suspeito) e o remédio é a chave de dedup, não o insert. A instrumentação
-  existe para responder isso com medição em vez de palpite.
+- **A instrumentação respondeu, e a resposta foi "não".** `colididas` = 0 em
+  todas as páginas: o `providerId` é único por transação, e a suspeita de que ele
+  colapsasse parcela da mesma compra estava errada. Vale registrar que a suspeita
+  nasceu de ler descrições (`Vindi *Casalarshop 8/12`) — plausível, e não é o
+  mesmo que medido.
 
 ### O que falta na Fase 1
 
@@ -773,9 +784,9 @@ Cinco coisas que não se leem no código:
 |---|---|
 | Open Finance — schema | ✅ Fundação pronta e na nuvem (fatia acima). |
 | Open Finance — `pluggy-connect-token` | ✅ Deployada e **exercitada de verdade**: responde 200 contra a Pluggy real, e o widget aceita o token que ela emite. |
-| Open Finance — `pluggy-webhook` e `pluggy-sync-worker` | ✅ Existem, deployados e rodaram contra sandbox **e** conta real: 6 eventos, 4 contas, 642 lançamentos, zero duplicata. ⚠️ A versão corrigida da direção e da perda de página **ainda não foi deployada** — é o item zero de "Onde retomar". |
+| Open Finance — `pluggy-webhook` e `pluggy-sync-worker` | ✅ Deployados, rodaram contra sandbox **e** conta real, e o reparo foi medido: **2.076** lançamentos, zero duplicata, `perdidas` = 0, fila vazia. |
 | Open Finance — widget Connect | ✅ Internalizado, com 28 testes das partes puras, e **rodou num device**: o canal JS conversa, a allowlist não bloqueia o fluxo legítimo e o `SUCCESS` chega com `item_id`. |
-| Open Finance — caminho no app | ✅ Percorrido de ponta a ponta no iPhone 17 Pro, com sandbox e com conta real. O que falta é conferir o **reparo** dos dados depois do próximo deploy. |
+| Open Finance — caminho no app | ✅ Percorrido de ponta a ponta no iPhone 17 Pro, com sandbox e com conta real, e o dado reparado está no Postgres. Falta **ver as 1.750 linhas no app** — a lista do mês, o resumo e o rótulo "Transferência" com dado de banco de verdade. |
 | Detecção/confirmação automática de contribuição | Metade pronta: schema e UI existem; falta quem crie a linha (ingestão Pluggy). O `transaction_id` já espera por ela: a detecção pode ligar a contribuição ao lançamento importado |
 | Streaks e badges básicos | Nada. Agora há histórico de contribuição para derivá-los |
 | Categorização por IA (premium) | Nada |
@@ -821,14 +832,25 @@ Ordenados por risco. Todos verificados no código.
       fato diz. **Lição transferível:** medir em um conector só não estabelece uma
       convenção, e a instrumentação que mede precisa gravar no **banco** —
       `console.log` de Edge Function não é legível por SQL nem pelo CLI.
-- [x] **A escrita de transação perdia página inteira em silêncio.** Um INSERT de
-      várias linhas é atômico; `23505` era tratado como benigno sem log; e a
-      função devolvia `toInsert.length` mesmo com o INSERT falhando. Três falhas
-      pequenas compondo 1.433 lançamentos perdidos que se reportaram como
-      sucesso. Agora falha de escrita lança, o INSERT vai em pedaços de 100 com
-      recuo linha a linha no que colidir, e a contagem vem do `select` do que
-      entrou — mais um `perdidas` que deve ser sempre zero, porque a soma que
+- [x] **A ingestão perdia página inteira em silêncio — 1.433 lançamentos.** A
+      causa é a **leitura de dedup**: um `in.()` com 433 ou 500 UUIDs monta URL de
+      17 a 20 mil caracteres e o `fetch` de dentro da Edge Function não consegue
+      enviá-la (`TypeError: error sending request`). O erro virava `return 0`, que
+      significa "nada a fazer", e a página era descartada contando-se como
+      escrita. Confere com o que sumiu: páginas de 433 e 500 falhavam, de 317 e
+      299 passavam.
+
+      Corrigido lendo em pedaços de 100 (`READ_CHUNK`), com o INSERT também em
+      pedaços e recuo linha a linha, e com `perdidas` no diagnóstico — a soma que
       ninguém fazia era o que permitia "sucesso" com 1.433 linhas a menos.
+      Reprocessado e medido: cartão de 317 para 1.750, `perdidas` = 0.
+
+      **Lição transferível, e é sobre método:** de fora, um `in.()` com 500 UUIDs
+      responde 200 — eu testei isso e descartei a hipótese certa. O teste tem de
+      rodar de onde o código roda; de outro lugar, ele produz uma conclusão com a
+      forma de evidência. Mesma família da lição do `UPSERT` de orçamento, um
+      nível acima: não basta executar o SQL de verdade, é preciso executá-lo pelo
+      mesmo caminho.
 - [x] **As Edge Functions não tinham teste nenhum.** As decisões puras da
       ingestão moram em `_shared/ingest.ts`, com 16 testes que rodam em
       `node --test` — sem Deno, sem Docker e sem rede — e um gate no CI. Era o
@@ -979,11 +1001,6 @@ Ordenados por risco. Todos verificados no código.
 - [ ] **Estorno de cartão fica invisível no resumo.** Ele chega negativo, como
       pagamento de fatura, e vira `transfer` junto. Deveria abater despesa. Não
       há campo que os separe sem heurística de texto.
-- [ ] **A chave de dedup pode estar colapsando parcela.** O ADR 0005 escolhe
-      `providerId` quando existe, e a suspeita de que ele se repita entre parcelas
-      da mesma compra é o que explicaria a colisão que derrubou as páginas. A
-      instrumentação nova conta `colididas` por página; se vier alto, o remédio é
-      a chave (`id` da transação como desempate), não o insert.
 - [ ] **O cartão do sandbox mostra compra como transferência.** É o custo
       conhecido da regra ciente do tipo de conta: lá compra chega como `CREDIT`
       negativa, assinatura idêntica à de um pagamento de fatura. Se incomodar, o
