@@ -239,6 +239,85 @@ void main() {
     });
   });
 
+  group('sequência de semanas', () {
+    testWidgets('sem aporte, o bloco convida a começar em vez de mostrar 0', (
+      tester,
+    ) async {
+      await pumpScreen(
+        tester,
+        const SavingsPage(),
+        savingsRepository: FakeSavingsRepository(goals: [testGoal()]),
+      );
+
+      expect(find.byKey(const Key('streak_banner')), findsOneWidget);
+      expect(find.text('Nenhuma sequência agora'), findsOneWidget);
+    });
+
+    testWidgets('aporte nesta semana acende a sequência', (tester) async {
+      await pumpScreen(
+        tester,
+        const SavingsPage(),
+        savingsRepository: FakeSavingsRepository(
+          goals: [testGoal()],
+          contributions: [
+            testContribution(id: 'c1', minor: 10000, contributedAt: testNow),
+          ],
+        ),
+      );
+
+      expect(find.text('1 semana seguida'), findsOneWidget);
+    });
+  });
+
+  group('conquistas', () {
+    testWidgets('a seção lista todas e conta as desbloqueadas', (tester) async {
+      await pumpScreen(
+        tester,
+        const SavingsPage(),
+        savingsRepository: FakeSavingsRepository(
+          goals: [testGoal()],
+          contributions: [
+            testContribution(id: 'c1', minor: 20000, contributedAt: testNow),
+          ],
+        ),
+      );
+
+      expect(find.text('Conquistas'), findsOneWidget);
+      // Primeiro aporte e R$ 100. A sequência de 1 semana não desbloqueia nada:
+      // o menor limiar de streak é 4.
+      expect(
+        tester.widget<Text>(find.byKey(const Key('badges_count'))).data,
+        '2 de 7',
+      );
+      expect(find.byKey(const Key('badge_primeiro_aporte')), findsOneWidget);
+    });
+
+    testWidgets('sem histórico nenhuma conquista é anunciada', (tester) async {
+      await pumpScreen(
+        tester,
+        const SavingsPage(),
+        savingsRepository: FakeSavingsRepository(goals: [testGoal()]),
+      );
+
+      expect(
+        tester.widget<Text>(find.byKey(const Key('badges_count'))).data,
+        '0 de 7',
+      );
+    });
+
+    testWidgets('a bloqueada mostra o critério, não um cadeado mudo', (
+      tester,
+    ) async {
+      await pumpScreen(
+        tester,
+        const SavingsPage(),
+        savingsRepository: FakeSavingsRepository(goals: [testGoal()]),
+      );
+
+      expect(find.text('Guardar dinheiro pela primeira vez'), findsOneWidget);
+    });
+  });
+
   group('aporte detectado pelo Open Finance', () {
     testWidgets('o card anuncia que há algo a confirmar', (tester) async {
       // Sem esta linha, o aporte que a ingestão detectou só existiria para quem
