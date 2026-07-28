@@ -4,11 +4,10 @@ import 'package:finance/di/providers.dart';
 import 'package:finance/features/auth/domain/auth_repository.dart';
 import 'package:finance/features/onboarding/domain/onboarding_preferences.dart';
 import 'package:finance/features/onboarding/presentation/onboarding_providers.dart';
-import 'package:finance/features/spaces/domain/space.dart';
-import 'package:finance/features/spaces/domain/spaces_repository.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
+import 'helpers/app_harness.dart' show FakeSpacesRepository, personalSpace;
 
 /// Fake sem dependência de Supabase para exercitar o shell (tema + router).
 class FakeAuthRepository implements AuthRepository {
@@ -36,26 +35,6 @@ class FakeAuthRepository implements AuthRepository {
 
   @override
   Future<Result<void, Failure>> signOut() async => const Ok(null);
-}
-
-class FakeSpacesRepository implements SpacesRepository {
-  @override
-  Stream<List<Space>> watchAll() => Stream.value([
-    Space(
-      id: 'p1',
-      type: SpaceType.personal,
-      name: 'Pessoal',
-      ownerId: 'user-1',
-      privacy: SpacePrivacy.sharedOnly,
-      status: SpaceStatus.active,
-      settlementCurrency: 'BRL',
-      createdAt: DateTime.utc(2026, 7, 17),
-      updatedAt: DateTime.utc(2026, 7, 17),
-    ),
-  ]);
-
-  @override
-  Stream<Space?> watchById(String id) => Stream.value(null);
 }
 
 /// Preferência de primeira execução que não toca em banco.
@@ -87,7 +66,9 @@ void main() {
           authRepositoryProvider.overrideWithValue(
             FakeAuthRepository(user: user),
           ),
-          spacesRepositoryProvider.overrideWithValue(FakeSpacesRepository()),
+          spacesRepositoryProvider.overrideWithValue(
+            FakeSpacesRepository([personalSpace()]),
+          ),
           onboardingStoreProvider.overrideWithValue(
             FakePreferences(seen: seenOnboarding),
           ),

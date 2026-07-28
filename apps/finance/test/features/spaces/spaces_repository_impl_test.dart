@@ -4,8 +4,15 @@ import 'package:flutter_test/flutter_test.dart';
 import 'package:mocktail/mocktail.dart';
 import 'package:sqlite3/common.dart';
 import 'package:sqlite_async/sqlite_async.dart';
+import 'package:supabase_flutter/supabase_flutter.dart';
 
 class MockSqliteConnection extends Mock implements SqliteConnection {}
+
+/// As leituras não tocam o Supabase — ele entra no construtor por causa das
+/// escritas (identificar o dono) e das duas RPCs de convite. Um mock cru basta
+/// aqui; a RPC de verdade foi exercitada contra o Postgres da nuvem, que é onde
+/// ela pode falhar.
+class MockSupabaseClient extends Mock implements SupabaseClient {}
 
 ResultSet _rows(List<List<Object?>> rows) => ResultSet(
   const [
@@ -54,7 +61,10 @@ void main() {
         ),
       );
 
-      final spaces = await SpacesRepositoryImpl(db: db).watchAll().first;
+      final spaces = await SpacesRepositoryImpl(
+        db: db,
+        supabase: MockSupabaseClient(),
+      ).watchAll().first;
 
       expect(spaces, hasLength(2));
       expect(spaces.first.type, SpaceType.personal);
@@ -68,7 +78,10 @@ void main() {
         () => db.watch(any(), parameters: any(named: 'parameters')),
       ).thenAnswer((_) => Stream.value(_rows([_spaceRow('s1', 'household')])));
 
-      final space = await SpacesRepositoryImpl(db: db).watchById('s1').first;
+      final space = await SpacesRepositoryImpl(
+        db: db,
+        supabase: MockSupabaseClient(),
+      ).watchById('s1').first;
 
       expect(space?.id, 's1');
       expect(space?.type, SpaceType.household);
@@ -79,7 +92,10 @@ void main() {
         () => db.watch(any(), parameters: any(named: 'parameters')),
       ).thenAnswer((_) => Stream.value(_rows([])));
 
-      final space = await SpacesRepositoryImpl(db: db).watchById('x').first;
+      final space = await SpacesRepositoryImpl(
+        db: db,
+        supabase: MockSupabaseClient(),
+      ).watchById('x').first;
 
       expect(space, isNull);
     });

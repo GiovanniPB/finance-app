@@ -1050,7 +1050,7 @@ estava certo sobre uma coisa que eu não tinha pensado.
 | Open Finance — desconectar | ✅ Deployada e **exercitada rodando**: 3 conexões viraram 1, as contas do banco removido sobreviveram com o histórico órfão, e os nomes editados não foram sobrescritos. |
 | Detecção/confirmação automática de contribuição | ✅ Escrita e testada (fatia acima): entrada em conta alvo com uma meta ativa vira contribuição `confirmed=false`, ligada ao lançamento importado. ⚠️ **Não exercitada rodando** — falta deployar o worker e ver a proposta chegar ao app |
 | Streaks e badges básicos | ✅ Feitos e derivados, sem tabela (fatia acima e [ADR 0009](adr/0009-conquista-derivada-ate-ser-anunciada.md)): sequência semanal com melhor marca, e 7 conquistas. ⚠️ **Não vistos rodando** |
-| Categorização por IA (premium) | Nada |
+| Categorização por IA (premium) | ⏸️ **Adiada por decisão** (2026-07-28). Depende da questão #4 do PRD (modelo próprio vs. API, e como tratar dado sensível na inferência), que segue aberta. Fase 2 passou na frente |
 | `recurring_challenge` como quarto tipo de meta | Fora de escopo por decisão (ver acima) |
 
 ---

@@ -64,9 +64,14 @@ AccountsRepository accountsRepository(Ref ref) => AccountsRepositoryImpl(
   supabase: ref.watch(supabaseClientProvider),
 );
 
+/// Espaços. Depende do `SupabaseClient` por dois motivos: identificar quem cria
+/// o espaço, e chamar as duas RPCs de convite — entrar num espaço é a única
+/// operação do app que **não** pode ser local (ver `SpacesRepository`).
 @Riverpod(keepAlive: true)
-SpacesRepository spacesRepository(Ref ref) =>
-    SpacesRepositoryImpl(db: ref.watch(powerSyncServiceProvider).db);
+SpacesRepository spacesRepository(Ref ref) => SpacesRepositoryImpl(
+  db: ref.watch(powerSyncServiceProvider).db,
+  supabase: ref.watch(supabaseClientProvider),
+);
 
 /// Conexões de Open Finance. Depende do `SupabaseClient` por dois motivos:
 /// identificar o dono nas leituras **e** invocar a Edge Function que emite o

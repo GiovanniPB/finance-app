@@ -1,25 +1,13 @@
 import 'package:core/core.dart';
 import 'package:finance/di/providers.dart';
 import 'package:finance/features/spaces/domain/space.dart';
-import 'package:finance/features/spaces/domain/spaces_repository.dart';
 import 'package:finance/features/spaces/presentation/spaces_providers.dart';
 import 'package:finance/features/transactions/domain/transaction.dart';
 import 'package:finance/features/transactions/domain/transactions_repository.dart';
 import 'package:finance/features/transactions/presentation/quick_entry_controller.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
-
-class FakeSpacesRepository implements SpacesRepository {
-  FakeSpacesRepository(this._spaces);
-  final List<Space> _spaces;
-
-  @override
-  Stream<List<Space>> watchAll() => Stream.value(_spaces);
-
-  @override
-  Stream<Space?> watchById(String id) =>
-      Stream.value(_spaces.where((s) => s.id == id).firstOrNull);
-}
+import '../../helpers/app_harness.dart' show FakeSpacesRepository;
 
 /// Registra as chamadas de `create` e devolve o resultado configurado.
 class RecordingTransactionsRepository implements TransactionsRepository {

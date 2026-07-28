@@ -6,7 +6,6 @@ import 'package:finance/features/budgets/presentation/budgets_providers.dart';
 import 'package:finance/features/categories/domain/category.dart';
 import 'package:finance/features/categories/presentation/categories_providers.dart';
 import 'package:finance/features/spaces/domain/space.dart';
-import 'package:finance/features/spaces/domain/spaces_repository.dart';
 import 'package:finance/features/spaces/presentation/spaces_providers.dart';
 import 'package:finance/features/transactions/domain/transaction.dart';
 import 'package:finance/features/transactions/domain/transactions_repository.dart';
@@ -16,24 +15,12 @@ import 'package:flutter_test/flutter_test.dart';
 
 // Import seletivo: os outros fakes deste arquivo colidiriam com os do harness.
 // Só a categoria vem de lá — era a segunda cópia do mesmo fake.
-import '../../helpers/app_harness.dart' show FakeCategoriesRepository;
+import '../../helpers/app_harness.dart'
+    show FakeCategoriesRepository, FakeSpacesRepository;
 
 // ---------------------------------------------------------------------------
 // Fakes: preferidos a mocks para dependências com comportamento (ver regras).
 // ---------------------------------------------------------------------------
-
-class FakeSpacesRepository implements SpacesRepository {
-  FakeSpacesRepository(this._spaces);
-  final List<Space> _spaces;
-
-  @override
-  Stream<List<Space>> watchAll() => Stream.value(_spaces);
-
-  @override
-  Stream<Space?> watchById(String id) => Stream.value(
-    _spaces.where((s) => s.id == id).firstOrNull,
-  );
-}
 
 class FakeTransactionsRepository implements TransactionsRepository {
   FakeTransactionsRepository(this._transactions);

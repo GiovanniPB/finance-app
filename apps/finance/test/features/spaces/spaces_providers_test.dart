@@ -1,9 +1,9 @@
 import 'package:finance/di/providers.dart';
 import 'package:finance/features/spaces/domain/space.dart';
-import 'package:finance/features/spaces/domain/spaces_repository.dart';
 import 'package:finance/features/spaces/presentation/spaces_providers.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
+import '../../helpers/app_harness.dart' show FakeSpacesRepository;
 
 Space _space(String id, SpaceType type) => Space(
   id: id,
@@ -16,22 +16,6 @@ Space _space(String id, SpaceType type) => Space(
   createdAt: DateTime.utc(2026, 7, 17, 12),
   updatedAt: DateTime.utc(2026, 7, 17, 12),
 );
-
-class FakeSpacesRepository implements SpacesRepository {
-  FakeSpacesRepository(this._spaces);
-  final List<Space> _spaces;
-
-  @override
-  Stream<List<Space>> watchAll() => Stream.value(_spaces);
-
-  @override
-  Stream<Space?> watchById(String id) {
-    for (final s in _spaces) {
-      if (s.id == id) return Stream.value(s);
-    }
-    return Stream.value(null);
-  }
-}
 
 /// Cria o container, mantém [activeSpaceProvider] escutado (o que mantém vivos
 /// os providers dos quais ele depende) e aguarda o primeiro emit dos espaços.

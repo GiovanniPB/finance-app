@@ -15,6 +15,7 @@ import 'package:finance/features/savings/domain/savings_contribution.dart';
 import 'package:finance/features/savings/domain/savings_goal.dart';
 import 'package:finance/features/savings/domain/savings_repository.dart';
 import 'package:finance/features/spaces/domain/space.dart';
+import 'package:finance/features/spaces/domain/space_member.dart';
 import 'package:finance/features/spaces/domain/spaces_repository.dart';
 import 'package:finance/features/transactions/domain/transaction.dart';
 import 'package:finance/features/transactions/domain/transactions_repository.dart';
@@ -123,8 +124,28 @@ OpenFinanceConnection testConnection({
 /// fake explícito deixa o teste legível sem pilha de `when(...)`.
 
 class FakeSpacesRepository implements SpacesRepository {
-  FakeSpacesRepository(this.spaces);
+  FakeSpacesRepository(
+    List<Space> spaces, {
+    this.members = const [],
+    this.code = 'WM38G4KA',
+    this.failure,
+  }) : spaces = [...spaces];
+
   final List<Space> spaces;
+  final List<SpaceMember> members;
+
+  /// Código devolvido por [inviteCode]. Fixo para o teste poder afirmá-lo.
+  final String code;
+
+  /// Quando presente, **toda** escrita falha com ele. É como os testes de
+  /// mensagem de erro forçam o caminho ruim sem mockar a RPC.
+  final Failure? failure;
+
+  /// Espaços criados pela folha, na ordem.
+  final List<Space> created = [];
+
+  /// Códigos passados a [joinByCode], na ordem.
+  final List<String> joined = [];
 
   @override
   Stream<List<Space>> watchAll() => Stream.value(spaces);
@@ -132,6 +153,44 @@ class FakeSpacesRepository implements SpacesRepository {
   @override
   Stream<Space?> watchById(String id) =>
       Stream.value(spaces.where((s) => s.id == id).firstOrNull);
+
+  @override
+  Stream<List<SpaceMember>> watchMembers(String spaceId) =>
+      Stream.value(members.where((m) => m.spaceId == spaceId).toList());
+
+  @override
+  Future<Result<Space, Failure>> createShared({
+    required SpaceType type,
+    required String name,
+  }) async {
+    if (failure != null) return Err(failure!);
+    final space = Space(
+      id: 'space-novo',
+      type: type,
+      name: name.trim(),
+      ownerId: 'user-1',
+      privacy: type == SpaceType.household
+          ? SpacePrivacy.fullTransparency
+          : SpacePrivacy.sharedOnly,
+      status: SpaceStatus.active,
+      settlementCurrency: 'BRL',
+      createdAt: testNow,
+      updatedAt: testNow,
+    );
+    created.add(space);
+    spaces.add(space);
+    return Ok(space);
+  }
+
+  @override
+  Future<Result<String, Failure>> inviteCode(String spaceId) async =>
+      failure != null ? Err(failure!) : Ok(code);
+
+  @override
+  Future<Result<String, Failure>> joinByCode(String code) async {
+    joined.add(code);
+    return failure != null ? Err(failure!) : const Ok('space-1');
+  }
 }
 
 /// Contas em memória, que também registram o que foi escrito.
