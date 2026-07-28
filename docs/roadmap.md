@@ -4,7 +4,7 @@ Documento vivo. O **PRD** define *o quê* e *por quê*; este arquivo registra
 *onde estamos*. Atualize junto com o PR que muda o estado.
 
 - Última atualização: **2026-07-28**
-- Branch de trabalho atual: `feat/poupanca-fechamento`
+- Branch de trabalho atual: nenhuma — `main` limpa, PR #20 mergeado
 
 ---
 
@@ -54,7 +54,10 @@ categorização por IA.
    testar migrations, não para rodar o app).
    `cd apps/finance && fvm flutter run -d iphone --target lib/main_dev.dart --dart-define-from-file=../../env/dev.json`.
    Criar conta é passo manual.
-8. **Se as telas ficarem vazias ou o registro rápido travar em "nenhuma
+8. **Nunca aplique schema na nuvem por fora de `supabase db push`.** O
+   `apply_migration` do MCP grava um histórico que o repo não reproduz — leia a
+   seção "A armadilha do histórico de migrations" antes de tocar em schema.
+9. **Se as telas ficarem vazias ou o registro rápido travar em "nenhuma
    categoria", suspeite das sync rules publicadas.** O arquivo
    `powersync/sync_rules.yaml` do repo **não é publicado automaticamente**: toda
    vez que ele muda, é preciso colar o conteúdo no editor de Sync Rules do
@@ -498,15 +501,16 @@ Ordenados por risco. Todos verificados no código.
 
 ### Médio
 
-- [ ] **A migration nova não foi validada contra um Postgres de verdade.** O
-      Docker estava fora na sessão em que ela foi escrita, então
-      `20260728000822` passou só pela revisão e pelo lado SQLite (os testes de
-      integração cobrem as views locais, não o Postgres). Antes do merge:
-      `supabase start && supabase db reset` para validar do zero, e
-      `get_advisors` depois — a migration recria uma função `SECURITY DEFINER`.
-      **A coluna também ainda não foi aplicada no projeto da nuvem**, então o app
-      rodando contra `ivfcypfljxvwkvnvmuum` vai falhar ao gravar contribuição até
-      a migration subir.
+- [ ] **A cadeia de migrations nunca foi replicada do zero.** A
+      `20260728000822` subiu para a nuvem por `supabase db push` (então o SQL
+      **rodou** num Postgres de verdade e foi aceito), mas ninguém rodou
+      `supabase db reset`, que aplica as nove em sequência num banco vazio. É a
+      diferença entre "aplica sobre o schema atual" e "o repo descreve o banco" —
+      e a segunda é a promessa que o `CLAUDE.md` faz. Exige Docker.
+- [ ] **`get_advisors` não foi rodado depois da mudança de schema.** O
+      `CLAUDE.md` pede, e a `20260728000822` recria uma função
+      `SECURITY DEFINER` (`savings_contributions_inherit_space`). O `revoke` está
+      reafirmado na migration, mas a verificação é que confirma.
 - [ ] **O vínculo depende do cliente para não desincronizar no local.** No
       Postgres o `on delete cascade` garante que apagar o lançamento apaga a
       contribuição. As tabelas locais do PowerSync são views e não cascateiam:
@@ -626,9 +630,52 @@ Ordenados por risco. Todos verificados no código.
 | iOS Simulator | ✅ Xcode 26.1.1. Verificado rodando de fato: `fvm flutter build ios --simulator --debug` + instalar o `Runner.app`. |
 | Supabase local | ✅ Configurado nas portas 553xx (offset +1000, coexiste com `finance-dashboard`). Exige Docker de pé. |
 | **PowerSync** | ✅ Instância Cloud (ambiente Development) ligada ao Supabase da nuvem, com as sync rules do repo publicadas. ⚠️ **Publicar é manual**: o arquivo do repo não sobe sozinho, e regras velhas se manifestam como tabela vazia no cliente sem erro nenhum. **Coluna nova não exige republicar** — os buckets usam `select *`, e a fatia de contas confirmou isso rodando: as quatro colunas novas chegaram ao SQLite local sem tocar no dashboard. Tabela ou bucket novo, sim. |
-| **Supabase (nuvem)** | ✅ Projeto `ivfcypfljxvwkvnvmuum`, 7 migrations aplicadas, 10 categorias de sistema semeadas, 7 tabelas com `REPLICA IDENTITY FULL` na publication `powersync`. É o que o `env/dev.json` usa. |
+| **Supabase (nuvem)** | ✅ Projeto `ivfcypfljxvwkvnvmuum`, as 9 migrations do repo aplicadas, 10 categorias de sistema semeadas, 7 tabelas com `REPLICA IDENTITY FULL` na publication `powersync`. É o que o `env/dev.json` usa. ⚠️ **Nunca aplique schema por outro caminho que não `supabase db push`** — ver a armadilha do histórico abaixo. |
 | Web (Chrome) | ⚠️ Compila, mas falta `sqlite3.wasm` + worker em `apps/finance/web/`. `PowerSyncService.open()` falharia. |
 | Android | ⚠️ Três bloqueios: `cmdline-tools` ausente, nenhum AVD criado, e o `env/dev.json` não serve (no emulador o host é `10.0.2.2`, não `127.0.0.1`, e o Android 9+ bloqueia cleartext — o `AndroidManifest.xml` não tem exceção). Precisaria de `env/dev-android.json` + network security config. |
+
+---
+
+## A armadilha do histórico de migrations (resolvida, e fácil de recriar)
+
+Em 2026-07-28 um `supabase db push` falhou com **"Remote migration versions not
+found in local migrations directory"**, apontando quatro versões que o remoto
+conhecia e o repo não: `20260727192311`, `20260727195907`, `20260727224321`,
+`20260727224349`.
+
+**Nenhum arquivo com esses nomes jamais existiu no repo** — verificado com
+`git log --all --diff-filter=A -- 'supabase/migrations/*'`. Não foi renomeação
+nem squash.
+
+A causa, reconstruída por horário (os nomes de versão são **UTC**, os commits
+estavam em `-03`): as quatro nasceram de `apply_migration` do MCP do Supabase,
+que aplica o SQL direto na nuvem e grava a versão com timestamp próprio. Cada
+uma cai poucos minutos **antes** de um commit que adicionou um arquivo de
+migration equivalente:
+
+| Órfã (UTC) | Commit seguinte (UTC) | Arquivo local correspondente |
+|---|---|---|
+| `192311` | `5aeb975` 19:50 | `20260727210000_accounts_profile` |
+| `195907` | mesma sessão | correção do mesmo SQL |
+| `224321` | `2fa1e35` 22:45 | `20260727235500_savings_goals` |
+| `224349` | 28s depois | idem, aplicada em duas partes |
+
+O sinal que confirma: `20260727151151` (transações) tem horário coerente com a
+geração real, enquanto `210000`, `230000` e `235500` são **redondos e à frente do
+próprio commit** — nome escrito à mão depois de o SQL já ter subido por outro
+caminho. Duas histórias paralelas para o mesmo DDL.
+
+**A regra que evita isso:** schema deste projeto muda **só** por arquivo em
+`supabase/migrations/` aplicado com `supabase db push`. `apply_migration` do MCP
+serve para exploração num branch descartável, nunca no projeto que o
+`env/dev.json` usa — ele grava um histórico que o repo não tem como reproduzir, e
+`supabase db reset` deixa de descrever o banco.
+
+Se acontecer de novo: `supabase migration list` mostra os dois lados,
+`supabase migration repair --status reverted <órfãs>` limpa o histórico (não
+desfaz DDL), e `--status applied <arquivos locais>` registra os equivalentes.
+**Não** use `supabase db pull` aqui: ele achata as nove migrations comentadas num
+arquivo só, e os cabeçalhos delas são documentação de verdade.
 
 ---
 
