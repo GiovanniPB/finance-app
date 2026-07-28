@@ -70,6 +70,40 @@ Credenciais bancárias **nunca** transitam por nós (ficam na Pluggy).
   rules e sem policy de INSERT para o cliente.
 - Plano Free da Pluggy só cria item via widget — o que já é o nosso fluxo.
 
+## Revisão de 2026-07-28 (fatia de fundação de schema)
+
+Duas coisas mudam ao sair do desenho para o SQL. A decisão central — todo dado
+entra pelo servidor — segue de pé.
+
+### A IP allowlist deixa de ser bloqueante
+
+O texto acima manda validar "header secreto + IP allowlist (`52.67.145.81`)". A
+allowlist passa a ser **registro, não recusa**: o header secreto é o que de fato
+autentica, e IP de fornecedor muda sem aviso.
+
+O que decidiu foi o **modo de falha**. Com a allowlist bloqueante, uma troca de
+IP da Pluggy produz webhooks recusados com 4xx, a Pluggy desiste após 9
+tentativas, e a sincronização para **sem erro visível em lugar nenhum** — é
+exatamente o modo de falha que este projeto já pagou com as sync rules não
+publicadas (tabela vazia no cliente, zero mensagens). Um IP desconhecido com
+header válido é mais provavelmente infraestrutura nova do fornecedor que ataque;
+e um atacante que tenha o header não é barrado por um IP de origem que ele pode
+não precisar forjar.
+
+Fica: header secreto **obrigatório** (sem ele, 401), IP fora da lista **logado**
+com aviso e processado.
+
+### `provider_id` e `external_id` viram uma coluna só
+
+O ADR listava as duas. Viraram `transactions.external_id`, porque o próprio
+critério de dedup daqui de cima ("`provider_id` senão o `id` da transação") diz
+que os dois nunca coexistem: um é o valor preferido do outro. Duas colunas
+guardariam o mesmo fato com dois nomes, e a `unique` teria de eleger uma.
+
+Custo aceito: a linha não conta se o id veio de conexão regulada ou de
+screen-scraping. Se isso passar a importar, o lugar é uma coluna de
+**procedência** (`external_id_source`), não uma segunda cópia do id.
+
 ## Alternativas descartadas
 
 - **Cliente chamando a Pluggy direto**: exporia segredos; proibido.

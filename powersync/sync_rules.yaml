@@ -25,6 +25,13 @@ bucket_definitions:
     data:
       - select * from profiles where id = bucket.user_id
       - select * from accounts where owner_id = bucket.user_id
+      # Conexão de Open Finance é do dono, não do espaço: o consentimento é
+      # pessoal (ver o cabeçalho da migration 20260728033219). Por isso mora
+      # aqui e não em `by_space`.
+      #
+      # `webhook_events` **não** aparece em bucket nenhum, de propósito: é
+      # registro de operação do servidor, não dado do usuário.
+      - select * from open_finance_connections where owner_id = bucket.user_id
 
   by_space:
     # Um bucket por espaço em que o usuário é membro ativo.
