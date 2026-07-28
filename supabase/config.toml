@@ -413,7 +413,18 @@ s3_secret_key = "env(S3_SECRET_KEY)"
 [functions.pluggy-connect-token]
 verify_jwt = true
 
-# NOTA para a fatia do webhook: `pluggy-webhook` precisará de
-# `verify_jwt = false` — quem chama é a Pluggy, que não tem JWT do Supabase. A
-# autenticação dela é o header secreto (ver a revisão de 2026-07-28 do ADR 0005),
-# e é a única função do projeto que pode ficar sem `verify_jwt`.
+# Recebe as notificações da Pluggy. **A única função do projeto sem
+# `verify_jwt`**, e não há alternativa: quem chama é a Pluggy, que não tem sessão
+# do Supabase. Ela também não pode exigir header secreto — a Pluggy só envia
+# `headers` customizados em webhook registrado por `POST /webhooks`, e o nosso
+# `webhookUrl` vai no Connect Token (referência §8.5). A autoridade vem de outro
+# lugar: o payload nunca é confiado, só item que existe em
+# `open_finance_connections` é aceito, e `event_id` é `unique`. Ver o cabeçalho
+# da função.
+[functions.pluggy-webhook]
+verify_jwt = false
+
+# Consome a fila e traz o dado da Pluggy. `verify_jwt = true`: quem a chama é o
+# webhook, com a service-role key — não há caminho de cliente até aqui.
+[functions.pluggy-sync-worker]
+verify_jwt = true

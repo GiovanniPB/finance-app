@@ -4,8 +4,11 @@ Documento vivo. O **PRD** define *o quê* e *por quê*; este arquivo registra
 *onde estamos*. Atualize junto com o PR que muda o estado.
 
 - Última atualização: **2026-07-28**
-- Branch de trabalho atual: `feat/open-finance-cliente`, empilhada sobre
-  `feat/open-finance-fundacao` (PR #25, verde e aguardando merge). O PR #24
+- Branch de trabalho atual: `feat/open-finance-ingestao`, terceira de uma pilha
+  sobre `feat/open-finance-fundacao` (PR #25, verde) e `feat/open-finance-cliente`
+  (PR #26). ⚠️ **PR empilhado não tem CI**: o workflow dispara só em
+  `pull_request` para `main`, então o #26 nunca teve check — a verificação dele foi
+  local (Definição de Pronto completa), não do CI. O PR #24
   (segurança e idioma) está **mergeado**. Os únicos outros PRs abertos são quatro do
   dependabot (#1, #2, #8, #9), deixados para depois por decisão; os dois de pub
   (`sqlite3`, `sqlite_async`) tocam a camada do PowerSync e merecem uma passada
@@ -298,13 +301,25 @@ manual, no simulador, e cada fatia a registra no PR.
 
 Estado em 2026-07-28, fim da sessão:
 
-0. **Percorrer o fluxo de conectar banco no simulador** — é o único passo que
-   falta para o Open Finance sair de "escrito" para "funciona". Tudo já está no
-   lugar: schema na nuvem, sync rules publicadas, segredos configurados, função
-   deployada, e a aba Perfil com "Conectar banco". Os conectores de **sandbox**
-   (Pluggy Bank) estão ligados fora de produção, então dá para percorrer sem
-   banco real. É aí que se descobre se o canal JS conversa e se o salto para o
-   OAuth volta — nada disso tem prova ainda.
+0. **Reconectar um banco e ver o dado chegar.** O pipeline inteiro está no ar
+   pela primeira vez: schema, sync rules, as três Edge Functions deployadas e o
+   app com a ponte JS corrigida. Credenciais de sandbox: `user-ok` /
+   `password-ok`, MFA `123456`. O que se prova nessa passagem é o que ainda não
+   tem prova nenhuma: se o worker roda, se o mapeamento de status/subtipo/sinal
+   está certo, e se conta e lançamento aparecem no app.
+
+   **O que já foi provado rodando** (2026-07-28, iPhone 17 Pro): a
+   `pluggy-connect-token` responde 200 contra a Pluggy real, o widget carrega, a
+   allowlist não bloqueia o fluxo legítimo, o sandbox aparece, e o fluxo completa
+   com "dados coletados com sucesso". As guardas do webhook também: 405 em GET,
+   400 em corpo inválido e em payload sem `eventId`, e **200 + zero linhas
+   gravadas** em item que não é nosso.
+
+   **Para conta real**, as credenciais precisam ser de uma aplicação de
+   **produção** — a atual é uma aplicação Demo, que só conecta sandbox. O
+   [Meu Pluggy](https://www.pluggy.ai/meu-pluggy) dá isso de graça para contas
+   nominais do próprio titular. Trocar troca de aplicação: os items da anterior
+   deixam de ser visíveis.
 1. **A exposição das funções está fechada, e o advisor caiu de 10 WARN para 1.**
    O único que sobrou é o toggle de **proteção de senha vazada** no dashboard —
    um clique, sem código nem migration. Nada mais de segurança pende no repo.

@@ -19,11 +19,9 @@
 //    rastreabilidade ponta a ponta do lado da Pluggy, o dado importado
 //    apareceria amarrado à pessoa errada.
 //
-// 2. A apiKey é cacheada **em memória do isolate**, não no banco. Ela vale 2h e
-//    a Pluggy pede para reutilizá-la (há rate limit em `/auth`). Guardá-la numa
-//    tabela seria persistir credencial de acesso total para economizar uma
-//    chamada; um isolate reciclado apenas paga um `/auth` a mais. A margem de
-//    5 minutos evita usar uma chave que expira no meio da chamada seguinte.
+// 2. A troca de credenciais pela apiKey vive em `_shared/pluggy.ts`, junto do
+//    cache por isolate — duas funções com lógicas de cache diferentes acabariam
+//    estourando o rate limit de `/auth` por um caminho e não pelo outro.
 //
 // 3. Erro da Pluggy **não vaza para o cliente**. A resposta dela pode conter
 //    detalhe de configuração da conta; o cliente recebe uma frase em português e
@@ -33,19 +31,13 @@
 
 import { createClient } from 'jsr:@supabase/supabase-js@2';
 
+import {
+  ClientFacingError,
+  getApiKey,
+  requiredEnv,
+} from '../_shared/pluggy.ts';
+
 const PLUGGY_BASE_URL = 'https://api.pluggy.ai';
-
-// A apiKey da Pluggy vale 2h; renovamos 5 min antes para nunca usar uma que
-// expire no meio da chamada seguinte.
-const API_KEY_TTL_MS = 2 * 60 * 60 * 1000;
-const API_KEY_RENEW_MARGIN_MS = 5 * 60 * 1000;
-
-interface CachedApiKey {
-  readonly apiKey: string;
-  readonly fetchedAtMs: number;
-}
-
-let cachedApiKey: CachedApiKey | null = null;
 
 const CORS_HEADERS = {
   'Access-Control-Allow-Origin': '*',
@@ -58,72 +50,6 @@ function jsonResponse(body: unknown, status: number): Response {
     status,
     headers: { ...CORS_HEADERS, 'Content-Type': 'application/json' },
   });
-}
-
-/** Falha esperada, com frase pronta para a tela. */
-class ClientFacingError extends Error {
-  constructor(readonly status: number, message: string) {
-    super(message);
-  }
-}
-
-function requiredEnv(name: string): string {
-  const value = Deno.env.get(name);
-  if (!value) {
-    // Falha rápida no boot da requisição, como o `AppEnv` faz no app: uma
-    // função sem credencial configurada deve dizer isso, não tentar e falhar
-    // com 401 da Pluggy (que leria como credencial errada).
-    throw new Error(`Variável de ambiente ausente: ${name}`);
-  }
-  return value;
-}
-
-/**
- * Troca `CLIENT_ID`/`CLIENT_SECRET` pela apiKey, reaproveitando a que estiver
- * em memória e ainda válida.
- */
-async function getApiKey(): Promise<string> {
-  const now = Date.now();
-  if (
-    cachedApiKey &&
-    now - cachedApiKey.fetchedAtMs < API_KEY_TTL_MS - API_KEY_RENEW_MARGIN_MS
-  ) {
-    return cachedApiKey.apiKey;
-  }
-
-  const response = await fetch(`${PLUGGY_BASE_URL}/auth`, {
-    method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({
-      clientId: requiredEnv('PLUGGY_CLIENT_ID'),
-      clientSecret: requiredEnv('PLUGGY_CLIENT_SECRET'),
-    }),
-  });
-
-  if (!response.ok) {
-    // Nunca ecoar o corpo: em `401 CLIENT_KEYS_UNAUTHORIZED` ele confirmaria ao
-    // chamador que as credenciais do servidor estão inválidas.
-    console.error('Pluggy /auth falhou', {
-      status: response.status,
-      statusText: response.statusText,
-    });
-    throw new ClientFacingError(
-      502,
-      'Não foi possível falar com o provedor de Open Finance. '
-        + 'Tente de novo em instantes.',
-    );
-  }
-
-  const body = (await response.json()) as { apiKey?: string };
-  if (!body.apiKey) {
-    throw new ClientFacingError(
-      502,
-      'O provedor de Open Finance respondeu de forma inesperada.',
-    );
-  }
-
-  cachedApiKey = { apiKey: body.apiKey, fetchedAtMs: now };
-  return body.apiKey;
 }
 
 /**

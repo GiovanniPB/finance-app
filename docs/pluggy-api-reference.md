@@ -389,7 +389,7 @@ Campos de `Transaction`:
 | `amount` | number | Valor. |
 | `amountInAccountCurrency` | number | Valor na moeda da conta (se diferente). |
 | `date` | date-time | Data da transação. |
-| `type` | `DEBIT` \| `CREDIT` | Direção do fluxo pela ótica do titular. **Normalizado:** em cartão, compras = `DEBIT`, pagamentos da fatura = `CREDIT`. |
+| `type` | `DEBIT` \| `CREDIT` | Direção declarada. ⚠️ **NÃO CONFIE NELE — use o sinal de `amount`.** Medido no sandbox em 2026-07-28: compra de cartão chega como `CREDIT` com `amount` **negativo**, e confiar em `type` gravou 27 compras como receita. O sinal é coerente nas duas contas: negativo = saiu. A doc oficial afirma o oposto (compra = `DEBIT`, valor positivo), então os dois campos divergem entre doc e sandbox. Ver `resolveDirection` em `pluggy-sync-worker`. |
 | `balance` | number\|null | Saldo após a transação (pode ser null). |
 | `status` | `POSTED` \| `PENDING` | Liquidada / autorizada mas não liquidada. |
 | `category` / `categoryId` | string | Categoria e ID (ver Categories). |
