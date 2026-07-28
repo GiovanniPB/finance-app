@@ -53,11 +53,12 @@ void main() {
       expect(find.text('Viagem ao Chile'), findsOneWidget);
     });
 
-    testWidgets('só espaço compartilhado oferece ver quem está nele', (
+    testWidgets('toda linha abre e toda linha pode virar a ativa', (
       tester,
     ) async {
-      // O Pessoal tem um membro só e não recebe convite (PRD §4.3): um botão
-      // ali abriria uma folha sem nada.
+      // Inclusive o Pessoal: ele tem resumo e nome, mesmo sem membro para
+      // gerenciar — e uma linha que não responde ao toque, no meio de outras
+      // que respondem, lê como bug.
       await pumpScreen(
         tester,
         const SpacesPage(),
@@ -67,8 +68,10 @@ void main() {
         ]),
       );
 
-      expect(find.byKey(const Key('space_manage_space-2')), findsOneWidget);
-      expect(find.byKey(const Key('space_manage_space-1')), findsNothing);
+      for (final id in ['space-1', 'space-2']) {
+        expect(find.byKey(Key('space_open_$id')), findsOneWidget);
+        expect(find.byKey(Key('space_use_$id')), findsOneWidget);
+      }
     });
   });
 

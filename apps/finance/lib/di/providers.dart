@@ -42,6 +42,16 @@ DateTime Function() clock(Ref ref) => DateTime.now;
 @Riverpod(keepAlive: true)
 SupabaseClient supabaseClient(Ref ref) => Supabase.instance.client;
 
+/// Id de quem está usando o app. Nulo sem sessão.
+///
+/// Existe para uma tela poder perguntar "sou eu?" sem depender do
+/// `SupabaseClient` inteiro — que num teste de widget significaria uma sessão
+/// de verdade. A pergunta aparece em toda lista de membro: qual linha é a
+/// minha, o que dá para fazer com as outras.
+@Riverpod(keepAlive: true)
+String? currentUserId(Ref ref) =>
+    ref.watch(supabaseClientProvider).auth.currentUser?.id;
+
 /// Serviço PowerSync. Sobrescrito no `bootstrap` com a instância já aberta.
 @Riverpod(keepAlive: true)
 PowerSyncService powerSyncService(Ref ref) => throw UnimplementedError(

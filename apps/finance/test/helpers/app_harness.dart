@@ -191,6 +191,62 @@ class FakeSpacesRepository implements SpacesRepository {
     joined.add(code);
     return failure != null ? Err(failure!) : const Ok('space-1');
   }
+
+  /// Nomes novos passados a [rename], na ordem.
+  final List<String> renamed = [];
+
+  /// Ids de espaço arquivados, na ordem.
+  final List<String> archived = [];
+
+  /// Papéis gravados por [changeRole], por id de membro.
+  final List<({String memberId, SpaceRole role})> roleChanges = [];
+
+  /// Ids de membro removidos, na ordem.
+  final List<String> removed = [];
+
+  /// Ids de espaço dos quais [leave] foi chamado, na ordem.
+  final List<String> left = [];
+
+  @override
+  Future<Result<void, Failure>> rename({
+    required String spaceId,
+    required String name,
+  }) async {
+    if (failure != null) return Err(failure!);
+    renamed.add(name.trim());
+    return const Ok(null);
+  }
+
+  @override
+  Future<Result<void, Failure>> archive(String spaceId) async {
+    if (failure != null) return Err(failure!);
+    archived.add(spaceId);
+    return const Ok(null);
+  }
+
+  @override
+  Future<Result<void, Failure>> changeRole({
+    required String memberId,
+    required SpaceRole role,
+  }) async {
+    if (failure != null) return Err(failure!);
+    roleChanges.add((memberId: memberId, role: role));
+    return const Ok(null);
+  }
+
+  @override
+  Future<Result<void, Failure>> removeMember(String memberId) async {
+    if (failure != null) return Err(failure!);
+    removed.add(memberId);
+    return const Ok(null);
+  }
+
+  @override
+  Future<Result<void, Failure>> leave(String spaceId) async {
+    if (failure != null) return Err(failure!);
+    left.add(spaceId);
+    return const Ok(null);
+  }
 }
 
 /// Contas em memória, que também registram o que foi escrito.
@@ -809,6 +865,11 @@ Future<void> pumpScreen(
   /// Estado da apresentação no boot. O padrão é `true` — "já viu" — porque é o
   /// que toda tela que não é a apresentação pressupõe.
   bool onboardingSeenAtBoot = true,
+
+  /// Quem está usando o app. O padrão casa com o `ownerId` das fábricas de
+  /// espaço, então por omissão o teste roda como quem criou — troque para
+  /// exercitar a tela pelos olhos de um convidado.
+  String? currentUserId = 'user-1',
   bool dark = false,
   bool wrapInScaffold = true,
   bool settle = true,
@@ -842,6 +903,9 @@ Future<void> pumpScreen(
         ),
         // Relógio fixo: as telas de meta calculam ritmo e projeção contra hoje.
         clockProvider.overrideWithValue(() => testNow),
+        // Sem isto, qualquer tela que pergunte "sou eu?" cai no provider real,
+        // que pede uma sessão do Supabase que o teste não tem.
+        currentUserIdProvider.overrideWithValue(currentUserId),
         onboardingStoreProvider.overrideWithValue(
           onboardingPreferences ?? FakeOnboardingPreferences(),
         ),
