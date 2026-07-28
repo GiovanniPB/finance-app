@@ -7,6 +7,10 @@ import '../../accounts/domain/account.dart';
 import '../../accounts/presentation/account_form_sheet.dart';
 import '../../accounts/presentation/account_tile.dart';
 import '../../accounts/presentation/accounts_providers.dart';
+import '../../categories/domain/category.dart';
+import '../../categories/presentation/categories_providers.dart';
+import '../../categories/presentation/category_form_sheet.dart';
+import '../../categories/presentation/category_icons.dart';
 
 /// Aba Perfil (PRD §11.1).
 ///
@@ -25,6 +29,7 @@ class ProfilePage extends ConsumerWidget {
     final accounts =
         ref.watch(accountsProvider).asData?.value ?? const <Account>[];
     final net = ref.watch(accountsNetBalanceProvider);
+    final userCategories = ref.watch(userCategoriesProvider);
 
     return ListView(
       padding: const EdgeInsets.only(bottom: AppSpacing.xxxl),
@@ -81,6 +86,44 @@ class ProfilePage extends ConsumerWidget {
           ),
         ],
         const SizedBox(height: AppSpacing.xxl),
+        const _SectionHeader(title: 'Suas categorias'),
+        if (userCategories.isEmpty)
+          Padding(
+            padding: const EdgeInsets.symmetric(
+              horizontal: AppSpacing.screenGutter,
+            ),
+            child: Text(
+              'As dez categorias do sistema cobrem o básico. As que você criar '
+              'aparecem aqui, para renomear ou remover.',
+              key: const Key('no_user_categories'),
+              style: context.texts.bodySmall?.copyWith(
+                color: context.tokens.textMuted,
+              ),
+            ),
+          )
+        else
+          for (final category in userCategories)
+            _CategoryTile(
+              key: Key('category_${category.id}'),
+              category: category,
+              onTap: () => CategoryFormSheet.show(context, editing: category),
+            ),
+        Padding(
+          padding: const EdgeInsets.fromLTRB(
+            AppSpacing.screenGutter,
+            AppSpacing.md,
+            AppSpacing.screenGutter,
+            0,
+          ),
+          child: AppButton(
+            key: const Key('new_category'),
+            label: 'Nova categoria',
+            variant: AppButtonVariant.secondary,
+            icon: Icons.add,
+            onPressed: () => CategoryFormSheet.show(context),
+          ),
+        ),
+        const SizedBox(height: AppSpacing.xxl),
         const _SectionHeader(title: 'Ainda não'),
         const Padding(
           padding: EdgeInsets.all(AppSpacing.screenGutter),
@@ -93,6 +136,57 @@ class ProfilePage extends ConsumerWidget {
           ),
         ),
       ],
+    );
+  }
+}
+
+/// Uma categoria de usuário na lista do Perfil.
+///
+/// Espelha a `AccountTile` de propósito: mesma altura de toque, mesmo swatch da
+/// linha de transação, mesma hairline. A seção é de gerenciamento, e duas
+/// listas de gerenciamento na mesma tela com formas diferentes leriam como duas
+/// telas.
+class _CategoryTile extends StatelessWidget {
+  const _CategoryTile({
+    required this.category,
+    required this.onTap,
+    super.key,
+  });
+
+  final Category category;
+  final VoidCallback onTap;
+
+  @override
+  Widget build(BuildContext context) {
+    final tokens = context.tokens;
+
+    return DecoratedBox(
+      decoration: BoxDecoration(
+        border: Border(bottom: BorderSide(color: tokens.hairline)),
+      ),
+      child: InkWell(
+        onTap: onTap,
+        child: Padding(
+          padding: const EdgeInsets.symmetric(
+            horizontal: AppSpacing.screenGutter,
+            vertical: AppSpacing.md,
+          ),
+          child: Row(
+            children: [
+              CategorySwatch(
+                categoryId: category.id,
+                colorIndex: category.colorIndex,
+                icon: CategoryIcons.resolve(category.iconKey),
+              ),
+              const SizedBox(width: AppSpacing.md),
+              Expanded(
+                child: Text(category.name, style: context.texts.bodyMedium),
+              ),
+              Icon(Icons.chevron_right, size: 18, color: tokens.textMuted),
+            ],
+          ),
+        ),
+      ),
     );
   }
 }

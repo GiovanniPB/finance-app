@@ -19,6 +19,24 @@ abstract interface class CategoriesRepository {
     String? parentCategoryId,
   });
 
+  /// Altera nome, ícone e matiz de uma categoria de usuário.
+  ///
+  /// Categoria de sistema não é editável: o nome dela é vocabulário
+  /// compartilhado por todo espaço, e a RLS bloqueia no servidor de qualquer
+  /// forma.
+  Future<Result<Category, Failure>> update(Category category);
+
+  /// Quantos lançamentos usam esta categoria, em **qualquer** mês.
+  ///
+  /// Existe para a tela poder dizer "não dá para remover, 12 lançamentos usam
+  /// esta categoria" em vez de falhar sem explicar.
+  Future<Result<int, Failure>> countUsage(String categoryId);
+
   /// Remove uma categoria de usuário pelo id.
+  ///
+  /// **Recusa** categoria com lançamento, com [ValidationFailure]. Apagá-la
+  /// deixaria os lançamentos sem categoria, e escolher entre isso e reatribuir
+  /// é pergunta de produto, não de tela. O caso resolvido aqui é o trivial: a
+  /// categoria criada por engano, que ninguém usou.
   Future<Result<void, Failure>> delete(String id);
 }

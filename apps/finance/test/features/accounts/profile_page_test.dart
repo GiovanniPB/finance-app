@@ -1,5 +1,7 @@
+import 'package:core/core.dart';
 import 'package:design_system/design_system.dart';
 import 'package:finance/features/accounts/domain/account.dart';
+import 'package:finance/features/categories/domain/category.dart';
 import 'package:finance/features/profile/presentation/profile_page.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
@@ -100,6 +102,135 @@ void main() {
       await pumpScreen(tester, const ProfilePage());
 
       expect(find.text('Assinatura e preferências'), findsOneWidget);
+    });
+  });
+
+  group('seção de categorias', () {
+    /// Uma categoria criada pelo usuário — `testCategory` faz de sistema.
+    Category minha({String id = 'cat-user', String name = 'Academia'}) =>
+        Category(
+          id: id,
+          name: name,
+          iconKey: 'fitness',
+          isSystem: false,
+          createdAt: testNow,
+          updatedAt: testNow,
+          spaceId: 'space-1',
+        );
+
+    testWidgets('lista só as criadas pelo usuário', (tester) async {
+      await pumpScreen(
+        tester,
+        const ProfilePage(),
+        categories: [testCategory(), minha()],
+      );
+
+      expect(find.text('Suas categorias'), findsOneWidget);
+      expect(find.byKey(const Key('category_cat-user')), findsOneWidget);
+      // A de sistema não entra: não é editável, e uma linha que não responde ao
+      // toque numa seção de gerenciamento é ruído.
+      expect(find.byKey(const Key('category_cat-1')), findsNothing);
+    });
+
+    testWidgets('sem categoria própria, explica em vez de mostrar vazio', (
+      tester,
+    ) async {
+      await pumpScreen(
+        tester,
+        const ProfilePage(),
+        categories: [testCategory()],
+      );
+
+      expect(find.byKey(const Key('no_user_categories')), findsOneWidget);
+      // A ação continua oferecida.
+      expect(find.byKey(const Key('new_category')), findsOneWidget);
+    });
+
+    testWidgets('tocar a linha abre a edição preenchida', (tester) async {
+      await pumpScreen(tester, const ProfilePage(), categories: [minha()]);
+
+      await tester.tap(find.byKey(const Key('category_cat-user')));
+      await tester.pumpAndSettle();
+
+      expect(find.text('Editar categoria'), findsOneWidget);
+      // O campo abre preenchido — sem isso, salvar apagaria o nome. Asserção no
+      // `TextField`, e não contagem de ocorrências: o nome aparece três vezes
+      // (a linha do Perfil atrás da folha, a prévia e o campo).
+      expect(find.widgetWithText(TextField, 'Academia'), findsOneWidget);
+      expect(find.byKey(const Key('category_delete')), findsOneWidget);
+    });
+
+    testWidgets('salvar a edição persiste o que mudou', (tester) async {
+      final categories = FakeCategoriesRepository([minha()]);
+      await pumpScreen(
+        tester,
+        const ProfilePage(),
+        categoriesRepository: categories,
+      );
+
+      await tester.tap(find.byKey(const Key('category_cat-user')));
+      await tester.pumpAndSettle();
+      await tester.enterText(find.byType(TextField), 'Musculação');
+      await tester.pumpAndSettle();
+      await tapVisible(tester, find.byKey(const Key('category_form_save')));
+
+      expect(categories.updated.single.name, 'Musculação');
+      expect(categories.updated.single.id, 'cat-user');
+    });
+
+    testWidgets('excluir pede confirmação e diz que só sai a sem lançamento', (
+      tester,
+    ) async {
+      final categories = FakeCategoriesRepository([minha()]);
+      await pumpScreen(
+        tester,
+        const ProfilePage(),
+        categoriesRepository: categories,
+      );
+
+      await tester.tap(find.byKey(const Key('category_cat-user')));
+      await tester.pumpAndSettle();
+      await tapVisible(tester, find.byKey(const Key('category_delete')));
+
+      expect(find.text('Excluir esta categoria?'), findsOneWidget);
+      expect(find.textContaining('nenhum lançamento usa'), findsOneWidget);
+      expect(categories.deleted, isEmpty);
+
+      await tapVisible(
+        tester,
+        find.byKey(const Key('confirm_delete_category')),
+      );
+
+      expect(categories.deleted, ['cat-user']);
+    });
+
+    testWidgets('a recusa por uso aparece na folha, sem fechá-la', (
+      tester,
+    ) async {
+      // A mensagem vem do repository, com a contagem — a folha não a duplica.
+      final categories = FakeCategoriesRepository([minha()])
+        ..writeFailure = const ValidationFailure(
+          '3 lançamentos usam esta categoria. Mude a categoria deles antes de '
+          'remover.',
+        );
+      await pumpScreen(
+        tester,
+        const ProfilePage(),
+        categoriesRepository: categories,
+      );
+
+      await tester.tap(find.byKey(const Key('category_cat-user')));
+      await tester.pumpAndSettle();
+      await tapVisible(tester, find.byKey(const Key('category_delete')));
+      await tapVisible(
+        tester,
+        find.byKey(const Key('confirm_delete_category')),
+      );
+
+      expect(find.byKey(const Key('category_form_error')), findsOneWidget);
+      expect(find.textContaining('3 lançamentos'), findsOneWidget);
+      // A folha fica aberta: o usuário precisa da mensagem para agir.
+      expect(find.text('Editar categoria'), findsOneWidget);
     });
   });
 }

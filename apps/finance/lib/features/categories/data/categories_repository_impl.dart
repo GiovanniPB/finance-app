@@ -85,7 +85,85 @@ class CategoriesRepositoryImpl implements CategoriesRepository {
   }
 
   @override
+  Future<Result<Category, Failure>> update(Category category) async {
+    final trimmed = category.name.trim();
+    if (trimmed.isEmpty) {
+      return const Err(ValidationFailure('Informe um nome para a categoria.'));
+    }
+    if (category.isSystem) {
+      return const Err(
+        ValidationFailure('Categoria do sistema não pode ser editada.'),
+      );
+    }
+
+    final updated = category.copyWith(name: trimmed, updatedAt: _now());
+
+    try {
+      final cols = updated.toColumns();
+      // `is_system = 0` no WHERE, e não só a guarda acima: a linha pode ter
+      // mudado por baixo do cliente entre a leitura e a escrita.
+      await db.execute(
+        'UPDATE categories SET name = ?, icon_key = ?, color_index = ?, '
+        'updated_at = ? WHERE id = ? AND is_system = 0',
+        [
+          cols['name'],
+          cols['icon_key'],
+          cols['color_index'],
+          cols['updated_at'],
+          cols['id'],
+        ],
+      );
+      return Ok(updated);
+    } on Exception catch (e, st) {
+      _log.severe('Falha ao salvar categoria', e, st);
+      return Err(
+        DatabaseFailure('Não foi possível salvar a categoria.', cause: e),
+      );
+    }
+  }
+
+  @override
+  Future<Result<int, Failure>> countUsage(String categoryId) async {
+    try {
+      // Lê `transactions` de dentro do repository de categorias. Atravessa
+      // feature, mas não camada: quem conhece o banco é a camada `data`, e a
+      // alternativa (um método no repository de transações) faria a UI
+      // coordenar dois repositories para responder a uma pergunta só.
+      final rows = await db.getAll(
+        'SELECT COUNT(*) AS total FROM transactions WHERE category_id = ?',
+        [categoryId],
+      );
+      return Ok(rows.first['total']! as int);
+    } on Exception catch (e, st) {
+      _log.severe('Falha ao contar uso da categoria', e, st);
+      return Err(
+        DatabaseFailure('Não foi possível verificar a categoria.', cause: e),
+      );
+    }
+  }
+
+  @override
   Future<Result<void, Failure>> delete(String id) async {
+    final usage = await countUsage(id);
+    switch (usage) {
+      case Err(:final failure):
+        return Err(failure);
+      case Ok(:final value) when value > 0:
+        // Recusa explícita em vez de DELETE que não apaga nada: um no-op
+        // silencioso deixaria a tela fechar como se tivesse dado certo.
+        return Err(
+          ValidationFailure(
+            value == 1
+                ? 'Um lançamento usa esta categoria. Mude a categoria dele '
+                      'antes de remover.'
+                : '$value lançamentos usam esta categoria. Mude a categoria '
+                      'deles antes de remover.',
+          ),
+        );
+      case Ok():
+        break;
+    }
+
     try {
       // Guarda local: a RLS já bloqueia no servidor, mas apagar localmente uma
       // categoria de sistema criaria divergência até o próximo sync.

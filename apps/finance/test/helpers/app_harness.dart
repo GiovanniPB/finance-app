@@ -105,9 +105,31 @@ class FakeAccountsRepository implements AccountsRepository {
   }
 }
 
+/// Categorias em memória, que registram o que foi escrito.
+///
+/// Como o de conta e o de meta, e não como os de leitura pura: desde que editar
+/// e remover categoria existem na UI, lançar em toda escrita esconderia
+/// justamente o que há para testar.
 class FakeCategoriesRepository implements CategoriesRepository {
-  FakeCategoriesRepository(this.categories);
+  FakeCategoriesRepository([List<Category> categories = const []])
+    : categories = [...categories];
+
   final List<Category> categories;
+
+  final List<Category> created = [];
+  final List<Category> updated = [];
+  final List<String> deleted = [];
+
+  /// Espaço passado no último `create`, para o teste afirmar que a categoria
+  /// nasceu no espaço ativo.
+  String? lastSpaceId;
+
+  /// Quantos lançamentos usam cada categoria, por id. Ausente conta como zero.
+  final Map<String, int> usage = {};
+
+  /// Quando não nulo, toda escrita falha com esta [Failure] — inclusive a
+  /// recusa por categoria em uso, que em produção vem do repository de verdade.
+  Failure? writeFailure;
 
   @override
   Stream<List<Category>> watchForSpace(String spaceId) =>
@@ -120,11 +142,48 @@ class FakeCategoriesRepository implements CategoriesRepository {
     required String iconKey,
     int? colorIndex,
     String? parentCategoryId,
-  }) async => throw UnimplementedError();
+  }) async {
+    final failure = writeFailure;
+    if (failure != null) return Err(failure);
+
+    lastSpaceId = spaceId;
+    final category = Category(
+      id: 'cat-nova',
+      name: name,
+      iconKey: iconKey,
+      isSystem: false,
+      createdAt: testNow,
+      updatedAt: testNow,
+      spaceId: spaceId,
+      colorIndex: colorIndex,
+      parentCategoryId: parentCategoryId,
+    );
+    created.add(category);
+    return Ok(category);
+  }
 
   @override
-  Future<Result<void, Failure>> delete(String id) async =>
-      throw UnimplementedError();
+  Future<Result<Category, Failure>> update(Category category) async {
+    final failure = writeFailure;
+    if (failure != null) return Err(failure);
+    updated.add(category);
+    return Ok(category);
+  }
+
+  @override
+  Future<Result<int, Failure>> countUsage(String categoryId) async {
+    final failure = writeFailure;
+    if (failure != null) return Err(failure);
+    return Ok(usage[categoryId] ?? 0);
+  }
+
+  @override
+  Future<Result<void, Failure>> delete(String id) async {
+    final failure = writeFailure;
+    if (failure != null) return Err(failure);
+    deleted.add(id);
+    return const Ok(null);
+  }
 }
 
 class FakeTransactionsRepository implements TransactionsRepository {
@@ -426,6 +485,18 @@ Budget testBudget({
 /// só passaria no dia em que foi escrito.
 final testNow = DateTime(2026, 7, 27, 10);
 
+/// Toca num alvo que pode estar fora da viewport da folha.
+///
+/// Vive aqui porque quatro arquivos de teste mantinham a mesma cópia: as folhas
+/// são mais altas que o viewport do teste (valor, campos, teclado e as ações),
+/// então o rodapé começa fora da tela e um `tap` cru cairia no vazio.
+Future<void> tapVisible(WidgetTester tester, Finder finder) async {
+  await tester.ensureVisible(finder);
+  await tester.pumpAndSettle();
+  await tester.tap(finder);
+  await tester.pumpAndSettle();
+}
+
 SavingsGoal testGoal({
   String id = 'goal-1',
   SavingsGoalType type = SavingsGoalType.objective,
@@ -516,6 +587,7 @@ Future<void> pumpScreen(
   BudgetsRepository? budgetsRepository,
   AccountsRepository? accountsRepository,
   SavingsRepository? savingsRepository,
+  CategoriesRepository? categoriesRepository,
   OnboardingPreferences? onboardingPreferences,
 
   /// Estado da apresentação no boot. O padrão é `true` — "já viu" — porque é o
@@ -532,7 +604,8 @@ Future<void> pumpScreen(
           FakeSpacesRepository(spaces ?? [personalSpace()]),
         ),
         categoriesRepositoryProvider.overrideWithValue(
-          FakeCategoriesRepository(categories ?? [testCategory()]),
+          categoriesRepository ??
+              FakeCategoriesRepository(categories ?? [testCategory()]),
         ),
         transactionsRepositoryProvider.overrideWithValue(
           transactionsRepository ?? FakeTransactionsRepository(transactions),

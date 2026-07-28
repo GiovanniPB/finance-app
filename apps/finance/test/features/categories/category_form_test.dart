@@ -1,8 +1,6 @@
 import 'package:core/core.dart';
 import 'package:design_system/design_system.dart';
 import 'package:finance/di/providers.dart';
-import 'package:finance/features/categories/domain/categories_repository.dart';
-import 'package:finance/features/categories/domain/category.dart';
 import 'package:finance/features/categories/presentation/category_form_controller.dart';
 import 'package:finance/features/categories/presentation/category_form_sheet.dart';
 import 'package:finance/features/categories/presentation/category_icons.dart';
@@ -15,62 +13,8 @@ import 'package:flutter_test/flutter_test.dart';
 
 import '../../helpers/app_harness.dart';
 
-/// Registra o que chegou no repositório, para verificar o que foi persistido.
-class RecordingCategoriesRepository implements CategoriesRepository {
-  RecordingCategoriesRepository({this.failure, this.existing = const []});
-
-  /// Quando presente, toda escrita falha com este erro.
-  final Failure? failure;
-  final List<Category> existing;
-
-  String? lastSpaceId;
-  String? lastName;
-  String? lastIconKey;
-  int? lastColorIndex;
-  int createCalls = 0;
-
-  @override
-  Stream<List<Category>> watchForSpace(String spaceId) =>
-      Stream.value(existing);
-
-  @override
-  Future<Result<Category, Failure>> create({
-    required String spaceId,
-    required String name,
-    required String iconKey,
-    int? colorIndex,
-    String? parentCategoryId,
-  }) async {
-    createCalls++;
-    lastSpaceId = spaceId;
-    lastName = name;
-    lastIconKey = iconKey;
-    lastColorIndex = colorIndex;
-
-    final error = failure;
-    if (error != null) return Err(error);
-
-    return Ok(
-      Category(
-        id: 'cat-nova',
-        name: name,
-        iconKey: iconKey,
-        isSystem: false,
-        createdAt: DateTime.utc(2026, 7),
-        updatedAt: DateTime.utc(2026, 7),
-        spaceId: spaceId,
-        colorIndex: colorIndex,
-      ),
-    );
-  }
-
-  @override
-  Future<Result<void, Failure>> delete(String id) async =>
-      throw UnimplementedError();
-}
-
 Future<ProviderContainer> ready(
-  RecordingCategoriesRepository repo, {
+  FakeCategoriesRepository repo, {
   List<Space>? spaces,
 }) async {
   final container = ProviderContainer(
@@ -89,15 +33,15 @@ Future<ProviderContainer> ready(
 }
 
 void main() {
-  late RecordingCategoriesRepository repo;
+  late FakeCategoriesRepository repo;
 
-  setUp(() => repo = RecordingCategoriesRepository());
+  setUp(() => repo = FakeCategoriesRepository());
 
   CategoryFormController controller(ProviderContainer c) =>
-      c.read(categoryFormControllerProvider.notifier);
+      c.read(categoryFormControllerProvider(null).notifier);
 
   CategoryFormState stateOf(ProviderContainer c) =>
-      c.read(categoryFormControllerProvider);
+      c.read(categoryFormControllerProvider(null));
 
   group('CategoryFormController', () {
     test('começa sem nome, com ícone padrão e sem cor escolhida', () async {
@@ -138,9 +82,9 @@ void main() {
 
       expect(created?.id, 'cat-nova');
       expect(repo.lastSpaceId, 'space-1');
-      expect(repo.lastName, 'Academia');
-      expect(repo.lastIconKey, 'health');
-      expect(repo.lastColorIndex, 3);
+      expect(repo.created.single.name, 'Academia');
+      expect(repo.created.single.iconKey, 'health');
+      expect(repo.created.single.colorIndex, 3);
     });
 
     test('tocar a cor escolhida desmarca — volta a derivar do id', () async {
@@ -152,7 +96,7 @@ void main() {
 
       await controller(container).save();
 
-      expect(repo.lastColorIndex, isNull);
+      expect(repo.created.single.colorIndex, isNull);
     });
 
     test('sem nome recusa e explica, sem chamar o repositório', () async {
@@ -165,7 +109,7 @@ void main() {
         stateOf(container).errorMessage,
         'Informe um nome para a categoria.',
       );
-      expect(repo.createCalls, 0);
+      expect(repo.created, isEmpty);
     });
 
     test('sem espaço ativo pede para aguardar o sync', () async {
@@ -179,13 +123,14 @@ void main() {
         stateOf(container).errorMessage,
         'Aguarde a sincronização do seu espaço.',
       );
-      expect(repo.createCalls, 0);
+      expect(repo.created, isEmpty);
     });
 
     test('falha do repositório vira mensagem e libera o botão', () async {
-      final falha = RecordingCategoriesRepository(
-        failure: const DatabaseFailure('Não foi possível criar a categoria.'),
-      );
+      final falha = FakeCategoriesRepository()
+        ..writeFailure = const DatabaseFailure(
+          'Não foi possível criar a categoria.',
+        );
       final container = await ready(falha);
       controller(container).editName('Academia');
 

@@ -65,20 +65,34 @@ class CategoryPicker extends StatelessWidget {
       child: Row(
         children: [
           Expanded(
-            child: ListView.separated(
-              scrollDirection: Axis.horizontal,
-              itemCount: categories.length,
-              separatorBuilder: (_, _) => const SizedBox(width: AppSpacing.sm),
-              itemBuilder: (context, index) {
-                final category = categories[index];
-                final isSelected = category.id == selectedId;
-                return CategoryChip(
-                  label: category.name,
-                  icon: CategoryIcons.resolve(category.iconKey),
-                  isSelected: isSelected,
-                  onSelected: () => onSelected(isSelected ? null : category.id),
-                );
-              },
+            child: Stack(
+              children: [
+                ListView.separated(
+                  scrollDirection: Axis.horizontal,
+                  itemCount: categories.length,
+                  separatorBuilder: (_, _) =>
+                      const SizedBox(width: AppSpacing.sm),
+                  itemBuilder: (context, index) {
+                    final category = categories[index];
+                    final isSelected = category.id == selectedId;
+                    return CategoryChip(
+                      label: category.name,
+                      icon: CategoryIcons.resolve(category.iconKey),
+                      isSelected: isSelected,
+                      onSelected: () =>
+                          onSelected(isSelected ? null : category.id),
+                    );
+                  },
+                ),
+                // O chip cortado contra o "Nova" ancorado lia como defeito de
+                // renderização. O desvanecimento diz "há mais coisa ao lado".
+                const Positioned(
+                  top: 0,
+                  bottom: 0,
+                  right: 0,
+                  child: ScrollEdgeFade(axis: Axis.horizontal),
+                ),
+              ],
             ),
           ),
           if (create != null) ...[

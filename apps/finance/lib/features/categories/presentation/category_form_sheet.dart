@@ -2,33 +2,57 @@ import 'package:design_system/design_system.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
+import '../domain/category.dart';
 import 'category_form_controller.dart';
 import 'category_icons.dart';
 
-/// Cria uma categoria de usuário (RN-1.2).
+/// Cria ou edita uma categoria de usuário (RN-1.2).
 ///
 /// Nome, ícone e matiz — nada mais. Subcategoria existe no schema
 /// (`parent_category_id`) mas fica fora: hierarquia só compensa depois que
 /// alguém tem categorias demais, e ninguém tem na primeira semana.
 ///
-/// Devolve a categoria criada pelo `pop`, para quem abriu já sair com ela
+/// Devolve a categoria gravada pelo `pop`, para quem abriu já sair com ela
 /// selecionada em vez de ter de procurá-la na lista.
-class CategoryFormSheet extends ConsumerWidget {
-  const CategoryFormSheet({super.key});
+///
+/// `ConsumerStatefulWidget` por causa do campo de nome: editar precisa do texto
+/// já preenchido, e isso exige um `TextEditingController` com dono — o mesmo
+/// motivo da folha de edição de lançamento.
+class CategoryFormSheet extends ConsumerStatefulWidget {
+  const CategoryFormSheet({this.editing, super.key});
 
-  /// Abre a folha. Devolve o id da categoria criada, ou `null` se desistiu.
-  static Future<String?> show(BuildContext context) =>
+  /// Categoria a editar. Nula cria uma nova.
+  final Category? editing;
+
+  /// Abre a folha. Devolve o id da categoria gravada, ou `null` se desistiu.
+  static Future<String?> show(BuildContext context, {Category? editing}) =>
       showModalBottomSheet<String>(
         context: context,
         isScrollControlled: true,
         useSafeArea: true,
-        builder: (_) => const CategoryFormSheet(),
+        builder: (_) => CategoryFormSheet(editing: editing),
       );
 
   @override
-  Widget build(BuildContext context, WidgetRef ref) {
-    final state = ref.watch(categoryFormControllerProvider);
-    final controller = ref.read(categoryFormControllerProvider.notifier);
+  ConsumerState<CategoryFormSheet> createState() => _CategoryFormSheetState();
+}
+
+class _CategoryFormSheetState extends ConsumerState<CategoryFormSheet> {
+  late final TextEditingController _name = TextEditingController(
+    text: widget.editing?.name,
+  );
+
+  @override
+  void dispose() {
+    _name.dispose();
+    super.dispose();
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final provider = categoryFormControllerProvider(widget.editing);
+    final state = ref.watch(provider);
+    final controller = ref.read(provider.notifier);
 
     return Padding(
       padding: EdgeInsets.fromLTRB(
@@ -43,7 +67,7 @@ class CategoryFormSheet extends ConsumerWidget {
         children: [
           const SheetGrabHandle(),
           Text(
-            'Nova categoria',
+            state.isEditing ? 'Editar categoria' : 'Nova categoria',
             textAlign: TextAlign.center,
             style: context.texts.titleMedium,
           ),
@@ -52,11 +76,13 @@ class CategoryFormSheet extends ConsumerWidget {
             name: state.trimmedName,
             iconKey: state.iconKey,
             colorIndex: state.colorIndex,
+            categoryId: widget.editing?.id,
           ),
           const SizedBox(height: AppSpacing.lg),
           AppTextField(
             label: 'Nome',
             hint: 'Ex.: Academia',
+            controller: _name,
             onChanged: controller.editName,
           ),
           if (state.errorMessage != null) ...[
@@ -84,20 +110,67 @@ class CategoryFormSheet extends ConsumerWidget {
           ),
           const SizedBox(height: AppSpacing.xxl),
           AppButton(
-            label: 'Criar categoria',
+            key: const Key('category_form_save'),
+            label: state.isEditing ? 'Salvar categoria' : 'Criar categoria',
             isLoading: state.isSaving,
             onPressed: state.canSave
                 ? () async {
-                    final created = await controller.save();
-                    if (created != null && context.mounted) {
-                      Navigator.of(context).pop(created.id);
+                    final saved = await controller.save();
+                    if (saved != null && context.mounted) {
+                      Navigator.of(context).pop(saved.id);
                     }
                   }
                 : null,
           ),
+          if (state.isEditing) ...[
+            const SizedBox(height: AppSpacing.sm),
+            AppButton(
+              key: const Key('category_delete'),
+              label: 'Excluir categoria',
+              variant: AppButtonVariant.ghost,
+              onPressed: state.isSaving ? null : _confirmDelete,
+            ),
+          ],
         ],
       ),
     );
+  }
+
+  /// Confirma e remove.
+  ///
+  /// A recusa por categoria em uso **não** é pré-checada: o repository já
+  /// devolve a contagem na mensagem ("3 lançamentos usam esta categoria…"), e
+  /// ela aparece na folha, que fica aberta. Pré-checar economizaria um toque ao
+  /// custo de duplicar essa frase em dois lugares.
+  Future<void> _confirmDelete() async {
+    final confirmed = await showDialog<bool>(
+      context: context,
+      builder: (dialogContext) => AlertDialog(
+        title: const Text('Excluir esta categoria?'),
+        content: const Text(
+          'Só sai categoria que nenhum lançamento usa. Isso não pode ser '
+          'desfeito.',
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.of(dialogContext).pop(false),
+            child: const Text('Cancelar'),
+          ),
+          TextButton(
+            key: const Key('confirm_delete_category'),
+            onPressed: () => Navigator.of(dialogContext).pop(true),
+            child: const Text('Excluir'),
+          ),
+        ],
+      ),
+    );
+
+    if (confirmed != true) return;
+
+    final removed = await ref
+        .read(categoryFormControllerProvider(widget.editing).notifier)
+        .remove();
+    if (removed && mounted) Navigator.of(context).pop();
   }
 }
 
@@ -122,20 +195,25 @@ class _Preview extends StatelessWidget {
     required this.name,
     required this.iconKey,
     required this.colorIndex,
+    this.categoryId,
   });
 
   final String name;
   final String iconKey;
   final int? colorIndex;
 
+  /// Id da categoria em edição, quando há uma. Nulo ao criar.
+  final String? categoryId;
+
   @override
   Widget build(BuildContext context) => Row(
     mainAxisAlignment: MainAxisAlignment.center,
     children: [
       CategorySwatch(
-        // Sem id ainda: a matiz vem da escolha, ou do nome como palpite estável
-        // enquanto ninguém escolheu.
-        categoryId: name,
+        // Editando, a matiz sem escolha explícita sai do hash do **id** — que é
+        // o que a lista vai mostrar. Criando não há id ainda, então o nome
+        // serve de palpite estável enquanto ninguém escolheu.
+        categoryId: categoryId ?? name,
         colorIndex: colorIndex,
         icon: CategoryIcons.resolve(iconKey),
       ),

@@ -10,18 +10,6 @@ import '../../helpers/app_harness.dart';
 import 'transaction_edit_controller_test.dart'
     show RecordingTransactionsRepository;
 
-/// Toca no alvo depois de rolar até ele.
-///
-/// A folha é mais alta que o viewport do teste (valor, categoria, data,
-/// descrição, teclado e duas ações), então o rodapé começa fora da tela e um
-/// `tap` cru cairia no vazio.
-Future<void> tapVisible(WidgetTester tester, Finder finder) async {
-  await tester.ensureVisible(finder);
-  await tester.pumpAndSettle();
-  await tester.tap(finder);
-  await tester.pumpAndSettle();
-}
-
 void main() {
   group('TransactionEditSheet', () {
     testWidgets('abre preenchida com o que está gravado', (tester) async {

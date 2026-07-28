@@ -3,7 +3,6 @@ import 'package:finance/di/providers.dart';
 import 'package:finance/features/budgets/domain/budget.dart';
 import 'package:finance/features/budgets/domain/budgets_repository.dart';
 import 'package:finance/features/budgets/presentation/budgets_providers.dart';
-import 'package:finance/features/categories/domain/categories_repository.dart';
 import 'package:finance/features/categories/domain/category.dart';
 import 'package:finance/features/categories/presentation/categories_providers.dart';
 import 'package:finance/features/spaces/domain/space.dart';
@@ -14,6 +13,10 @@ import 'package:finance/features/transactions/domain/transactions_repository.dar
 import 'package:finance/features/transactions/presentation/transactions_providers.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
+
+// Import seletivo: os outros fakes deste arquivo colidiriam com os do harness.
+// Só a categoria vem de lá — era a segunda cópia do mesmo fake.
+import '../../helpers/app_harness.dart' show FakeCategoriesRepository;
 
 // ---------------------------------------------------------------------------
 // Fakes: preferidos a mocks para dependências com comportamento (ver regras).
@@ -68,28 +71,6 @@ class FakeTransactionsRepository implements TransactionsRepository {
   @override
   Future<Result<Transaction, Failure>> update(Transaction transaction) async =>
       throw UnimplementedError();
-
-  @override
-  Future<Result<void, Failure>> delete(String id) async =>
-      throw UnimplementedError();
-}
-
-class FakeCategoriesRepository implements CategoriesRepository {
-  FakeCategoriesRepository(this._categories);
-  final List<Category> _categories;
-
-  @override
-  Stream<List<Category>> watchForSpace(String spaceId) =>
-      Stream.value(_categories);
-
-  @override
-  Future<Result<Category, Failure>> create({
-    required String spaceId,
-    required String name,
-    required String iconKey,
-    int? colorIndex,
-    String? parentCategoryId,
-  }) async => throw UnimplementedError();
 
   @override
   Future<Result<void, Failure>> delete(String id) async =>

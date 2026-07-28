@@ -4,7 +4,8 @@ Documento vivo. O **PRD** define *o quê* e *por quê*; este arquivo registra
 *onde estamos*. Atualize junto com o PR que muda o estado.
 
 - Última atualização: **2026-07-28**
-- Branch de trabalho atual: nenhuma — `main` limpa, PR #20 mergeado
+- Branch de trabalho atual: `chore/limpeza-de-debitos` (PR #21 aberto com a
+  armadilha do histórico de migrations)
 
 ---
 
@@ -396,6 +397,39 @@ Cinco decisões que não se leem no código:
 destino já é a meta. É o mesmo padrão de conta única do registro rápido, com
 `accountTouched` distinguindo "ainda não escolhi" de "tirei de propósito".
 
+### Concluído na fatia de limpeza de débitos (branch `chore/limpeza-de-debitos`)
+
+| Item | Onde |
+|---|---|
+| `CategoriesRepository.update` e `countUsage`; `delete` recusa categoria em uso com a contagem na mensagem | `.../categories/data/categories_repository_impl.dart` |
+| Folha de categoria vira criar **ou** editar, com excluir sob confirmação | `.../categories/presentation/category_form_sheet.dart`, `category_form_controller.dart` |
+| Seção "Suas categorias" na aba Perfil, espelhando a lista de contas | `.../profile/presentation/profile_page.dart` |
+| `userCategoriesProvider` — só as criadas pelo usuário | `.../categories/presentation/categories_providers.dart` |
+| `ScrollEdgeFade` ganha `axis`, e a fila de categorias ganha o desvanecimento | `packages/design_system/.../scroll_edge_fade.dart`, `category_picker.dart` |
+| `tapVisible` e o fake de categorias promovidos ao harness (cinco e três cópias, zero agora) | `test/helpers/app_harness.dart` |
+| `pumpScreen` aceita `categoriesRepository` injetado | idem |
+
+Três decisões que não se leem no código:
+
+- **Categoria vive no Perfil, não no `CategoryPicker`.** O picker aparece no
+  registro rápido, que tem orçamento de três toques; pendurar gerenciamento ali
+  (long-press, por exemplo) esconderia uma ação destrutiva atrás de um gesto que
+  ninguém descobre. O Perfil já é a superfície de gerenciamento — contas moram
+  lá pelo mesmo motivo.
+- **A seção lista só categoria de usuário.** As dez de sistema não são editáveis
+  (a RLS bloqueia, e o nome delas é vocabulário compartilhado entre espaços);
+  mostrá-las seria oferecer dez linhas que não respondem ao toque.
+- **A recusa por categoria em uso não é pré-checada na folha.** O repository já
+  devolve a contagem na mensagem, e ela aparece na folha, que fica aberta.
+  Pré-checar economizaria um toque ao custo de a mesma frase existir em dois
+  lugares — e é a frase que diz ao usuário o que fazer.
+
+**Dois itens saíram do escopo, e por quê.** Orçamento semanal é feature, não
+limpeza: `BudgetPeriod.weekly` persiste, mas exibir "R$ 200/semana" ao lado de
+"R$ 1.200/mês" e decidir qual semana é "a atual" quando o mês em foco não é o
+corrente é desenho novo. E o FAB "Novo limite" continua fora porque o próprio
+débito pede rodada de design em vez de arbitragem.
+
 ### O que falta na Fase 1
 
 | Item | Estado |
@@ -556,22 +590,21 @@ Ordenados por risco. Todos verificados no código.
       conta no mesmo aparelho mostra a apresentação de novo (defensável), e
       reinstalar também (menos defensável). Levar para `profiles` exigiria
       migration + coluna no schema do PowerSync + republicar sync rules.
-- [ ] **Remover/editar categoria não existe na UI.** `CategoriesRepository`
-      tem `delete` (com guarda para não apagar categoria de sistema), mas a folha
-      só cria: uma categoria criada por engano fica permanente, só sai por SQL.
-      O desenho pendente é permitir remover **apenas categoria sem lançamento
-      algum** — o caso "tem lançamento" é pergunta de produto (reatribuir?
-      deixar sem categoria?), o caso "recém-criada por engano" é trivial.
+- [ ] **Categoria com lançamento não tem como ser removida.** É o que sobrou do
+      débito de remover categoria: a UI agora edita e remove, mas `delete`
+      **recusa** categoria em uso, dizendo quantos lançamentos a usam. Resolver
+      exige escolher entre deixar os lançamentos sem categoria e reatribuí-los —
+      pergunta de produto, e a razão pela qual o caso ficou de fora.
 - [ ] **Abas sem URL própria.** O `AppShell` usa `IndexedStack`, então deep link
       por aba não funciona. Quando virar requisito, trocar por
       `StatefulShellRoute` do go_router.
-- [ ] **Duplicação de fakes nos testes.** `test/helpers/app_harness.dart`
-      centraliza os fakes, mas quatro arquivos de teste anteriores ainda têm a
-      sua própria cópia. Vale migrá-los. O harness já aceita repositório
-      injetado, então o caminho está aberto. O helper `tapVisible` está no mesmo
-      caso: quatro cópias idênticas, e `goal_detail_test.dart` agora **importa** a
-      de `goal_form_test.dart` em vez de criar a quinta — promovê-lo ao harness
-      resolve as cinco de uma vez.
+- [ ] **Ainda há fake duplicado em dois testes.** `tapVisible` e o fake de
+      categorias foram promovidos ao harness (cinco e três cópias, zero agora),
+      mas `quick_entry_sheet_test.dart` e `transactions_providers_test.dart`
+      seguem com os próprios `FakeSpacesRepository`, `FakeTransactionsRepository`
+      e `FakeBudgetsRepository` — por isso importam do harness com `show`, para
+      não colidir. Migrá-los é mecânico; o que trava é que os fakes locais
+      guardam argumentos (`lastFrom`, `lastTo`) que os do harness não expõem.
 - [ ] **`savingsMonthTotal` e `MonthSummary.outflow` contam o mesmo dinheiro.**
       Guardar R$ 500 agora aparece nos dois: no total guardado do mês (aba
       Poupança) e nas saídas do mês (home). Está certo — são perguntas diferentes
@@ -606,15 +639,14 @@ Ordenados por risco. Todos verificados no código.
 - [ ] **O FAB "Novo limite" é o único componente que lê como Material padrão.**
       Visto no simulador. Vale passar pela rodada de design em vez de eu
       arbitrar.
-- [ ] **A fila de categorias corta o último chip visível** contra o chip "Nova"
-      ancorado. Funciona, mas o corte parece defeito de renderização. **A saída
-      agora existe**: `ScrollEdgeFade`, criado na fatia de metas, é exatamente
-      isso — falta aplicá-lo aqui.
-- [ ] **A folha de editar conta corta a última fileira do teclado.** Visto no
-      simulador: com o botão "Excluir conta" no rodapé fixo sobra menos altura,
-      e o `0` fica pela metade. A folha de meta resolveu o mesmo problema com
-      **campos rolando e ações em rodapé fixo** (mais a divisão em dois passos);
-      aplicar o mesmo desenho aqui fecha este débito e o de cima.
+- [ ] **O teclado cortado na folha de conta não se reproduz no código.** O
+      débito dizia para aplicar ali o desenho da folha de meta (campos rolando,
+      ações em rodapé fixo) — e `git log -L` mostra que esse desenho **já existe
+      desde `5aeb975`**, a própria fatia de contas: o `AmountKeypad` está dentro
+      do `SingleChildScrollView`, então é alcançável rolando. Ou o corte era
+      apenas visual (o mesmo "corte lê como defeito" que o `ScrollEdgeFade`
+      resolve), ou já saiu junto de outra mudança. Reabrir só depois de ver
+      rodando — mexer sem reproduzir seria adivinhar.
 - [ ] **Conta é sempre em BRL.** A entidade e o schema carregam `currency`, mas
       o formulário não oferece escolha. Só incomoda quando houver conta em outra
       moeda; até lá, `accountsNetBalance` esconde o total se as moedas

@@ -10,31 +10,48 @@ import 'package:flutter/material.dart';
 /// Fica **sobre** o conteúdo e ignora toque ([IgnorePointer]), então não rouba
 /// gesto de rolagem na faixa que cobre.
 ///
-/// Uso: como último filho de uma `Column` cujo penúltimo filho é a área de
-/// rolagem, com margem negativa; ou dentro de um `Stack` alinhado ao fim.
+/// Uso vertical: como último filho de uma `Column` cujo penúltimo filho é a
+/// área de rolagem, com margem negativa; ou dentro de um `Stack` alinhado ao
+/// fim.
+///
+/// Uso horizontal ([Axis.horizontal]): num `Stack` alinhado a `centerRight`,
+/// sobre uma lista que rola de lado. É o caso da fila de categorias, onde o
+/// último chip visível era cortado contra o chip "Nova" ancorado à direita.
 class ScrollEdgeFade extends StatelessWidget {
-  const ScrollEdgeFade({this.color, this.height = defaultHeight, super.key});
+  const ScrollEdgeFade({
+    this.color,
+    this.extent = defaultHeight,
+    this.axis = Axis.vertical,
+    super.key,
+  });
 
   /// Cor de destino do gradiente. Padrão: o fundo da tela, que é o que está
   /// atrás do conteúdo que se desvanece.
   final Color? color;
 
-  final double height;
+  /// Espessura da faixa: altura no eixo vertical, largura no horizontal.
+  final double extent;
+
+  /// Em que direção o conteúdo rola. É o eixo que decide se a faixa fica em pé
+  /// ou deitada, porque o gradiente corre na direção da rolagem.
+  final Axis axis;
 
   static const defaultHeight = 24.0;
 
   @override
   Widget build(BuildContext context) {
     final target = color ?? Theme.of(context).scaffoldBackgroundColor;
+    final isVertical = axis == Axis.vertical;
 
     return IgnorePointer(
       child: SizedBox(
-        height: height,
+        height: isVertical ? extent : null,
+        width: isVertical ? null : extent,
         child: DecoratedBox(
           decoration: BoxDecoration(
             gradient: LinearGradient(
-              begin: Alignment.topCenter,
-              end: Alignment.bottomCenter,
+              begin: isVertical ? Alignment.topCenter : Alignment.centerLeft,
+              end: isVertical ? Alignment.bottomCenter : Alignment.centerRight,
               // `withAlpha(0)` em vez de `Colors.transparent`: transparente é
               // preto com alfa zero, e alguns navegadores/renderizadores
               // interpolam por preto, sujando o meio do gradiente.
