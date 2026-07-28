@@ -79,24 +79,30 @@ só a **categorização por IA**.
 8. **Nunca aplique schema na nuvem por fora de `supabase db push`.** O
    `apply_migration` do MCP grava um histórico que o repo não reproduz — leia a
    seção "A armadilha do histórico de migrations" antes de tocar em schema.
-9. **Antes de mexer na direção do lançamento importado, leia
+9. **Policy nova não pode consultar a própria tabela pelo `id`.** Isso torna
+    a linha invisível a si mesma no INSERT — o PostgREST usa `RETURNING` — e a
+    criação vinda do cliente falha com `42501`, aparecendo e sumindo na tela
+    sem erro nenhum. Aconteceu com `spaces` (migration `20260728204229`).
+    Quando a pergunta puder ser respondida por uma **coluna da linha**
+    (`owner_id = auth.uid()`), responda por ela.
+10. **Antes de mexer na direção do lançamento importado, leia
    `supabase/functions/_shared/ingest.ts`.** A regra já foi trocada duas vezes,
    nas duas direções, e as duas vezes gravou dinheiro errado — porque cada uma
    foi tirada de **um** conector. A tabela-verdade medida nos dois está lá, com
    teste (`node --test 'supabase/functions/_shared/*.test.ts'`), inclusive o caso
    do sandbox que fica errado de propósito. Não "conserte" esse caso.
-10. **Antes de criar tabela para streak, conquista ou qualquer marco, leia o
+11. **Antes de criar tabela para streak, conquista ou qualquer marco, leia o
     [ADR 0009](adr/0009-conquista-derivada-ate-ser-anunciada.md).** Os dois são
     derivados do histórico de contribuição, e o PRD modela `achievements` que
     **de propósito** não existe. Ela só nasce na Fase 3, e para registrar que a
     conquista foi *anunciada* — não para guardar o que se calcula.
-11. **Antes de mexer na detecção de poupança, leia `detectSavingsContribution`
+12. **Antes de mexer na detecção de poupança, leia `detectSavingsContribution`
     em `_shared/ingest.ts` e o item 5 do cabeçalho do worker.** Duas escolhas
     parecem defeito e não são: a regra propõe rendimento como aporte de
     propósito (a proposta não move dinheiro; o sim do usuário move), e só linha
     **recém-inserida** é proposta — reprocessar não repropõe, porque recusar uma
     proposta é apagá-la.
-12. **Se as telas ficarem vazias ou o registro rápido travar em "nenhuma
+13. **Se as telas ficarem vazias ou o registro rápido travar em "nenhuma
     categoria", suspeite das sync rules publicadas.** O arquivo
     `powersync/sync_rules.yaml` do repo **não é publicado automaticamente**: toda
     vez que ele muda, é preciso colar o conteúdo no editor de Sync Rules do
@@ -1100,6 +1106,70 @@ teste esperava `WMA` e recebeu `WOIMA`.
 ⚠️ **Não foi visto rodando.** Falta abrir o app e percorrer: criar um grupo, ver
 o código, e entrar com ele **de outra conta** — este último exige um segundo
 login, que é o custo novo de validar a Fase 2.
+
+### Concluído na fatia do espaço que aparecia e sumia (branch `feat/espacos-compartilhados`)
+
+O primeiro bug da Fase 2, achado **rodando** — e a fatia inteira tinha CI verde.
+
+| Item | Onde |
+|---|---|
+| Policy de SELECT de `spaces` respondível na linha nova | `supabase/migrations/20260728204229_espaco_novo_visivel_a_si_mesmo.sql` |
+| Tentativa anterior, com diagnóstico errado, mantida no histórico | `supabase/migrations/20260728203910_upsert_de_espaco_novo.sql` |
+| Erro de formulário passa a usar `context.colors.error` | `.../spaces/presentation/*_sheet.dart` |
+
+**O sintoma não tinha erro nenhum na tela:** o espaço nascia, aparecia na lista
+e sumia um segundo depois.
+
+**A causa: a linha não era visível a si mesma no instante do INSERT.** A policy
+de SELECT era `is_space_member(id) or is_space_owner(id)`, e `is_space_owner`
+faz `select … from spaces where id = _id`. Sendo `stable`, ela lê o snapshot do
+comando — que não contém a linha que o próprio comando está inserindo. Como o
+PostgREST sempre manda `RETURNING`, todo insert de espaço vindo do cliente
+reprovava com `42501`. O `SupabaseConnector` descarta o batch em
+`PostgrestException` (para não travar a fila), e o checkpoint seguinte apagava a
+linha local.
+
+**A correção é trocar a pergunta, não afrouxar a resposta.**
+`private.is_space_owner(id)` e `owner_id = auth.uid()` respondem à mesma coisa; a
+segunda não precisa que a linha exista. De brinde, some uma função
+`security definer` e uma subconsulta de toda leitura de espaço.
+
+**A medição que fechou o caso** — quatro formas do mesmo INSERT, mesma sessão:
+
+| forma | resultado |
+|---|---|
+| `insert` puro | ok |
+| `insert … on conflict do nothing` | 42501 |
+| `insert … on conflict do update` | 42501 |
+| `insert … returning` | **42501** |
+
+O `returning` é o que derrubou a hipótese anterior: ele não tem ramo de UPDATE
+nenhum. O que as três que falham têm em comum é **precisar ler a linha**.
+
+**Duas lições de método, e as duas já são conhecidas aqui:**
+
+- **Reproduzir não é diagnosticar.** A primeira hipótese (WITH CHECK de UPDATE)
+  foi "confirmada" por um teste em SQL que comparava `insert` puro com
+  `on conflict` — e concluía a causa errada porque não isolava a terceira
+  variável. A migration `…203910` subiu, não resolveu, e ficou no histórico.
+  É o mesmo padrão das duas explicações erradas da ingestão.
+- **A regra que fica:** policy que consulta a **própria tabela** pelo `id` torna
+  a linha invisível a si mesma no INSERT e quebra qualquer criação vinda do
+  cliente. Quando a pergunta puder ser respondida por uma coluna da linha,
+  responda por ela. Varrendo `pg_policies`, `spaces` era a única com essa forma
+  — por isso conta, lançamento, orçamento e meta sempre funcionaram.
+
+**Visto rodando** (iPhone 17 Pro, contra Supabase e PowerSync reais): grupo
+"Teste" criado e **persistido**, código de convite `MKFBC6UZ` gerado pelo app
+com validade de 7 dias, e a segunda chamada devolvendo o mesmo código —
+idempotência confirmada na tela, não só em SQL.
+
+Junto veio uma inconsistência vista na mesma passada: as folhas de espaço
+pintavam a mensagem de erro com `moneyOver`, o token de **orçamento estourado**.
+Todas as outras folhas do app usam `context.colors.error`.
+
+⚠️ **Falta ainda entrar com o código de outra conta** — a metade que exige um
+segundo login.
 
 ### O que falta na Fase 1
 
