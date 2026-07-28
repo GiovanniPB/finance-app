@@ -72,8 +72,6 @@ class PluggyConnectView extends StatefulWidget {
 }
 
 class _PluggyConnectViewState extends State<PluggyConnectView> {
-  static const _javaScriptChannel = 'pluggyConnectHandler';
-
   final _log = AppLogger('PluggyConnect');
   late final WebViewController _controller;
 
@@ -97,13 +95,17 @@ class _PluggyConnectViewState extends State<PluggyConnectView> {
     await _controller.setNavigationDelegate(
       NavigationDelegate(
         onNavigationRequest: _onNavigationRequest,
+        // A ponte tem de ser reinstalada a **cada** carga: cada navegação
+        // dentro do fluxo cria um contexto JS novo, e sem ela a página publica
+        // eventos num objeto que não existe (ver `pluggyBridgeScript`).
+        onPageFinished: (_) => unawaited(_installBridge()),
         onWebResourceError: (error) => _log.warning(
           'Erro de recurso no WebView do Connect: ${error.description}',
         ),
       ),
     );
     await _controller.addJavaScriptChannel(
-      _javaScriptChannel,
+      pluggyChannelName,
       onMessageReceived: (message) => _onJavaScriptMessage(message.message),
     );
     // Só carrega **depois** de delegate e canal instalados: carregar antes
@@ -117,6 +119,18 @@ class _PluggyConnectViewState extends State<PluggyConnectView> {
         ),
       ),
     );
+  }
+
+  /// Instala a ponte JS→Dart. Sem ela o fluxo é silencioso: a tela funciona e
+  /// nenhum evento chega. Ver [pluggyBridgeScript].
+  Future<void> _installBridge() async {
+    try {
+      await _controller.runJavaScript(pluggyBridgeScript);
+    } on PlatformException catch (e, st) {
+      // Se a injeção falhar, o fluxo inteiro fica mudo — e sem este log não
+      // haveria como saber por quê.
+      _log.severe('Falha ao instalar a ponte do Pluggy Connect', e, st);
+    }
   }
 
   /// `NavigationDecision` aqui é o tipo do `webview_flutter`; o nosso veredito
