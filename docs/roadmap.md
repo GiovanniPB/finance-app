@@ -354,9 +354,16 @@ Estado em 2026-07-28, fim da sessão:
    como benigno e devolvia `toInsert.length` mesmo com o INSERT falhando — e um
    INSERT de várias linhas é **atômico**, então uma colisão derruba as outras 499.
    O evento foi marcado como processado com sucesso. Agora falha de escrita
-   **lança**, o INSERT usa `ON CONFLICT DO NOTHING`, a contagem vem do que
-   entrou de verdade, e o resultado de cada página é gravado no `payload` do
-   evento.
+   **lança**, o INSERT vai em pedaços de 100 com recuo linha a linha no pedaço que
+   colidir, a contagem vem do `select` do que entrou de verdade, e o resultado de
+   cada página é gravado no `payload` do evento.
+
+   **`ON CONFLICT DO NOTHING` foi tentado e não serve** — descoberto
+   reprocessando, não lendo: a `unique (account_id, external_id)` é **parcial**,
+   e o Postgres só infere índice parcial se o `ON CONFLICT` repetir o predicado,
+   o que o `onConflict` do PostgREST (só colunas, sem `where`) não expressa. Erro
+   medido: *"there is no unique or exclusion constraint matching the ON CONFLICT
+   specification"* — em toda tentativa, antes de haver colisão alguma.
 
    **`console.log` de Edge Function não é diagnóstico.** A saída não é legível
    por SQL nem pelo CLI desta versão, só pelo dashboard — a primeira
@@ -727,7 +734,7 @@ aparecia em teste porque as Edge Functions não tinham teste nenhum.
 | `_shared/ingest.ts` — as decisões puras da ingestão, com a tabela-verdade medida nos dois conectores | `supabase/functions/_shared/ingest.ts` |
 | 16 testes das regras, rodando em `node --test` (sem Deno, sem Docker, sem rede) | `supabase/functions/_shared/ingest.test.ts` |
 | Direção ciente do tipo de conta: em cartão o sinal é invertido, e crédito de cartão é `transfer` | idem |
-| Escrita que falha **lança** em vez de devolver número; `ON CONFLICT DO NOTHING`; contagem do que entrou de verdade | `pluggy-sync-worker/index.ts` |
+| Escrita que falha **lança** em vez de devolver número; INSERT em pedaços com recuo linha a linha; contagem do `select` do que entrou | `pluggy-sync-worker/index.ts` |
 | Resultado de cada página gravado no `payload` do evento (chegaram, filtradas, colididas, entraram) | idem |
 | Lista de lançamentos nomeia "Transferência" e usa ícone próprio | `.../transactions/presentation/transaction_list.dart` |
 | Gate de CI para as regras da ingestão | `.github/workflows/ci.yaml` |
@@ -748,9 +755,13 @@ Cinco coisas que não se leem no código:
   como benigno sem log, e a função devolvia `toInsert.length` de qualquer forma.
   Três falhas pequenas compondo uma perda de 1.433 lançamentos que se reportou
   como sucesso.
-- **`ON CONFLICT DO NOTHING` não é o `upsert` que o ADR proíbe.** O que a regra
-  proíbe é sobrescrever coluna do usuário no `DO UPDATE`; `DO NOTHING` não
-  atualiza nada. E o `select` depois dele é o que torna a contagem verdade.
+- **`ON CONFLICT DO NOTHING` não dá, e o motivo é o índice ser parcial.** Ele
+  não seria o `upsert` que o ADR proíbe (não atualiza coluna nenhuma), mas o
+  Postgres não infere índice parcial sem o predicado repetido no `ON CONFLICT`, e
+  o PostgREST não o expressa. O substituto — pedaços de 100 com recuo linha a
+  linha — dá o mesmo resultado e ainda **conta** as colisões, que o
+  `DO NOTHING` engoliria. Descoberto reprocessando: a suposição de que daria
+  passou pelo typecheck, pelo lint e por 16 testes.
 - **A contagem de colisão é o próximo dado a ler.** Se `colididas` vier alto, o
   `providerId` do ADR 0005 está colapsando lançamentos distintos (parcela é o
   suspeito) e o remédio é a chave de dedup, não o insert. A instrumentação
@@ -814,8 +825,10 @@ Ordenados por risco. Todos verificados no código.
       várias linhas é atômico; `23505` era tratado como benigno sem log; e a
       função devolvia `toInsert.length` mesmo com o INSERT falhando. Três falhas
       pequenas compondo 1.433 lançamentos perdidos que se reportaram como
-      sucesso. Agora falha de escrita lança, o INSERT usa
-      `ON CONFLICT DO NOTHING`, e a contagem vem do `select` do que entrou.
+      sucesso. Agora falha de escrita lança, o INSERT vai em pedaços de 100 com
+      recuo linha a linha no que colidir, e a contagem vem do `select` do que
+      entrou — mais um `perdidas` que deve ser sempre zero, porque a soma que
+      ninguém fazia era o que permitia "sucesso" com 1.433 linhas a menos.
 - [x] **As Edge Functions não tinham teste nenhum.** As decisões puras da
       ingestão moram em `_shared/ingest.ts`, com 16 testes que rodam em
       `node --test` — sem Deno, sem Docker e sem rede — e um gate no CI. Era o
