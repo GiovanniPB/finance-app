@@ -146,7 +146,7 @@ class _JoinSpaceSheetState extends ConsumerState<JoinSpaceSheet> {
                   error,
                   key: const Key('join_error'),
                   style: context.texts.bodySmall?.copyWith(
-                    color: context.tokens.moneyOver,
+                    color: context.colors.error,
                   ),
                 ),
               ),

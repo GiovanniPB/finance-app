@@ -222,7 +222,7 @@ class _InviteBlock extends StatelessWidget {
                 failure,
                 key: const Key('space_invite_error'),
                 style: context.texts.bodySmall?.copyWith(
-                  color: tokens.moneyOver,
+                  color: context.colors.error,
                 ),
               ),
             ),

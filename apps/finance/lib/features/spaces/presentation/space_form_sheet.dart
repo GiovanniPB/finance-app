@@ -131,7 +131,7 @@ class _SpaceFormSheetState extends ConsumerState<SpaceFormSheet> {
                   error,
                   key: const Key('space_form_error'),
                   style: context.texts.bodySmall?.copyWith(
-                    color: context.tokens.moneyOver,
+                    color: context.colors.error,
                   ),
                 ),
               ),
