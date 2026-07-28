@@ -3,13 +3,23 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../domain/space.dart';
+import 'join_space_sheet.dart';
+import 'space_detail_sheet.dart';
+import 'space_form_sheet.dart';
 import 'spaces_providers.dart';
 
-/// Lista de espaços do usuário, com troca de contexto.
+/// Lista de espaços do usuário, com troca de contexto (PRD §11.1).
 ///
-/// Na Fase 0 só existe o Espaço Pessoal (criado no signup). Criar espaço
-/// `household`/`group` é Fase 2 — a tela existe agora para a aba não ser um
-/// buraco e para a troca de contexto já funcionar quando houver mais de um.
+/// **Duas ações, e a segunda não é óbvia.** "Criar" é o gesto esperado; "entrar
+/// com código" é o que a outra ponta do convite precisa, e sem um caminho
+/// próprio ela não existiria — o convidado abriria o app e não teria onde
+/// colar o código que recebeu. Por isso as duas ficam lado a lado, e não uma
+/// escondida dentro da outra.
+///
+/// O toque num espaço **troca de contexto**; ver quem está nele é um segundo
+/// gesto, no ícone de pessoas. Trocar é o que se faz o tempo todo, e gerenciar
+/// é raro: pôr a gestão no toque principal cobraria um gesto extra da ação
+/// frequente para favorecer a rara.
 class SpacesPage extends ConsumerWidget {
   const SpacesPage({super.key});
 
@@ -40,15 +50,48 @@ class SpacesPage extends ConsumerWidget {
             isActive: space.id == active?.id,
             onTap: () =>
                 ref.read(activeSpaceIdProvider.notifier).select(space.id),
+            onManage: space.isPersonal
+                ? null
+                : () => SpaceDetailSheet.show(context, space: space),
           ),
-        const Padding(
-          padding: EdgeInsets.all(AppSpacing.screenGutter),
-          child: AppEmptyState(
-            icon: Icons.group_add_outlined,
-            title: 'Dividir ou somar com alguém',
-            message:
-                'Espaços de casal e de grupo entram na fase de colaboração, '
-                'depois que o registro individual estiver redondo.',
+        if (ref.watch(sharedSpacesProvider).isEmpty)
+          const Padding(
+            padding: EdgeInsets.fromLTRB(
+              AppSpacing.screenGutter,
+              AppSpacing.md,
+              AppSpacing.screenGutter,
+              0,
+            ),
+            child: AppEmptyState(
+              icon: Icons.group_add_outlined,
+              title: 'Dividir ou somar com alguém',
+              message:
+                  'Crie um grupo para dividir despesas, ou um espaço de casal '
+                  'para juntar a vida financeira. Quem recebeu um convite '
+                  'entra pelo código.',
+            ),
+          ),
+        Padding(
+          padding: const EdgeInsets.all(AppSpacing.screenGutter),
+          child: Row(
+            children: [
+              Expanded(
+                child: AppButton(
+                  key: const Key('space_new'),
+                  label: 'Novo espaço',
+                  onPressed: () => SpaceFormSheet.show(context),
+                ),
+              ),
+              const SizedBox(width: AppSpacing.md),
+              Expanded(
+                child: AppButton(
+                  key: const Key('space_join'),
+                  label: 'Tenho um código',
+                  variant: AppButtonVariant.secondary,
+                  onPressed: () => JoinSpaceSheet.show(context),
+                ),
+              ),
+            ],
           ),
         ),
       ],
@@ -61,11 +104,16 @@ class _SpaceTile extends StatelessWidget {
     required this.space,
     required this.isActive,
     required this.onTap,
+    required this.onManage,
   });
 
   final Space space;
   final bool isActive;
   final VoidCallback onTap;
+
+  /// Nulo no Espaço Pessoal: ele tem um membro só e não recebe convite
+  /// (PRD §4.3), então um botão de gerenciar ali abriria uma tela sem nada.
+  final VoidCallback? onManage;
 
   @override
   Widget build(BuildContext context) {
@@ -115,6 +163,13 @@ class _SpaceTile extends StatelessWidget {
                 ),
                 if (isActive)
                   Icon(Icons.check_circle, size: 20, color: tokens.brandText),
+                if (onManage != null)
+                  IconButton(
+                    key: Key('space_manage_${space.id}'),
+                    icon: const Icon(Icons.people_outline),
+                    tooltip: 'Quem está aqui',
+                    onPressed: onManage,
+                  ),
               ],
             ),
           ),

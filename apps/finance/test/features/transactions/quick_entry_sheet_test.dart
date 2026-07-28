@@ -2,8 +2,6 @@ import 'package:core/core.dart';
 import 'package:design_system/design_system.dart';
 import 'package:finance/di/providers.dart';
 import 'package:finance/features/categories/domain/category.dart';
-import 'package:finance/features/spaces/domain/space.dart';
-import 'package:finance/features/spaces/domain/spaces_repository.dart';
 import 'package:finance/features/transactions/domain/transaction.dart';
 import 'package:finance/features/transactions/domain/transactions_repository.dart';
 import 'package:finance/features/transactions/presentation/quick_entry_sheet.dart';
@@ -14,27 +12,8 @@ import 'package:flutter_test/flutter_test.dart';
 // Import seletivo: este arquivo tem o próprio `FakeSpacesRepository`, que
 // colidiria com o do harness. Só a categoria vem de lá — era a terceira cópia
 // do mesmo fake.
-import '../../helpers/app_harness.dart' show FakeCategoriesRepository;
-
-class FakeSpacesRepository implements SpacesRepository {
-  @override
-  Stream<List<Space>> watchAll() => Stream.value([
-    Space(
-      id: 'space-1',
-      type: SpaceType.personal,
-      name: 'Pessoal',
-      ownerId: 'user-1',
-      privacy: SpacePrivacy.sharedOnly,
-      status: SpaceStatus.active,
-      settlementCurrency: 'BRL',
-      createdAt: DateTime.utc(2026, 7),
-      updatedAt: DateTime.utc(2026, 7),
-    ),
-  ]);
-
-  @override
-  Stream<Space?> watchById(String id) => Stream.value(null);
-}
+import '../../helpers/app_harness.dart'
+    show FakeCategoriesRepository, FakeSpacesRepository, personalSpace;
 
 class RecordingTransactionsRepository implements TransactionsRepository {
   int createCalls = 0;
@@ -106,7 +85,9 @@ Future<void> pumpSheet(
   await tester.pumpWidget(
     ProviderScope(
       overrides: [
-        spacesRepositoryProvider.overrideWithValue(FakeSpacesRepository()),
+        spacesRepositoryProvider.overrideWithValue(
+          FakeSpacesRepository([personalSpace()]),
+        ),
         categoriesRepositoryProvider.overrideWithValue(
           FakeCategoriesRepository(categories ?? [food()]),
         ),
@@ -283,7 +264,9 @@ void main() {
       await tester.pumpWidget(
         ProviderScope(
           overrides: [
-            spacesRepositoryProvider.overrideWithValue(FakeSpacesRepository()),
+            spacesRepositoryProvider.overrideWithValue(
+              FakeSpacesRepository([personalSpace()]),
+            ),
             categoriesRepositoryProvider.overrideWithValue(
               FakeCategoriesRepository([food()]),
             ),

@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 
 import '../theme/app_spacing.dart';
 import '../theme/app_theme.dart';
@@ -19,6 +20,7 @@ class AppTextField extends StatelessWidget {
     this.enabled = true,
     this.keyboardType,
     this.onChanged,
+    this.inputFormatters,
     super.key,
   });
 
@@ -29,6 +31,14 @@ class AppTextField extends StatelessWidget {
   final bool enabled;
   final TextInputType? keyboardType;
   final ValueChanged<String>? onChanged;
+
+  /// Filtros aplicados enquanto se digita.
+  ///
+  /// Existe para campo com alfabeto próprio — hoje o código de convite, que
+  /// exclui `0`, `1`, `I`, `L`, `O` e `S`. Recusar o caractere na entrada é
+  /// mais honesto do que aceitá-lo e depois dizer "código inválido" por um
+  /// símbolo que nunca existiu.
+  final List<TextInputFormatter>? inputFormatters;
 
   @override
   Widget build(BuildContext context) {
@@ -46,6 +56,7 @@ class AppTextField extends StatelessWidget {
           enabled: enabled,
           keyboardType: keyboardType,
           onChanged: onChanged,
+          inputFormatters: inputFormatters,
           style: context.texts.bodyMedium,
           decoration: InputDecoration(hintText: hint, errorText: errorText),
         ),

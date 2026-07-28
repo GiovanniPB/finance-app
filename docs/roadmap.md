@@ -4,7 +4,7 @@ Documento vivo. O **PRD** define *o quê* e *por quê*; este arquivo registra
 *onde estamos*. Atualize junto com o PR que muda o estado.
 
 - Última atualização: **2026-07-28**
-- Branch de trabalho atual: `feat/streaks-e-badges`, a partir da `main`.
+- Branch de trabalho atual: `feat/espacos-compartilhados`, a partir da `main`.
   **A pilha do Open Finance, a correção da ingestão, os débitos e a correção do
   mês estão mergeadas** (PRs #27 a #32). ⚠️ Fica registrada a armadilha que a
   pilha revelou:
@@ -79,24 +79,30 @@ só a **categorização por IA**.
 8. **Nunca aplique schema na nuvem por fora de `supabase db push`.** O
    `apply_migration` do MCP grava um histórico que o repo não reproduz — leia a
    seção "A armadilha do histórico de migrations" antes de tocar em schema.
-9. **Antes de mexer na direção do lançamento importado, leia
+9. **Policy nova não pode consultar a própria tabela pelo `id`.** Isso torna
+    a linha invisível a si mesma no INSERT — o PostgREST usa `RETURNING` — e a
+    criação vinda do cliente falha com `42501`, aparecendo e sumindo na tela
+    sem erro nenhum. Aconteceu com `spaces` (migration `20260728204229`).
+    Quando a pergunta puder ser respondida por uma **coluna da linha**
+    (`owner_id = auth.uid()`), responda por ela.
+10. **Antes de mexer na direção do lançamento importado, leia
    `supabase/functions/_shared/ingest.ts`.** A regra já foi trocada duas vezes,
    nas duas direções, e as duas vezes gravou dinheiro errado — porque cada uma
    foi tirada de **um** conector. A tabela-verdade medida nos dois está lá, com
    teste (`node --test 'supabase/functions/_shared/*.test.ts'`), inclusive o caso
    do sandbox que fica errado de propósito. Não "conserte" esse caso.
-10. **Antes de criar tabela para streak, conquista ou qualquer marco, leia o
+11. **Antes de criar tabela para streak, conquista ou qualquer marco, leia o
     [ADR 0009](adr/0009-conquista-derivada-ate-ser-anunciada.md).** Os dois são
     derivados do histórico de contribuição, e o PRD modela `achievements` que
     **de propósito** não existe. Ela só nasce na Fase 3, e para registrar que a
     conquista foi *anunciada* — não para guardar o que se calcula.
-11. **Antes de mexer na detecção de poupança, leia `detectSavingsContribution`
+12. **Antes de mexer na detecção de poupança, leia `detectSavingsContribution`
     em `_shared/ingest.ts` e o item 5 do cabeçalho do worker.** Duas escolhas
     parecem defeito e não são: a regra propõe rendimento como aporte de
     propósito (a proposta não move dinheiro; o sim do usuário move), e só linha
     **recém-inserida** é proposta — reprocessar não repropõe, porque recusar uma
     proposta é apagá-la.
-12. **Se as telas ficarem vazias ou o registro rápido travar em "nenhuma
+13. **Se as telas ficarem vazias ou o registro rápido travar em "nenhuma
     categoria", suspeite das sync rules publicadas.** O arquivo
     `powersync/sync_rules.yaml` do repo **não é publicado automaticamente**: toda
     vez que ele muda, é preciso colar o conteúdo no editor de Sync Rules do
@@ -1038,6 +1044,133 @@ sistema visual, e sete selos a repetiriam até gastar o sinal. Virou texto
 ("Faltam R$ 20,00"), que num tile de 148px informa mais que o traço. O teste
 estava certo sobre uma coisa que eu não tinha pensado.
 
+### Concluído na fatia de espaços compartilhados (branch `feat/espacos-compartilhados`)
+
+O começo da Fase 2: criar grupo/casal, convidar por código e entrar com ele.
+
+| Item | Onde |
+|---|---|
+| `space_invites` + `join_space_by_code` + `space_invite_code` (RPCs `security definer`) | `supabase/migrations/20260728200052_espacos_convites.sql` |
+| `SpaceMember`, `SpaceRole`, `MembershipStatus` | `.../spaces/domain/space_member.dart` |
+| `createShared`, `watchMembers`, `inviteCode`, `joinByCode` | `.../spaces/{domain,data}/` |
+| `spaceMembers`, `myRoleInSpace`, `sharedSpaces` | `.../spaces/presentation/spaces_providers.dart` |
+| Folhas de criar, entrar e gerenciar | `.../spaces/presentation/{space_form,join_space,space_detail}_sheet.dart` |
+| `inputFormatters` em `AppTextField` | `packages/design_system/lib/src/widgets/app_text_field.dart` |
+| 26 testes novos; os **cinco** `FakeSpacesRepository` duplicados viraram um | `test/features/spaces/`, `test/helpers/app_harness.dart` |
+
+**Criar é local, entrar é remoto — e a assimetria é a decisão da fatia.** A RLS
+já aceita o dono criando o próprio espaço e a própria membership, então criar sai
+em duas linhas locais na mesma transação e funciona offline. Entrar **não pode**
+ser local: o convidado não é membro, não enxerga o espaço nem o convite, e a
+policy de `space_members` exige ser dono ou admin. Afrouxá-la abriria a tabela
+para quem adivinhasse um uuid.
+
+**RPC em Postgres, não Edge Function.** Sobe junto do schema por
+`supabase db push` (sem um segundo deploy que fica para trás), roda dentro da
+transação, e não precisa de service-role key. Edge Function segue sendo o lugar
+de quem fala com terceiros.
+
+**`space_invites` fica fora das sync rules de propósito**, e isso evitou
+republicar o arquivo no dashboard — o passo manual que é a causa conhecida de
+"tela vazia sem erro" aqui. Dá para deixar de fora porque convite não tem uso
+offline: o código só vale se a outra ponta estiver online.
+
+**Exercitado contra o Postgres da nuvem, com um segundo usuário de verdade**
+criado e apagado no mesmo script. O que ficou provado, e que teste de unidade não
+prova:
+
+| Caso | Resultado |
+|---|---|
+| espaços que o convidado enxerga, antes → depois | **0 → 1** |
+| não-membro gerando código | recusado |
+| código inexistente / vencido / revogado | **mesma** mensagem nos três |
+| espaço arquivado | recusa entrar e recusa gerar |
+| entrar duas vezes | 2 membros, não 3 |
+| `space_invite_code` chamada duas vezes | 1 convite, mesmo código |
+
+A mensagem única para os três casos de código ruim é deliberada: distinguir
+"vencido" de "inexistente" diria a quem sonda códigos que acertou o código e
+errou só o prazo.
+
+⚠️ **O advisor foi de 1 para 3 WARN, e os dois novos são esta decisão.** Uma RPC
+que existe para atravessar a RLS é, por definição, `security definer` chamável
+por quem ainda não é membro. Mover para Edge Function calaria o aviso sem mudar
+o poder concedido — e exigiria a service-role key, que é mais poder, não menos.
+Não "conserte" revogando o grant.
+
+**Um teste pegou uma promessa que o código não cumpria.** O filtro do campo de
+código era `[A-Z2-9]`, que deixa passar `I`, `L`, `O` e `S` — exatamente os
+símbolos que o alfabeto exclui para o código poder ser ditado em voz alta. O
+teste esperava `WMA` e recebeu `WOIMA`.
+
+⚠️ **Não foi visto rodando.** Falta abrir o app e percorrer: criar um grupo, ver
+o código, e entrar com ele **de outra conta** — este último exige um segundo
+login, que é o custo novo de validar a Fase 2.
+
+### Concluído na fatia do espaço que aparecia e sumia (branch `feat/espacos-compartilhados`)
+
+O primeiro bug da Fase 2, achado **rodando** — e a fatia inteira tinha CI verde.
+
+| Item | Onde |
+|---|---|
+| Policy de SELECT de `spaces` respondível na linha nova | `supabase/migrations/20260728204229_espaco_novo_visivel_a_si_mesmo.sql` |
+| Tentativa anterior, com diagnóstico errado, mantida no histórico | `supabase/migrations/20260728203910_upsert_de_espaco_novo.sql` |
+| Erro de formulário passa a usar `context.colors.error` | `.../spaces/presentation/*_sheet.dart` |
+
+**O sintoma não tinha erro nenhum na tela:** o espaço nascia, aparecia na lista
+e sumia um segundo depois.
+
+**A causa: a linha não era visível a si mesma no instante do INSERT.** A policy
+de SELECT era `is_space_member(id) or is_space_owner(id)`, e `is_space_owner`
+faz `select … from spaces where id = _id`. Sendo `stable`, ela lê o snapshot do
+comando — que não contém a linha que o próprio comando está inserindo. Como o
+PostgREST sempre manda `RETURNING`, todo insert de espaço vindo do cliente
+reprovava com `42501`. O `SupabaseConnector` descarta o batch em
+`PostgrestException` (para não travar a fila), e o checkpoint seguinte apagava a
+linha local.
+
+**A correção é trocar a pergunta, não afrouxar a resposta.**
+`private.is_space_owner(id)` e `owner_id = auth.uid()` respondem à mesma coisa; a
+segunda não precisa que a linha exista. De brinde, some uma função
+`security definer` e uma subconsulta de toda leitura de espaço.
+
+**A medição que fechou o caso** — quatro formas do mesmo INSERT, mesma sessão:
+
+| forma | resultado |
+|---|---|
+| `insert` puro | ok |
+| `insert … on conflict do nothing` | 42501 |
+| `insert … on conflict do update` | 42501 |
+| `insert … returning` | **42501** |
+
+O `returning` é o que derrubou a hipótese anterior: ele não tem ramo de UPDATE
+nenhum. O que as três que falham têm em comum é **precisar ler a linha**.
+
+**Duas lições de método, e as duas já são conhecidas aqui:**
+
+- **Reproduzir não é diagnosticar.** A primeira hipótese (WITH CHECK de UPDATE)
+  foi "confirmada" por um teste em SQL que comparava `insert` puro com
+  `on conflict` — e concluía a causa errada porque não isolava a terceira
+  variável. A migration `…203910` subiu, não resolveu, e ficou no histórico.
+  É o mesmo padrão das duas explicações erradas da ingestão.
+- **A regra que fica:** policy que consulta a **própria tabela** pelo `id` torna
+  a linha invisível a si mesma no INSERT e quebra qualquer criação vinda do
+  cliente. Quando a pergunta puder ser respondida por uma coluna da linha,
+  responda por ela. Varrendo `pg_policies`, `spaces` era a única com essa forma
+  — por isso conta, lançamento, orçamento e meta sempre funcionaram.
+
+**Visto rodando** (iPhone 17 Pro, contra Supabase e PowerSync reais): grupo
+"Teste" criado e **persistido**, código de convite `MKFBC6UZ` gerado pelo app
+com validade de 7 dias, e a segunda chamada devolvendo o mesmo código —
+idempotência confirmada na tela, não só em SQL.
+
+Junto veio uma inconsistência vista na mesma passada: as folhas de espaço
+pintavam a mensagem de erro com `moneyOver`, o token de **orçamento estourado**.
+Todas as outras folhas do app usam `context.colors.error`.
+
+⚠️ **Falta ainda entrar com o código de outra conta** — a metade que exige um
+segundo login.
+
 ### O que falta na Fase 1
 
 | Item | Estado |
@@ -1050,7 +1183,7 @@ estava certo sobre uma coisa que eu não tinha pensado.
 | Open Finance — desconectar | ✅ Deployada e **exercitada rodando**: 3 conexões viraram 1, as contas do banco removido sobreviveram com o histórico órfão, e os nomes editados não foram sobrescritos. |
 | Detecção/confirmação automática de contribuição | ✅ Escrita e testada (fatia acima): entrada em conta alvo com uma meta ativa vira contribuição `confirmed=false`, ligada ao lançamento importado. ⚠️ **Não exercitada rodando** — falta deployar o worker e ver a proposta chegar ao app |
 | Streaks e badges básicos | ✅ Feitos e derivados, sem tabela (fatia acima e [ADR 0009](adr/0009-conquista-derivada-ate-ser-anunciada.md)): sequência semanal com melhor marca, e 7 conquistas. ⚠️ **Não vistos rodando** |
-| Categorização por IA (premium) | Nada |
+| Categorização por IA (premium) | ⏸️ **Adiada por decisão** (2026-07-28). Depende da questão #4 do PRD (modelo próprio vs. API, e como tratar dado sensível na inferência), que segue aberta. Fase 2 passou na frente |
 | `recurring_challenge` como quarto tipo de meta | Fora de escopo por decisão (ver acima) |
 
 ---
@@ -1061,7 +1194,7 @@ Nada de código. O que existe é **desenho**, não implementação.
 
 | Fase | Escopo (PRD §14) | Estado |
 |---|---|---|
-| **2 — Colaboração** | Espaços `group` (split, saldos, liquidação Pix) e `household` (transparência total, contas vinculadas), convites, matriz de papéis | Schema de espaços e papéis **já pronto**. `Money.allocate()` já resolve a matemática do split (RN-2.1). Falta tudo de UI, `expense_splits`, `settlements`. |
+| **2 — Colaboração** | Espaços `group` (split, saldos, liquidação Pix) e `household` (transparência total, contas vinculadas), convites, matriz de papéis | 🔨 **Em andamento.** Criar espaço, convidar por código e entrar já existem (fatia acima), com a matriz de papéis lida (`myRoleInSpace`). Falta `expense_splits`, saldos "quem deve a quem", liquidação Pix, contas vinculadas ao household, e gestão de membro (trocar papel, remover, sair). `Money.allocate()` já resolve a matemática do split (RN-2.1). |
 | **3 — Social + gamificação** | `friendships`, feed, reações, desafios com ranking, push | Streak e conquistas já existem no app, derivados. Falta tudo do social. ⚠️ É aqui que `achievements` passa a ser necessária — não como cache, mas como registro de que a conquista **foi anunciada** ([ADR 0009](adr/0009-conquista-derivada-ate-ser-anunciada.md)). |
 | **4 — Monetização + escala** | Paywall premium, relatórios com IA, widget | Nada. `profiles` não tem `subscription_tier`. |
 
@@ -1262,6 +1395,23 @@ Ordenados por risco. Todos verificados no código.
       valor precisa de um valor grande, não só de `R$ 12,34`.
 
 ### Médio
+
+- [ ] **Não há rate limit em `join_space_by_code`.** Qualquer usuário
+      autenticado pode chamá-la em laço tentando adivinhar código. O que protege
+      hoje são os ~6,6·10¹¹ códigos possíveis e a expiração de 7 dias — nada
+      mais. O caminho é contar tentativas por usuário (uma tabela, ou o rate
+      limit do gateway) antes de a base de usuários crescer.
+- [ ] **Membro não tem nome na tela.** A folha do espaço mostra o **papel** de
+      cada um ("Quem criou", "Editor") porque não há nome a mostrar:
+      `profiles.display_name` não é sincronizado para os outros membros (o
+      bucket `user_owned` é do próprio dono), e `username` não existe. Com três
+      pessoas no grupo, a lista fica com três linhas quase iguais. Resolver
+      exige decidir o que um membro pode ver do outro — e é a mesma decisão que
+      o débito de `username` já pedia.
+- [ ] **Não dá para sair de um espaço, nem trocar papel de ninguém.** A matriz
+      do PRD §7 é **lida** (`myRoleInSpace` esconde o convite de quem não é
+      admin), mas não há UI para remover membro, promover a admin ou sair. Quem
+      entrar num grupo por engano fica nele. A RLS já suporta as três operações.
 
 - [ ] **O histórico ingerido antes da detecção nunca é proposto.** A detecção de
       poupança só olha linha **recém-inserida**, para reprocessar não ressuscitar
