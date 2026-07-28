@@ -28,6 +28,14 @@ class MonthSummary {
   /// [balance] é a diferença — positiva quando entrou mais do que saiu.
   /// Transações sem categoria entram no [outflow] mas não em
   /// [spentByCategory], porque não há orçamento a debitar.
+  ///
+  /// **`transfer` não entra em nenhum dos dois lados**, e isto já foi um bug.
+  /// A versão anterior somava em [income] tudo que não era saída, o que era
+  /// inofensivo enquanto nada no produto produzia `transfer`. Quando a ingestão
+  /// do Open Finance passou a gravar pagamento de fatura como `transfer`, o mês
+  /// exibiu **R$ 10.641,79 de "Entradas" que eram dinheiro trocando de bolso**
+  /// — visto rodando, com extrato de banco real. Dinheiro que só muda de conta
+  /// não é receita nem despesa; o gasto já foi contado quando a compra entrou.
   factory MonthSummary.from(List<Transaction> transactions) {
     var income = const Money.zero();
     var outflow = const Money.zero();
@@ -41,7 +49,9 @@ class MonthSummary {
         if (key != null) {
           byCategory[key] = (byCategory[key] ?? const Money.zero()) + absolute;
         }
-      } else {
+      } else if (transaction.type == TransactionType.income) {
+        // Casa por tipo, não por "o que sobrou": um tipo novo passa a não
+        // contar em nada, em vez de virar receita em silêncio.
         income += absolute;
       }
     }

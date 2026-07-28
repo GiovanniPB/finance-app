@@ -39,12 +39,33 @@ class TransactionsRepositoryImpl implements TransactionsRepository {
   }) {
     final where = StringBuffer('space_id = ?');
     final params = <Object?>[spaceId];
+    // `datetime()` nos **dois** lados, e não comparação de texto crua.
+    //
+    // ─────────────────────────────────────────────────────────────────────
+    // MEDIDO NO SQLITE DO APP, não deduzido (2026-07-28)
+    //
+    // O PowerSync guarda o timestamp como `2026-07-14 02:52:38.001Z` — com
+    // **espaço**. `toIso8601String()` produz `2026-07-01T00:00:00.000Z` — com
+    // **T**. Em comparação de texto, `' '` (0x20) < `'T'` (0x54), então toda
+    // linha do **dia 1º** do mês reprovava no `>=` e desaparecia do mês; e
+    // linha do dia 1º do mês seguinte passava no `<` e entrava por engano.
+    //
+    // O efeito medido em julho/2026, com extrato de banco real: 8 linhas
+    // sumidas e **R$ 15.111,01 de despesa invisível** no resumo do mês. Ficou
+    // escondido desde a fatia de transações porque, com 8 lançamentos
+    // digitados à mão, nenhum caía num dia 1º.
+    //
+    // `datetime()` normaliza os dois formatos ao mesmo texto, então a
+    // comparação passa a valer independentemente de quem escreveu a linha —
+    // cliente (com `T`) ou sincronização (com espaço). O custo é não usar
+    // índice em `occurred_at`; num SQLite local de milhares de linhas isso não
+    // se mede, e correção vale mais que plano de consulta.
     if (from != null) {
-      where.write(' AND occurred_at >= ?');
+      where.write(' AND datetime(occurred_at) >= datetime(?)');
       params.add(from.toUtc().toIso8601String());
     }
     if (to != null) {
-      where.write(' AND occurred_at < ?');
+      where.write(' AND datetime(occurred_at) < datetime(?)');
       params.add(to.toUtc().toIso8601String());
     }
 

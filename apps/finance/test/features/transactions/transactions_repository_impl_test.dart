@@ -81,8 +81,17 @@ void main() {
         ),
       ).captured;
       final sql = captured[0] as String;
-      expect(sql, contains('occurred_at >= ?'));
-      expect(sql, contains('occurred_at < ?'));
+      // `datetime()` nos dois lados é a correção do mês que perdia o dia 1º: o
+      // PowerSync guarda a data com **espaço** (`2026-07-01 05:00:00.000Z`) e o
+      // parâmetro vem com **T**, então comparação de texto crua reprovava o dia
+      // 1º e aprovava o dia 1º do mês seguinte.
+      //
+      // Esta asserção é sobre o **texto** do SQL, e texto não prova
+      // comportamento — o que prova é o teste de integração "o dia 1º do mês
+      // não desaparece quando a linha veio da sincronização", que roda contra
+      // um PowerSync real com a linha no formato da sincronização.
+      expect(sql, contains('datetime(occurred_at) >= datetime(?)'));
+      expect(sql, contains('datetime(occurred_at) < datetime(?)'));
       expect(captured[1], [
         'space-1',
         '2026-07-01T00:00:00.000Z',
