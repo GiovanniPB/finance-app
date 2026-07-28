@@ -5,8 +5,10 @@ import '../../../di/providers.dart';
 import '../../spaces/presentation/spaces_providers.dart';
 import '../../transactions/presentation/transactions_providers.dart';
 import '../domain/goal_progress.dart';
+import '../domain/savings_badge.dart';
 import '../domain/savings_contribution.dart';
 import '../domain/savings_goal.dart';
+import '../domain/savings_streak.dart';
 
 part 'savings_providers.g.dart';
 
@@ -214,6 +216,49 @@ int pendingContributionsCount(Ref ref) {
   final contributions =
       ref.watch(savingsContributionsProvider).asData?.value ?? const [];
   return contributions.where((c) => c.isPending).length;
+}
+
+/// A sequência de semanas com aporte no espaço ativo (RN-3.4).
+///
+/// Por espaço e não por meta: o streak mede o **hábito de poupar**, e quem
+/// guardou toda semana alternando entre duas metas manteve o hábito. Por meta,
+/// a mesma pessoa apareceria com duas sequências picotadas.
+@riverpod
+SavingsStreak savingsStreak(Ref ref) {
+  final contributions =
+      ref.watch(savingsContributionsProvider).asData?.value ?? const [];
+
+  return SavingsStreak.from(
+    contributions: contributions,
+    now: ref.watch(clockProvider)(),
+  );
+}
+
+/// As conquistas do espaço ativo, desbloqueadas primeiro (PRD §8.2).
+///
+/// **Meta concluída aqui é só a por objetivo.** Meta mensal "conclui" todo mês
+/// por desenho — `GoalProgress.isComplete` nela responde pela janela do mês —,
+/// e contá-la faria a conquista desbloquear em julho e sumir em 1º de agosto.
+/// Numa meta por objetivo o acumulado é da vida toda e só cresce, então o
+/// desbloqueio é estável. Meta com status `completed` conta junto, para o dia
+/// em que algo passar a marcá-la.
+@riverpod
+List<BadgeStatus> savingsBadges(Ref ref) {
+  final contributions =
+      ref.watch(savingsContributionsProvider).asData?.value ?? const [];
+  final progress = ref.watch(goalProgressListProvider);
+
+  final completed = progress.where((p) {
+    if (p.goal.status == SavingsGoalStatus.completed) return true;
+    return !p.goal.type.isMonthly && p.isComplete;
+  }).length;
+
+  return deriveBadges(
+    contributions: contributions.where((c) => !c.isPending).length,
+    totalSaved: ref.watch(savingsTotalProvider),
+    bestStreakWeeks: ref.watch(savingsStreakProvider).bestWeeks,
+    completedGoals: completed,
+  );
 }
 
 /// Em andamento antes de concluída; entre as em andamento, a mais adiantada

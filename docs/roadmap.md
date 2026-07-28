@@ -4,7 +4,7 @@ Documento vivo. O **PRD** define *o quê* e *por quê*; este arquivo registra
 *onde estamos*. Atualize junto com o PR que muda o estado.
 
 - Última atualização: **2026-07-28**
-- Branch de trabalho atual: `feat/deteccao-de-poupanca`, a partir da `main`.
+- Branch de trabalho atual: `feat/streaks-e-badges`, a partir da `main`.
   **A pilha do Open Finance, a correção da ingestão, os débitos e a correção do
   mês estão mergeadas** (PRs #27 a #32). ⚠️ Fica registrada a armadilha que a
   pilha revelou:
@@ -41,8 +41,13 @@ A **detecção automática de contribuição fechou o circuito no código**: ent
 numa conta marcada como alvo de poupança, com uma meta ativa apontando para ela,
 vira contribuição `confirmed=false` ligada ao lançamento importado, e o card da
 meta anuncia que há algo a confirmar. Ainda **não foi vista rodando** — o worker
-precisa ser deployado. O que resta da Fase 1 é streaks/badges e categorização
-por IA.
+precisa ser deployado.
+
+**Streak e conquistas existem**, derivados do histórico e sem tabela nenhuma
+([ADR 0009](adr/0009-conquista-derivada-ate-ser-anunciada.md)): a aba Poupança
+mostra a sequência de semanas (que a segunda-feira não zera) e sete conquistas,
+com a bloqueada dizendo o que falta em vez de exibir um cadeado. Da Fase 1 resta
+só a **categorização por IA**.
 
 ## Por onde começar numa sessão nova
 
@@ -80,13 +85,18 @@ por IA.
    foi tirada de **um** conector. A tabela-verdade medida nos dois está lá, com
    teste (`node --test 'supabase/functions/_shared/*.test.ts'`), inclusive o caso
    do sandbox que fica errado de propósito. Não "conserte" esse caso.
-10. **Antes de mexer na detecção de poupança, leia `detectSavingsContribution`
+10. **Antes de criar tabela para streak, conquista ou qualquer marco, leia o
+    [ADR 0009](adr/0009-conquista-derivada-ate-ser-anunciada.md).** Os dois são
+    derivados do histórico de contribuição, e o PRD modela `achievements` que
+    **de propósito** não existe. Ela só nasce na Fase 3, e para registrar que a
+    conquista foi *anunciada* — não para guardar o que se calcula.
+11. **Antes de mexer na detecção de poupança, leia `detectSavingsContribution`
     em `_shared/ingest.ts` e o item 5 do cabeçalho do worker.** Duas escolhas
     parecem defeito e não são: a regra propõe rendimento como aporte de
     propósito (a proposta não move dinheiro; o sim do usuário move), e só linha
     **recém-inserida** é proposta — reprocessar não repropõe, porque recusar uma
     proposta é apagá-la.
-11. **Se as telas ficarem vazias ou o registro rápido travar em "nenhuma
+12. **Se as telas ficarem vazias ou o registro rápido travar em "nenhuma
     categoria", suspeite das sync rules publicadas.** O arquivo
     `powersync/sync_rules.yaml` do repo **não é publicado automaticamente**: toda
     vez que ele muda, é preciso colar o conteúdo no editor de Sync Rules do
@@ -318,7 +328,18 @@ manual, no simulador, e cada fatia a registra no PR.
 
 Estado em 2026-07-28, fim da sessão:
 
-0. **A detecção de poupança está escrita e não foi vista rodando.** É a dívida
+0. **Duas fatias esperam para ser vistas rodando, e a segunda é grátis de
+   conferir.** Streak e conquistas não dependem de deploy nenhum — são derivados
+   do que já está no banco. Basta abrir a aba Poupança:
+
+   - o bloco de sequência aparece com "Nenhuma sequência agora" enquanto não
+     houver aporte confirmado (o banco mostrava **zero** contribuições);
+   - guardar um valor deve acender "1 semana seguida" na hora;
+   - a seção Conquistas mostra "0 de 7", e cada selo bloqueado diz o que falta;
+   - o que **não** dá para ver sem esperar semanas é a sequência longa — o teste
+     cobre isso, mas a tela com "12 semanas seguidas" nunca foi renderizada.
+
+1. **A detecção de poupança está escrita e não foi vista rodando.** É a dívida
    mais fresca e a mais fácil de pagar errado. Para exercitá-la:
 
    1. deployar o worker (comando na seção da fatia; `functions deploy` é passo
@@ -337,7 +358,7 @@ Estado em 2026-07-28, fim da sessão:
    não viram proposta nenhuma, por decisão (ver o débito do backfill). Se nada
    aparecer, essa é a primeira hipótese — não um defeito da regra.
 
-1. **Desconectar foi exercitado de verdade** (2026-07-28, iPhone 17 Pro). A
+2. **Desconectar foi exercitado de verdade** (2026-07-28, iPhone 17 Pro). A
    `pluggy-disconnect` está deployada, e a passagem provou o que teste nenhum
    prova:
 
@@ -359,7 +380,7 @@ Estado em 2026-07-28, fim da sessão:
    que o dado de sandbox pôde ser limpo. Numa conta ainda importada o botão não
    existe.
 
-2. **A home foi vista com 2.083 lançamentos, e achou dois bugs** (fatia acima):
+3. **A home foi vista com 2.083 lançamentos, e achou dois bugs** (fatia acima):
    o dia 1º invisível e `transfer` somado como receita. O que **ainda não** foi
    visto é a **lista do mês** — 145 linhas em julho, com o rótulo
    "Transferência", o total do dia e o cabeçalho de saldo. `MoneyText` não tem
@@ -376,7 +397,7 @@ Estado em 2026-07-28, fim da sessão:
    categorias" no Perfil; o desvanecimento na fila de categorias; e a mensagem de
    erro de login em português (digite a senha errada e leia a frase).
 
-3. **O reparo da ingestão está feito e medido**, e o que a primeira ingestão
+4. **O reparo da ingestão está feito e medido**, e o que a primeira ingestão
    real ensinou vale relido antes de mexer em `_shared/ingest.ts`:
 
    **A convenção de sinal depende do tipo de conta.** Em conta corrente,
@@ -423,20 +444,20 @@ Estado em 2026-07-28, fim da sessão:
    instrumentação rodou e não houve como ler o resultado. Toda observação nova
    vai para o banco.
 
-4. **A exposição das funções está fechada, e o advisor caiu de 10 WARN para 1.**
+5. **A exposição das funções está fechada, e o advisor caiu de 10 WARN para 1.**
    O único que sobrou é o toggle de **proteção de senha vazada** no dashboard —
    um clique, sem código nem migration. Nada mais de segurança pende no repo.
    O advisor também passou a mostrar **1 INFO** (`rls_enabled_no_policy` em
    `webhook_events`), que é o desenho pretendido e não um defeito: RLS ligada com
    zero policies é justamente como se diz "server-only". Não "conserte"
    adicionando policy.
-5. **A cadeia de migrations continua sem ter sido replicada do zero.** A nova
+6. **A cadeia de migrations continua sem ter sido replicada do zero.** A nova
    `20260728030625` rodou num Postgres de verdade (`supabase db push`, e a
    verificação como papel `authenticated` passou), mas `supabase db reset` — as
    **dez** em sequência num banco vazio — segue pendente por exigir Docker. É o
    débito médio mais antigo e o único que ainda separa "aplica sobre o schema
    atual" de "o repo descreve o banco".
-6. **Fora do repo, pendente com o usuário:** o toggle de proteção de senha
+7. **Fora do repo, pendente com o usuário:** o toggle de proteção de senha
    vazada, e **rotacionar as credenciais de Postgres, Redis e partnr** que um
    `claude mcp list` imprimiu em texto claro na sessão de 2026-07-28. Esta
    segunda é a mais urgente das duas e não depende do projeto.
@@ -972,6 +993,51 @@ Nenhuma migration nova, e **sync rules não precisam ser republicadas**:
 `savings_contributions` já é bucketizada por `space_id` com `select *`, e nenhuma
 coluna foi adicionada.
 
+### Concluído na fatia de streaks e badges (branch `feat/streaks-e-badges`)
+
+Fase 1 fechada, menos a categorização por IA. **Zero migration** — ver o
+[ADR 0009](adr/0009-conquista-derivada-ate-ser-anunciada.md).
+
+| Item | Onde |
+|---|---|
+| `SavingsStreak` — sequência corrente, melhor marca e "em risco" | `.../savings/domain/savings_streak.dart` |
+| `SavingsBadge` + `deriveBadges` — 7 conquistas, desbloqueadas primeiro | `.../savings/domain/savings_badge.dart` |
+| `savingsStreakProvider` e `savingsBadgesProvider` | `.../savings/presentation/savings_providers.dart` |
+| `StreakBanner` e `BadgesSection` na aba Poupança | `.../savings/presentation/{streak_banner,badges_section}.dart` |
+| `StreakCopy` e `BadgeCopy` — o texto, testável sem widget | `.../savings/presentation/{streak_copy,badge_copy}.dart` |
+| 55 testes novos (34 de domínio, 16 de texto, 5 de tela) | `test/features/savings/` |
+
+**A semana corrente não quebra sequência, e essa é a regra que sustenta o
+resto.** Contar a partir da semana corrente e exigir aporte nela zeraria a
+sequência de qualquer pessoa na segunda-feira de manhã — o app anunciaria
+fracasso por causa do calendário, não do comportamento. A contagem começa na
+semana corrente **se** houver aporte nela, e na anterior caso contrário; só
+semana **encerrada** sem aporte interrompe. `isAtRisk` existe para a tela dizer
+"ainda há 3 dias" sem que o número caia.
+
+**Nenhuma frase cobra, e há teste afirmando isso.** A RN-3.4 pede que a quebra
+seja comunicada com tom de incentivo. Na prática isso proibiu três coisas: falar
+em perda ("você perdeu sua sequência de 8 semanas" é factual e é exatamente o que
+a regra veta — o que sobrou de 8 semanas virou marca pessoal), contagem
+regressiva ameaçadora (a frase diz quantos dias **ainda há**), e zero em
+destaque. Um teste varre todos os estados procurando "perde", "falhou",
+"quebrou", "atras" — mesma forma do teste que já guardava `GoalCopy.status`.
+
+**A conquista de meta conta só a por objetivo.** Meta mensal "conclui" todo mês
+por desenho, e contá-la faria a conquista desbloquear em julho e sumir em 1º de
+agosto. Num objetivo o acumulado só cresce, então o desbloqueio é estável.
+
+**Os badges de sequência olham a melhor marca, não a corrente.** Quem fez 12
+semanas e quebrou não perde a conquista — o que se perde é a sequência, não o
+histórico dela.
+
+**Um teste existente pegou um reuso errado.** O tile de conquista usava
+`SavingsProgress` para a barra do que falta, e o teste "meta pausada não mostra
+barra de progresso" passou a falhar — porque aquela barra **significa meta** no
+sistema visual, e sete selos a repetiriam até gastar o sinal. Virou texto
+("Faltam R$ 20,00"), que num tile de 148px informa mais que o traço. O teste
+estava certo sobre uma coisa que eu não tinha pensado.
+
 ### O que falta na Fase 1
 
 | Item | Estado |
@@ -983,7 +1049,7 @@ coluna foi adicionada.
 | Open Finance — caminho no app | ✅ Percorrido de ponta a ponta no iPhone 17 Pro, com sandbox e com conta real, e o dado reparado está no Postgres. Falta **ver as 1.750 linhas no app** — a lista do mês, o resumo e o rótulo "Transferência" com dado de banco de verdade. |
 | Open Finance — desconectar | ✅ Deployada e **exercitada rodando**: 3 conexões viraram 1, as contas do banco removido sobreviveram com o histórico órfão, e os nomes editados não foram sobrescritos. |
 | Detecção/confirmação automática de contribuição | ✅ Escrita e testada (fatia acima): entrada em conta alvo com uma meta ativa vira contribuição `confirmed=false`, ligada ao lançamento importado. ⚠️ **Não exercitada rodando** — falta deployar o worker e ver a proposta chegar ao app |
-| Streaks e badges básicos | Nada. Agora há histórico de contribuição para derivá-los |
+| Streaks e badges básicos | ✅ Feitos e derivados, sem tabela (fatia acima e [ADR 0009](adr/0009-conquista-derivada-ate-ser-anunciada.md)): sequência semanal com melhor marca, e 7 conquistas. ⚠️ **Não vistos rodando** |
 | Categorização por IA (premium) | Nada |
 | `recurring_challenge` como quarto tipo de meta | Fora de escopo por decisão (ver acima) |
 
@@ -996,7 +1062,7 @@ Nada de código. O que existe é **desenho**, não implementação.
 | Fase | Escopo (PRD §14) | Estado |
 |---|---|---|
 | **2 — Colaboração** | Espaços `group` (split, saldos, liquidação Pix) e `household` (transparência total, contas vinculadas), convites, matriz de papéis | Schema de espaços e papéis **já pronto**. `Money.allocate()` já resolve a matemática do split (RN-2.1). Falta tudo de UI, `expense_splits`, `settlements`. |
-| **3 — Social + gamificação** | `friendships`, feed, reações, desafios com ranking, push | Nada. |
+| **3 — Social + gamificação** | `friendships`, feed, reações, desafios com ranking, push | Streak e conquistas já existem no app, derivados. Falta tudo do social. ⚠️ É aqui que `achievements` passa a ser necessária — não como cache, mas como registro de que a conquista **foi anunciada** ([ADR 0009](adr/0009-conquista-derivada-ate-ser-anunciada.md)). |
 | **4 — Monetização + escala** | Paywall premium, relatórios com IA, widget | Nada. `profiles` não tem `subscription_tier`. |
 
 ---
@@ -1440,9 +1506,10 @@ arquivo só, e os cabeçalhos delas são documentação de verdade.
 - [`CLAUDE.md`](../CLAUDE.md) — como trabalhar no repo (toolchain, comandos,
   Definição de Pronto, fluxo git)
 - [`docs/adr/`](adr) — decisões de arquitetura e seus porquês. O mais recente é
-  o [0008](adr/0008-guardar-dinheiro-e-um-evento-com-duas-faces.md): guardar
-  dinheiro grava lançamento **e** contribuição, e a contribuição é a dona do
-  evento
+  o [0009](adr/0009-conquista-derivada-ate-ser-anunciada.md): streak e conquista
+  são derivados do histórico, e `achievements` só passa a existir na Fase 3 —
+  para registrar que a conquista **foi anunciada**, não para guardar o que se
+  calcula
 - **PRD**: `PRD.pdf` na raiz (git-ignored — 11,7 MB). É a fonte de *o quê* e
   *por quê*; este arquivo é o *onde estamos*
 - [`docs/pluggy-api-reference.md`](pluggy-api-reference.md) — referência da API do

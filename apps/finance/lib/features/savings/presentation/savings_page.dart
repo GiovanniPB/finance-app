@@ -6,11 +6,13 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../../spaces/presentation/spaces_providers.dart';
 import '../../transactions/presentation/transactions_providers.dart';
 import '../domain/savings_goal.dart';
+import 'badges_section.dart';
 import 'goal_card.dart';
 import 'goal_detail_page.dart';
 import 'goal_form_sheet.dart';
 import 'goal_icons.dart';
 import 'savings_providers.dart';
+import 'streak_banner.dart';
 
 /// Aba Poupança — o Pilar 3 (PRD §11.2).
 ///
@@ -70,6 +72,15 @@ class SavingsPage extends ConsumerWidget {
                 )
               else
                 const SizedBox(height: AppSpacing.xl),
+              Padding(
+                padding: const EdgeInsets.fromLTRB(
+                  AppSpacing.screenGutter,
+                  0,
+                  AppSpacing.screenGutter,
+                  AppSpacing.xs,
+                ),
+                child: StreakBanner(streak: ref.watch(savingsStreakProvider)),
+              ),
               _SectionTitle(
                 title: 'Suas metas',
                 onNew: () => GoalFormSheet.show(context),
@@ -109,6 +120,7 @@ class SavingsPage extends ConsumerWidget {
                   ),
                 ),
               if (paused.isNotEmpty) _PausedSection(goals: paused),
+              BadgesSection(badges: ref.watch(savingsBadgesProvider)),
             ],
           ),
         ),
