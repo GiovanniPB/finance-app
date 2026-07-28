@@ -55,6 +55,7 @@ import {
   getApiKey,
   type PluggyAccount,
   type PluggyItem,
+  PluggyNotFound,
   type PluggyTransaction,
   pluggyGet,
   requiredEnv,
@@ -152,11 +153,68 @@ function mapAccountType(account: PluggyAccount): string {
 /// por linha, que soma.
 ///
 /// O valor absoluto é deliberado: a coluna é positiva por constraint e a direção
-/// vem de `type`, como em todo o resto do app.
+/// mora em `type` na nossa tabela, como em todo o resto do app. Quem decide essa
+/// direção a partir do dado da Pluggy é [resolveDirection] — e é lá que está
+/// registrado por que o **sinal** manda, não o `type` deles.
 function toMinor(amount: number | undefined): number | null {
   if (typeof amount !== 'number' || !Number.isFinite(amount)) return null;
   const minor = Math.round(Math.abs(amount) * 100);
   return minor > 0 ? minor : null;
+}
+
+/**
+ * Direção do lançamento: **o sinal decide, não o `type`.**
+ *
+ * ─────────────────────────────────────────────────────────────────────────
+ * MEDIDO, NÃO DEDUZIDO (2026-07-28, sandbox Pluggy Bank)
+ *
+ * | Conta    | `type`              | sinal do `amount` |
+ * |----------|---------------------|-------------------|
+ * | corrente | 14 DEBIT / 3 CREDIT | 14 neg / 3 pos    |
+ * | cartão   | 9 CREDIT, 0 DEBIT   | **9 negativos**   |
+ *
+ * As compras do cartão (Netflix, Spotify, academia) chegam como
+ * `CREDIT -89.9`. A primeira versão confiava em `type` e gravou 27 compras como
+ * **receita** — R$ 1.509,30 de gasto virando entrada, com a soma delas batendo
+ * exatamente com a fatura. Bug encontrado conferindo o extrato, não por teste.
+ *
+ * O sinal, por outro lado, é coerente nas duas contas: negativo é dinheiro que
+ * saiu. É nele que a direção passa a se basear.
+ *
+ * ─────────────────────────────────────────────────────────────────────────
+ * POR QUE O CRUZAMENTO CONTINUA SENDO FEITO
+ *
+ * A doc oficial da Pluggy afirma o **oposto** do sandbox: compra em cartão
+ * seria `DEBIT` com valor **positivo**. Divergem nos dois campos, então não há
+ * regra derivável da documentação que seja segura.
+ *
+ * Como não se sabe qual dos dois mundos é o de produção, a discordância entre
+ * sinal e `type` é **contada e logada** em vez de ignorada. Se conta real vier
+ * na convenção da doc, isso aparece no log em vez de virar dinheiro errado
+ * descoberto por alguém conferindo extrato — que é como este bug apareceu.
+ */
+function resolveDirection(
+  transaction: PluggyTransaction,
+  accountType: string,
+): 'income' | 'expense' {
+  const amount = transaction.amount;
+  const bySign = typeof amount === 'number' && amount < 0
+    ? 'expense'
+    : 'income';
+  const byType = transaction.type === 'CREDIT' ? 'income' : 'expense';
+
+  if (bySign !== byType) {
+    // Esperado hoje em cartão; inesperado em conta corrente. Os dois valem
+    // registro, porque uma mudança de convenção do fornecedor aparece aqui.
+    console.warn('Sinal e type discordam sobre a direção', {
+      accountType,
+      type: transaction.type ?? 'ausente',
+      sinal: typeof amount === 'number' && amount < 0 ? 'negativo' : 'positivo',
+      escolhido: bySign,
+    });
+  }
+
+  return bySign;
 }
 
 function isoOrNull(value: string | null | undefined): string | null {
@@ -193,6 +251,24 @@ async function personalSpaceId(
   return data?.id ?? null;
 }
 
+/**
+ * Marca a conexão como removida na Pluggy.
+ *
+ * Um caminho só para os dois jeitos de descobrir isso — o evento
+ * `item/deleted` e o 404 no `GET /items` —, porque o efeito precisa ser
+ * idêntico: o app tem de parar de mostrar a conexão como conectada.
+ */
+async function markConnectionDeleted(
+  supabase: SupabaseClient,
+  connectionId: string,
+): Promise<void> {
+  const { error } = await supabase
+    .from('open_finance_connections')
+    .update({ status: 'deleted', provider_execution_status: null })
+    .eq('id', connectionId);
+  if (error) console.error('Falha ao marcar conexão removida', error);
+}
+
 /** Atualiza a conexão com o estado autoritativo do item. */
 async function syncConnection(
   supabase: SupabaseClient,
@@ -222,15 +298,110 @@ async function syncConnection(
 }
 
 /**
- * Traz as contas do item. Devolve o mapa `id da Pluggy → id da nossa conta`,
- * que a sincronização de transação usa.
+ * Registra a convenção de direção que a Pluggy usou, cruzada com o tipo de
+ * conta. **Instrumentação permanente, não sonda temporária.**
+ *
+ * Por que existe: em 2026-07-28 a primeira ingestão real gravou 27 compras de
+ * cartão (Netflix, Spotify, academia) como **receita**. A soma delas batia
+ * exatamente com a fatura, então eram gasto sem dúvida. E a doc oficial da
+ * Pluggy afirma o contrário do que chegou — ela diz que compra em cartão vem
+ * como `DEBIT` com valor positivo; o que chegou não era `DEBIT`.
+ *
+ * A convenção de um agregador **depende do tipo de conta** (numa conta corrente
+ * o dinheiro sai; num cartão a compra aumenta a dívida) e pode divergir entre
+ * sandbox e produção. Sem este log, a próxima divergência volta a ser descoberta
+ * por alguém conferindo extrato à mão.
+ *
+ * O sinal é registrado porque `toMinor` o descarta com `Math.abs` — depois de
+ * gravado, a informação não existe mais em lugar nenhum.
+ */
+function observeDirectionConvention(
+  account: IngestedAccount,
+  transactions: PluggyTransaction[],
+): Record<string, unknown> {
+  const tally = { DEBIT: 0, CREDIT: 0, ausente: 0 };
+  const sign = { positivo: 0, negativo: 0, zero: 0 };
+  const amostra: string[] = [];
+
+  for (const transaction of transactions) {
+    if (transaction.type === 'DEBIT') tally.DEBIT += 1;
+    else if (transaction.type === 'CREDIT') tally.CREDIT += 1;
+    else tally.ausente += 1;
+
+    const amount = transaction.amount;
+    if (typeof amount !== 'number') continue;
+    if (amount > 0) sign.positivo += 1;
+    else if (amount < 0) sign.negativo += 1;
+    else sign.zero += 1;
+
+    // Três exemplos bastam para ler a convenção; descrição é do extrato do
+    // usuário, então só o começo dela entra.
+    if (amostra.length < 3) {
+      amostra.push(
+        `${transaction.type ?? 'sem-type'} ${amount} `
+          + `"${(transaction.description ?? '').slice(0, 24)}"`,
+      );
+    }
+  }
+
+  return { accountType: account.accountType, porType: tally, porSinal: sign, amostra };
+}
+
+/**
+ * Persiste a observação da convenção junto do evento que a produziu.
+ *
+ * Por que no banco e não só em `console.log`: a saída de console das Edge
+ * Functions **não** é legível por SQL nem pelo CLI (`supabase functions logs`
+ * não existe nesta versão) — só pelo dashboard. Em 2026-07-28 isso travou o
+ * diagnóstico do bug de direção do cartão: a instrumentação existia, tinha
+ * rodado, e não havia como ler o resultado sem alguém abrir o navegador.
+ *
+ * Fica no `payload` do próprio evento porque é observação **sobre aquela
+ * ingestão**: some junto quando `webhook_events` for podado, e não inventa
+ * tabela para um dado que só serve acompanhado do evento. A chave começa com
+ * `_` para não colidir com campo que a Pluggy mande.
+ */
+async function recordConvention(
+  supabase: SupabaseClient,
+  eventRowId: string,
+  observation: unknown,
+): Promise<void> {
+  const { data, error: readError } = await supabase
+    .from('webhook_events')
+    .select('payload')
+    .eq('id', eventRowId)
+    .maybeSingle();
+  if (readError || !data) return;
+
+  const payload = (data.payload ?? {}) as Record<string, unknown>;
+  const existing = Array.isArray(payload._convencao) ? payload._convencao : [];
+
+  const { error } = await supabase
+    .from('webhook_events')
+    .update({ payload: { ...payload, _convencao: [...existing, observation] } })
+    .eq('id', eventRowId);
+  if (error) console.error('Falha ao registrar a convenção observada', error);
+}
+
+/** Nossa conta, do ponto de vista da ingestão de transação. */
+interface IngestedAccount {
+  readonly id: string;
+  /// Precisa acompanhar porque a convenção de direção da Pluggy **depende** do
+  /// tipo de conta: numa conta corrente o dinheiro sai; num cartão a compra
+  /// aumenta a dívida. Ver `logDirectionConvention`.
+  readonly accountType: string;
+}
+
+/**
+ * Traz as contas do item. Devolve o mapa `id da Pluggy → nossa conta`, que a
+ * sincronização de transação usa.
  */
 async function syncAccounts(
   supabase: SupabaseClient,
   connection: ConnectionRow,
   apiKey: string,
-): Promise<Map<string, string>> {
-  const byExternalId = new Map<string, string>();
+): Promise<Map<string, IngestedAccount>> {
+  const byExternalId = new Map<string, IngestedAccount>();
 
   const page = await pluggyGet<{ results?: PluggyAccount[] }>(
     `/accounts?itemId=${encodeURIComponent(connection.item_id)}`,
@@ -275,7 +446,10 @@ async function syncAccounts(
         })
         .eq('id', known);
       if (error) console.error('Falha ao atualizar conta importada', error);
-      byExternalId.set(account.id, known);
+      byExternalId.set(account.id, {
+        id: known,
+        accountType: mapAccountType(account),
+      });
       continue;
     }
 
@@ -298,7 +472,12 @@ async function syncAccounts(
       console.error('Falha ao inserir conta importada', error);
       continue;
     }
-    if (inserted?.id) byExternalId.set(account.id, inserted.id as string);
+    if (inserted?.id) {
+      byExternalId.set(account.id, {
+        id: inserted.id as string,
+        accountType: mapAccountType(account),
+      });
+    }
   }
 
   return byExternalId;
@@ -310,8 +489,9 @@ async function syncTransactions(
   connection: ConnectionRow,
   apiKey: string,
   externalAccountId: string,
-  accountId: string,
+  account: IngestedAccount,
   spaceId: string,
+  eventRowId: string,
 ): Promise<number> {
   let path: string | null =
     `/v2/transactions?accountId=${encodeURIComponent(externalAccountId)}`;
@@ -330,11 +510,16 @@ async function syncTransactions(
     );
 
     if (transactions.length > 0) {
+      await recordConvention(
+        supabase,
+        eventRowId,
+        observeDirectionConvention(account, transactions),
+      );
       written += await writeTransactions(
         supabase,
         transactions,
         connection,
-        accountId,
+        account,
         spaceId,
       );
     }
@@ -348,7 +533,7 @@ async function syncTransactions(
 
   if (path) {
     console.warn('Limite de páginas atingido; o resto vem na próxima passada', {
-      accountId,
+      accountId: account.id,
       pages,
     });
   }
@@ -367,7 +552,7 @@ async function writeTransactions(
   supabase: SupabaseClient,
   transactions: PluggyTransaction[],
   connection: ConnectionRow,
-  accountId: string,
+  account: IngestedAccount,
   spaceId: string,
 ): Promise<number> {
   // `providerId` é preferido quando existe (conexão regulada): ele é o mesmo
@@ -387,7 +572,7 @@ async function writeTransactions(
   const { data: existing, error: readError } = await supabase
     .from('transactions')
     .select('id, external_id')
-    .eq('account_id', accountId)
+    .eq('account_id', account.id)
     .in('external_id', keyed.map((entry) => entry.externalId));
 
   if (readError) {
@@ -416,7 +601,7 @@ async function writeTransactions(
           amount_minor: amountMinor,
           currency: transaction.currencyCode ?? 'BRL',
           occurred_at: occurredAt,
-          type: transaction.type === 'CREDIT' ? 'income' : 'expense',
+          type: resolveDirection(transaction, account.accountType),
           description_raw: descriptionRaw,
         })
         .eq('id', known);
@@ -430,11 +615,9 @@ async function writeTransactions(
 
     toInsert.push({
       space_id: spaceId,
-      account_id: accountId,
+      account_id: account.id,
       created_by: connection.owner_id,
-      // `DEBIT`/`CREDIT` da Pluggy já vem normalizado pela ótica do titular —
-      // em cartão, compra é DEBIT e pagamento de fatura é CREDIT (§7.4).
-      type: transaction.type === 'CREDIT' ? 'income' : 'expense',
+      type: resolveDirection(transaction, account.accountType),
       amount_minor: amountMinor,
       currency: transaction.currencyCode ?? 'BRL',
       occurred_at: occurredAt,
@@ -487,18 +670,34 @@ async function processEvent(
     return;
   }
 
-  // **Sempre** o estado autoritativo, nunca o payload — regra do ADR 0005.
-  const item = await pluggyGet<PluggyItem>(`/items/${itemId}`, apiKey);
-  await syncConnection(supabase, connection as ConnectionRow, item);
-
+  // `item/deleted` é tratado **antes** de qualquer busca, e a ordem é o ponto.
+  // A regra do ADR 0005 ("sempre `GET /items/{id}` primeiro, nunca confie no
+  // payload") não vale para deleção: o item já não existe, então o GET responde
+  // 404 por definição. A primeira versão buscava primeiro e o 404 subia como
+  // erro — o ramo abaixo nunca executava, o evento gastava as cinco tentativas e
+  // a conexão ficava `active` no app apontando para um item que morreu.
+  // Visto em produção em 2026-07-28, com três conexões nesse estado.
   if (event.event_type === 'item/deleted') {
-    const { error: deletedError } = await supabase
-      .from('open_finance_connections')
-      .update({ status: 'deleted' })
-      .eq('id', connection.id);
-    if (deletedError) console.error('Falha ao marcar conexão removida', deletedError);
+    await markConnectionDeleted(supabase, connection.id);
     return;
   }
+
+  // **Sempre** o estado autoritativo, nunca o payload — regra do ADR 0005.
+  let item: PluggyItem;
+  try {
+    item = await pluggyGet<PluggyItem>(`/items/${itemId}`, apiKey);
+  } catch (error) {
+    // O item pode ter sido removido entre o webhook e agora — inclusive por
+    // limpeza automática de sandbox. Isso encerra o evento em vez de gastar as
+    // cinco tentativas contra um 404 que nunca vai mudar.
+    if (error instanceof PluggyNotFound) {
+      console.warn('Item já não existe na Pluggy; conexão marcada como removida');
+      await markConnectionDeleted(supabase, connection.id);
+      return;
+    }
+    throw error;
+  }
+  await syncConnection(supabase, connection as ConnectionRow, item);
 
   if (event.event_type === 'transactions/deleted') {
     // Ver o item 4 do cabeçalho: não apagamos lançamento por conta própria.
@@ -519,14 +718,15 @@ async function processEvent(
   }
 
   let total = 0;
-  for (const [externalAccountId, accountId] of accounts) {
+  for (const [externalAccountId, account] of accounts) {
     total += await syncTransactions(
       supabase,
       connection as ConnectionRow,
       apiKey,
       externalAccountId,
-      accountId,
+      account,
       spaceId,
+      event.id,
     );
   }
   console.log('Ingestão concluída', {

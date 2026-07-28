@@ -27,6 +27,21 @@ export class ClientFacingError extends Error {
   }
 }
 
+/**
+ * O recurso não existe mais na Pluggy (404).
+ *
+ * Tem tipo próprio porque **não é falha**: é informação. Item deletado responde
+ * 404 para sempre, então tratá-lo como erro genérico faz o worker gastar as
+ * cinco tentativas e desistir sem nunca registrar que a conexão morreu — foi
+ * exatamente o que aconteceu em 2026-07-28, com três conexões ficando `active`
+ * no app apontando para itens que já não existiam.
+ */
+export class PluggyNotFound extends Error {
+  constructor(readonly path: string) {
+    super(`Recurso não encontrado na Pluggy: ${path}`);
+  }
+}
+
 export function requiredEnv(name: string): string {
   const value = Deno.env.get(name);
   if (!value) {
@@ -110,12 +125,18 @@ export async function pluggyGet<T>(
   });
 
   if (!response.ok) {
-    console.error('Pluggy GET falhou', {
-      // Só o caminho, nunca a query: `createdTransactionsLink` e o cursor
-      // carregam parâmetros que não precisam ir para o log.
-      path: new URL(url).pathname,
-      status: response.status,
-    });
+    // Só o caminho, nunca a query: `createdTransactionsLink` e o cursor
+    // carregam parâmetros que não precisam ir para o log.
+    const path = new URL(url).pathname;
+
+    // 404 não é falha, é fato: o recurso foi removido lá. Quem chama decide o
+    // que fazer, e re-tentar não é uma das opções.
+    if (response.status === 404) {
+      console.warn('Pluggy respondeu 404', { path });
+      throw new PluggyNotFound(path);
+    }
+
+    console.error('Pluggy GET falhou', { path, status: response.status });
     throw new ClientFacingError(
       502,
       'O provedor de Open Finance não respondeu como esperado.',
