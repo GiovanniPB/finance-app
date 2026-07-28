@@ -85,6 +85,17 @@ abstract class Account with _$Account {
     /// Household ao qual a conta foi vinculada, tornando-a visível para os
     /// outros membros daquele espaço (ADR 0004). Nulo = só o dono vê.
     String? linkedSpaceId,
+
+    /// Conexão de Open Finance que alimenta esta conta. Nulo em conta digitada.
+    ///
+    /// É este campo que separa as duas naturezas de saldo: com conexão, a
+    /// Pluggy é dona de [currentBalance] (ADR 0005) e editá-lo à mão seria
+    /// desfeito na próxima sincronização; sem conexão, o saldo é o snapshot que
+    /// o usuário informou. Ver [isFromOpenFinance].
+    String? connectionId,
+
+    /// O `accountId` desta conta na Pluggy. Chave de dedup da ingestão.
+    String? externalId,
   }) = _Account;
 
   const Account._();
@@ -112,12 +123,20 @@ abstract class Account with _$Account {
     updatedAt: DateTime.parse(row['updated_at']! as String),
     institution: row['institution'] as String?,
     linkedSpaceId: row['linked_space_id'] as String?,
+    connectionId: row['connection_id'] as String?,
+    externalId: row['external_id'] as String?,
   );
 
   /// Colunas para INSERT/UPDATE no banco local.
   ///
   /// Descarta o sinal do saldo: a coluna é positiva por constraint e o tipo
   /// carrega a direção.
+  ///
+  /// **`connection_id` e `external_id` ficam de fora de propósito.** Elas são
+  /// colunas da ingestão (ADR 0005, propriedade de dados): quem as escreve é o
+  /// servidor, e um UPDATE do cliente que as incluísse apagaria o vínculo da
+  /// conta com o banco na primeira edição de nome. A leitura as traz
+  /// ([connectionId], [externalId]); a escrita, não.
   Map<String, Object?> toColumns() => {
     'id': id,
     'owner_id': ownerId,
@@ -145,4 +164,13 @@ abstract class Account with _$Account {
 
   /// Visível para os membros de um household, e não só para o dono.
   bool get isSharedWithHousehold => linkedSpaceId != null;
+
+  /// Se esta conta vem de um banco conectado por Open Finance.
+  ///
+  /// A pergunta é feita por [connectionId], não por `externalId`: o vínculo é o
+  /// que importa para a UI (saldo e lançamentos passam a ser da Pluggy), e uma
+  /// conta pode ter perdido a conexão sem perder o id externo — a FK é
+  /// `on delete set null`, então desconectar o banco zera `connection_id` e
+  /// deixa o histórico de pé.
+  bool get isFromOpenFinance => connectionId != null;
 }

@@ -100,6 +100,7 @@ void main() {
 
     testWidgets('não some com a promessa das fases seguintes', (tester) async {
       await pumpScreen(tester, const ProfilePage());
+      await scrollTo(tester, find.text('Assinatura e preferências'));
 
       expect(find.text('Assinatura e preferências'), findsOneWidget);
     });
@@ -125,6 +126,8 @@ void main() {
         categories: [testCategory(), minha()],
       );
 
+      await scrollTo(tester, find.text('Suas categorias'));
+
       expect(find.text('Suas categorias'), findsOneWidget);
       expect(find.byKey(const Key('category_cat-user')), findsOneWidget);
       // A de sistema não entra: não é editável, e uma linha que não responde ao
@@ -141,6 +144,8 @@ void main() {
         categories: [testCategory()],
       );
 
+      await scrollTo(tester, find.byKey(const Key('no_user_categories')));
+
       expect(find.byKey(const Key('no_user_categories')), findsOneWidget);
       // A ação continua oferecida.
       expect(find.byKey(const Key('new_category')), findsOneWidget);
@@ -149,8 +154,7 @@ void main() {
     testWidgets('tocar a linha abre a edição preenchida', (tester) async {
       await pumpScreen(tester, const ProfilePage(), categories: [minha()]);
 
-      await tester.tap(find.byKey(const Key('category_cat-user')));
-      await tester.pumpAndSettle();
+      await tapVisible(tester, find.byKey(const Key('category_cat-user')));
 
       expect(find.text('Editar categoria'), findsOneWidget);
       // O campo abre preenchido — sem isso, salvar apagaria o nome. Asserção no
@@ -168,8 +172,7 @@ void main() {
         categoriesRepository: categories,
       );
 
-      await tester.tap(find.byKey(const Key('category_cat-user')));
-      await tester.pumpAndSettle();
+      await tapVisible(tester, find.byKey(const Key('category_cat-user')));
       await tester.enterText(find.byType(TextField), 'Musculação');
       await tester.pumpAndSettle();
       await tapVisible(tester, find.byKey(const Key('category_form_save')));
@@ -188,8 +191,7 @@ void main() {
         categoriesRepository: categories,
       );
 
-      await tester.tap(find.byKey(const Key('category_cat-user')));
-      await tester.pumpAndSettle();
+      await tapVisible(tester, find.byKey(const Key('category_cat-user')));
       await tapVisible(tester, find.byKey(const Key('category_delete')));
 
       expect(find.text('Excluir esta categoria?'), findsOneWidget);
@@ -219,8 +221,7 @@ void main() {
         categoriesRepository: categories,
       );
 
-      await tester.tap(find.byKey(const Key('category_cat-user')));
-      await tester.pumpAndSettle();
+      await tapVisible(tester, find.byKey(const Key('category_cat-user')));
       await tapVisible(tester, find.byKey(const Key('category_delete')));
       await tapVisible(
         tester,

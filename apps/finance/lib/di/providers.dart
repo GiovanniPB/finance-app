@@ -13,6 +13,8 @@ import '../features/categories/data/categories_repository_impl.dart';
 import '../features/categories/domain/categories_repository.dart';
 import '../features/onboarding/data/onboarding_store.dart';
 import '../features/onboarding/domain/onboarding_preferences.dart';
+import '../features/open_finance/data/open_finance_repository_impl.dart';
+import '../features/open_finance/domain/open_finance_repository.dart';
 import '../features/savings/data/savings_repository_impl.dart';
 import '../features/savings/domain/savings_repository.dart';
 import '../features/spaces/data/spaces_repository_impl.dart';
@@ -65,6 +67,16 @@ AccountsRepository accountsRepository(Ref ref) => AccountsRepositoryImpl(
 @Riverpod(keepAlive: true)
 SpacesRepository spacesRepository(Ref ref) =>
     SpacesRepositoryImpl(db: ref.watch(powerSyncServiceProvider).db);
+
+/// Conexões de Open Finance. Depende do `SupabaseClient` por dois motivos:
+/// identificar o dono nas leituras **e** invocar a Edge Function que emite o
+/// Connect Token (ADR 0005 — o cliente nunca fala com a Pluggy direto).
+@Riverpod(keepAlive: true)
+OpenFinanceRepository openFinanceRepository(Ref ref) =>
+    OpenFinanceRepositoryImpl(
+      db: ref.watch(powerSyncServiceProvider).db,
+      supabase: ref.watch(supabaseClientProvider),
+    );
 
 @Riverpod(keepAlive: true)
 CategoriesRepository categoriesRepository(Ref ref) =>

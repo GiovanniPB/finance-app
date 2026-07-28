@@ -11,6 +11,10 @@ import '../../categories/domain/category.dart';
 import '../../categories/presentation/categories_providers.dart';
 import '../../categories/presentation/category_form_sheet.dart';
 import '../../categories/presentation/category_icons.dart';
+import '../../open_finance/domain/open_finance_connection.dart';
+import '../../open_finance/presentation/connect_bank_page.dart';
+import '../../open_finance/presentation/connection_tile.dart';
+import '../../open_finance/presentation/open_finance_providers.dart';
 
 /// Aba Perfil (PRD §11.1).
 ///
@@ -30,6 +34,10 @@ class ProfilePage extends ConsumerWidget {
         ref.watch(accountsProvider).asData?.value ?? const <Account>[];
     final net = ref.watch(accountsNetBalanceProvider);
     final userCategories = ref.watch(userCategoriesProvider);
+    final connections =
+        ref.watch(openFinanceConnectionsProvider).asData?.value ??
+        const <OpenFinanceConnection>[];
+    final accountCounts = ref.watch(connectionAccountCountsProvider);
 
     return ListView(
       padding: const EdgeInsets.only(bottom: AppSpacing.xxxl),
@@ -82,6 +90,55 @@ class ProfilePage extends ConsumerWidget {
               variant: AppButtonVariant.secondary,
               icon: Icons.add,
               onPressed: () => AccountFormSheet.show(context),
+            ),
+          ),
+        ],
+        const SizedBox(height: AppSpacing.xxl),
+        const _SectionHeader(title: 'Bancos conectados'),
+        if (connections.isEmpty)
+          Padding(
+            padding: const EdgeInsets.all(AppSpacing.screenGutter),
+            child: AppEmptyState(
+              key: const Key('no_connections'),
+              icon: Icons.account_balance_outlined,
+              title: 'Nenhum banco conectado',
+              message:
+                  'Conectar seu banco traz os lançamentos sem você digitar. '
+                  'Suas credenciais ficam no provedor de Open Finance — o app '
+                  'nunca as vê.',
+              actionLabel: 'Conectar banco',
+              onAction: () => ConnectBankPage.show(context),
+            ),
+          )
+        else ...[
+          for (final connection in connections)
+            ConnectionTile(
+              key: Key('connection_${connection.id}'),
+              connection: connection,
+              accountCount: accountCounts[connection.id] ?? 0,
+              // Só conexão que precisa de ação responde ao toque, e o que ela
+              // abre é o re-consentimento. Um detalhe de conexão que só
+              // mostrasse o que a linha já diz seria um toque sem resposta.
+              onTap: connection.status.needsUserAction
+                  ? () => ConnectBankPage.show(
+                      context,
+                      updateItemId: connection.itemId,
+                    )
+                  : null,
+            ),
+          Padding(
+            padding: const EdgeInsets.fromLTRB(
+              AppSpacing.screenGutter,
+              AppSpacing.md,
+              AppSpacing.screenGutter,
+              0,
+            ),
+            child: AppButton(
+              key: const Key('connect_bank'),
+              label: 'Conectar outro banco',
+              variant: AppButtonVariant.secondary,
+              icon: Icons.add,
+              onPressed: () => ConnectBankPage.show(context),
             ),
           ),
         ],
