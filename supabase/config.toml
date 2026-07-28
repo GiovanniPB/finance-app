@@ -401,3 +401,19 @@ s3_secret_key = "env(S3_SECRET_KEY)"
 # declarative_schema_path = "./database"
 # JSON string passed through to pg-delta SQL formatting.
 # format_options = "{\"keywordCase\":\"upper\",\"indent\":2,\"maxWidth\":80,\"commaStyle\":\"trailing\"}"
+
+# =========================================================================
+# Edge Functions — pipeline de Open Finance (ADR 0005).
+# =========================================================================
+
+# Devolve um Connect Token efêmero ao cliente autenticado. `verify_jwt = true`
+# (o padrão, explicitado aqui porque é uma decisão e não um descuido): o
+# `clientUserId` que amarra o item da Pluggy ao usuário sai do `sub` do JWT, e
+# sem verificação qualquer um pediria token no nome de outra pessoa.
+[functions.pluggy-connect-token]
+verify_jwt = true
+
+# NOTA para a fatia do webhook: `pluggy-webhook` precisará de
+# `verify_jwt = false` — quem chama é a Pluggy, que não tem JWT do Supabase. A
+# autenticação dela é o header secreto (ver a revisão de 2026-07-28 do ADR 0005),
+# e é a única função do projeto que pode ficar sem `verify_jwt`.
