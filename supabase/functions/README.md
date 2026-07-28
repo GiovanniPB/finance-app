@@ -17,7 +17,7 @@ Pluggy → pluggy-webhook → webhook_events → pluggy-sync-worker → Postgres
 | `pluggy-connect-token` | `true` | ✅ Deployada e **exercitada de verdade** — o widget carregou e o fluxo completou no simulador. |
 | `pluggy-webhook` | **`false`** | ✅ Deployada. 6 eventos reais recebidos e enfileirados; guardas verificadas (405 em GET, 400 em corpo inválido, 200 sem escrita em item de terceiro). |
 | `pluggy-sync-worker` | `true` | ✅ Deployada e rodou contra sandbox **e** conta real. Duas correções saíram dessa passagem: direção em cartão e perda silenciosa de página. |
-| `pluggy-disconnect` | `true` | Escrita. Cancela o acesso no banco (`DELETE /items/{id}`). **Não deployada, nunca rodou.** |
+| `pluggy-disconnect` | `true` | ✅ Deployada e **exercitada rodando**: dois bancos removidos, com as contas sobrevivendo e o histórico ficando órfão. |
 
 `_shared/pluggy.ts` concentra a troca de `CLIENT_ID`/`CLIENT_SECRET` pela apiKey
 (com cache por isolate) e o `GET` autenticado — duas funções com caches

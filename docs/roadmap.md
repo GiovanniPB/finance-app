@@ -308,20 +308,27 @@ manual, no simulador, e cada fatia a registra no PR.
 
 Estado em 2026-07-28, fim da sessão:
 
-0. **Deployar `pluggy-disconnect` e remover um banco de verdade.** É o único
-   passo pendente da fatia atual, e o deploy depende de você (o classificador de
-   permissões bloqueia `functions deploy` do meu lado):
+0. **Desconectar foi exercitado de verdade** (2026-07-28, iPhone 17 Pro). A
+   `pluggy-disconnect` está deployada, e a passagem provou o que teste nenhum
+   prova:
 
-   ```bash
-   supabase functions deploy pluggy-disconnect
-   ```
+   | O que | Resultado |
+   |---|---|
+   | conexões | 3 → 1 (só a real) |
+   | contas | 4 → 2, **renomeadas** para "Nubank" e "Ultravioleta" |
+   | lançamentos do banco removido | 26 continuam existindo, `account_id` nulo |
+   | lançamentos totais | 2.083, dos quais 2.050 em conta |
 
-   Depois: Perfil → toque numa conexão → Remover banco. O que se prova nessa
-   passagem é o que teste nenhum prova — se a Pluggy aceita o `DELETE /items`, se
-   a RLS deixa a função ler a conexão pelo `Authorization` do chamador, e se as
-   contas sobrevivem com o histórico intacto (a FK é `on delete set null`).
-   O item do sandbox é o candidato: ele é dado falso e o cartão dele mostra compra
-   como transferência.
+   A Pluggy aceitou o `DELETE /items`: a linha só é apagada depois de
+   `revokeAccess` devolver `Ok`, então se a revogação tivesse falhado ela estaria
+   lá. Os nomes editados sobreviveram, o que confirma que a ingestão não
+   sobrescreve `name` depois do INSERT. E o extrato do banco removido continua
+   existindo sem conta — o que a confirmação promete.
+
+   **Um encadeamento que não foi projetado e saiu certo:** removida a conexão, as
+   contas viram contas comuns, e aí "Excluir conta" reaparece nelas — foi assim
+   que o dado de sandbox pôde ser limpo. Numa conta ainda importada o botão não
+   existe.
 
 1. **Ver as 1.750 linhas no app** (herdado, e agora mais urgente). O dado real
    está no Postgres e reparado, mas ninguém viu o app com esse volume — antes
@@ -816,6 +823,10 @@ Quatro decisões que não se leem no código:
   caso real) enquanto o antigo ficaria órfão. Um toque viraria histórico
   duplicado.
 
+**Visto rodando** (iPhone 17 Pro, contra Supabase e PowerSync reais): remover
+banco com revogação de verdade, as contas do sandbox virando comuns e podendo ser
+excluídas, e as duas contas reais renomeadas à mão sem a sincronização desfazer.
+
 **Tipo e saldo aparecem como fato, não como campo desabilitado.** Campo cinza
 convida a tocar e não responde; um bloco com o valor, a data e a frase "editar
 aqui seria desfeito na próxima sincronização" diz o que está acontecendo. É o
@@ -830,7 +841,7 @@ mesmo desenho que a folha de lançamento usa quando detecta vínculo com meta.
 | Open Finance — `pluggy-webhook` e `pluggy-sync-worker` | ✅ Deployados, rodaram contra sandbox **e** conta real, e o reparo foi medido: **2.076** lançamentos, zero duplicata, `perdidas` = 0, fila vazia. |
 | Open Finance — widget Connect | ✅ Internalizado, com 28 testes das partes puras, e **rodou num device**: o canal JS conversa, a allowlist não bloqueia o fluxo legítimo e o `SUCCESS` chega com `item_id`. |
 | Open Finance — caminho no app | ✅ Percorrido de ponta a ponta no iPhone 17 Pro, com sandbox e com conta real, e o dado reparado está no Postgres. Falta **ver as 1.750 linhas no app** — a lista do mês, o resumo e o rótulo "Transferência" com dado de banco de verdade. |
-| Open Finance — desconectar | ✅ `pluggy-disconnect` escrita, folha de ações no Perfil, e a ordem "revoga → apaga" com teste. **A função não foi deployada e nunca rodou.** |
+| Open Finance — desconectar | ✅ Deployada e **exercitada rodando**: 3 conexões viraram 1, as contas do banco removido sobreviveram com o histórico órfão, e os nomes editados não foram sobrescritos. |
 | Detecção/confirmação automática de contribuição | Metade pronta: schema e UI existem; falta quem crie a linha (ingestão Pluggy). O `transaction_id` já espera por ela: a detecção pode ligar a contribuição ao lançamento importado |
 | Streaks e badges básicos | Nada. Agora há histórico de contribuição para derivá-los |
 | Categorização por IA (premium) | Nada |
