@@ -54,4 +54,49 @@ abstract interface class SpacesRepository {
   /// Exige rede (ver o cabeçalho). Já ser membro **não** é erro: devolve o
   /// espaço, porque tocar no convite duas vezes é acidente comum.
   Future<Result<String, Failure>> joinByCode(String code);
+
+  // -------------------------------------------------------------------------
+  // Gestão. Tudo daqui para baixo é escrita **local** — sobe pelo PowerSync
+  // como qualquer lançamento, e portanto funciona offline.
+  //
+  // Todas checam a permissão antes de escrever, contra o estado do banco local
+  // (ver [SpacePermissions]). Não é redundância com a RLS: o
+  // `SupabaseConnector` descarta o batch quando o Postgres recusa, então uma
+  // escrita sem permissão **não** produziria erro na tela — ela apareceria
+  // aplicada e sumiria no checkpoint seguinte, que é o pior desfecho possível.
+  // -------------------------------------------------------------------------
+
+  /// Renomeia o espaço.
+  Future<Result<void, Failure>> rename({
+    required String spaceId,
+    required String name,
+  });
+
+  /// Troca o papel de um membro.
+  ///
+  /// Recusa a linha de quem criou o espaço: o dono é admin por construção, e é
+  /// isso que garante que todo espaço tenha pelo menos um admin.
+  Future<Result<void, Failure>> changeRole({
+    required String memberId,
+    required SpaceRole role,
+  });
+
+  /// Remove alguém do espaço (`status = 'left'`).
+  ///
+  /// A linha **permanece**: é ela que guarda o histórico de quem lançou o quê,
+  /// e é ela que `join_space_by_code` reativa se a pessoa voltar.
+  Future<Result<void, Failure>> removeMember(String memberId);
+
+  /// Sai do espaço.
+  ///
+  /// Quem criou não sai — encerrar é [archive]. Depois de sair, as sync rules
+  /// deixam de entregar o bucket e o espaço some do aparelho junto com tudo
+  /// que era dele.
+  Future<Result<void, Failure>> leave(String spaceId);
+
+  /// Arquiva o espaço: ninguém mais lança, o histórico fica de pé.
+  ///
+  /// Não é exclusão. Apagar um espaço apagaria o lançamento de outras pessoas,
+  /// que não é dado de quem arquiva.
+  Future<Result<void, Failure>> archive(String spaceId);
 }

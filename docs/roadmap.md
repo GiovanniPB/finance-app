@@ -79,12 +79,21 @@ só a **categorização por IA**.
 8. **Nunca aplique schema na nuvem por fora de `supabase db push`.** O
    `apply_migration` do MCP grava um histórico que o repo não reproduz — leia a
    seção "A armadilha do histórico de migrations" antes de tocar em schema.
-9. **Policy nova não pode consultar a própria tabela pelo `id`.** Isso torna
-    a linha invisível a si mesma no INSERT — o PostgREST usa `RETURNING` — e a
-    criação vinda do cliente falha com `42501`, aparecendo e sumindo na tela
-    sem erro nenhum. Aconteceu com `spaces` (migration `20260728204229`).
-    Quando a pergunta puder ser respondida por uma **coluna da linha**
-    (`owner_id = auth.uid()`), responda por ela.
+9. **A policy de SELECT governa a linha velha e a linha nova de todo UPDATE, e
+    a linha nova de todo INSERT.** Consequências, todas medidas nesta base:
+    linha nova invisível a si mesma ⇒ `42501` no INSERT (`spaces`, migration
+    `20260728204229`); linha velha invisível ⇒ o UPDATE afeta **0 linhas, sem
+    erro**; linha nova invisível ⇒ `42501` no UPDATE (migration
+    `20260728210321`). Como o `SupabaseConnector` descarta o batch, nada disso
+    vira erro na tela: aparece aplicado e some no checkpoint. Quando a pergunta
+    puder ser respondida por uma **coluna da linha** (`owner_id = auth.uid()`),
+    responda por ela.
+9b. **Policy separa linhas; trigger congela colunas.** Não existe `OLD` numa
+    policy, então ela não consegue perguntar "esta coluna mudou?" — e um ramo
+    do tipo `user_id = auth.uid()` autoriza mudar **qualquer** coluna daquela
+    linha, inclusive a que decide permissão. Foi assim que qualquer editor podia
+    se promover a admin. Regra sobre *transição* mora em trigger
+    (`space_members_guard`, `spaces_guard`).
 10. **Antes de mexer na direção do lançamento importado, leia
    `supabase/functions/_shared/ingest.ts`.** A regra já foi trocada duas vezes,
    nas duas direções, e as duas vezes gravou dinheiro errado — porque cada uma
@@ -334,7 +343,22 @@ manual, no simulador, e cada fatia a registra no PR.
 
 Estado em 2026-07-28, fim da sessão:
 
-0. **Duas fatias esperam para ser vistas rodando, e a segunda é grátis de
+0. **A gestão de espaço fechou três furos de privilégio e precisa ser vista
+   rodando.** As policies e triggers **já estão na nuvem** (`db push` feito), e
+   os furos foram medidos fechados por SQL. O que falta é a tela:
+
+   - abrir um espaço tocando nele na lista (antes o toque trocava de contexto);
+   - conferir que o círculo à direita ainda troca o espaço ativo num toque;
+   - renomear, e ver o nome novo na lista e na home;
+   - com um segundo login: trocar o papel do convidado, removê-lo, e vê-lo sair
+     da lista — este é o caminho que **nunca** foi percorrido;
+   - arquivar um espaço e ver o aviso, sem os controles de gestão;
+   - o dono **não** deve ver "Sair do espaço", e sim a frase explicando por quê.
+
+   ⚠️ O grupo "Teste" e o convite `MKFBC6UZ` ficaram na conta da sessão
+   anterior. Agora dá para arquivá-lo pela tela.
+
+1. **Duas fatias esperam para ser vistas rodando, e a segunda é grátis de
    conferir.** Streak e conquistas não dependem de deploy nenhum — são derivados
    do que já está no banco. Basta abrir a aba Poupança:
 
@@ -345,7 +369,7 @@ Estado em 2026-07-28, fim da sessão:
    - o que **não** dá para ver sem esperar semanas é a sequência longa — o teste
      cobre isso, mas a tela com "12 semanas seguidas" nunca foi renderizada.
 
-1. **A detecção de poupança está escrita e não foi vista rodando.** É a dívida
+2. **A detecção de poupança está escrita e não foi vista rodando.** É a dívida
    mais fresca e a mais fácil de pagar errado. Para exercitá-la:
 
    1. deployar o worker (comando na seção da fatia; `functions deploy` é passo
@@ -364,7 +388,7 @@ Estado em 2026-07-28, fim da sessão:
    não viram proposta nenhuma, por decisão (ver o débito do backfill). Se nada
    aparecer, essa é a primeira hipótese — não um defeito da regra.
 
-2. **Desconectar foi exercitado de verdade** (2026-07-28, iPhone 17 Pro). A
+3. **Desconectar foi exercitado de verdade** (2026-07-28, iPhone 17 Pro). A
    `pluggy-disconnect` está deployada, e a passagem provou o que teste nenhum
    prova:
 
@@ -386,7 +410,7 @@ Estado em 2026-07-28, fim da sessão:
    que o dado de sandbox pôde ser limpo. Numa conta ainda importada o botão não
    existe.
 
-3. **A home foi vista com 2.083 lançamentos, e achou dois bugs** (fatia acima):
+4. **A home foi vista com 2.083 lançamentos, e achou dois bugs** (fatia acima):
    o dia 1º invisível e `transfer` somado como receita. O que **ainda não** foi
    visto é a **lista do mês** — 145 linhas em julho, com o rótulo
    "Transferência", o total do dia e o cabeçalho de saldo. `MoneyText` não tem
@@ -403,7 +427,7 @@ Estado em 2026-07-28, fim da sessão:
    categorias" no Perfil; o desvanecimento na fila de categorias; e a mensagem de
    erro de login em português (digite a senha errada e leia a frase).
 
-4. **O reparo da ingestão está feito e medido**, e o que a primeira ingestão
+5. **O reparo da ingestão está feito e medido**, e o que a primeira ingestão
    real ensinou vale relido antes de mexer em `_shared/ingest.ts`:
 
    **A convenção de sinal depende do tipo de conta.** Em conta corrente,
@@ -450,20 +474,20 @@ Estado em 2026-07-28, fim da sessão:
    instrumentação rodou e não houve como ler o resultado. Toda observação nova
    vai para o banco.
 
-5. **A exposição das funções está fechada, e o advisor caiu de 10 WARN para 1.**
+6. **A exposição das funções está fechada, e o advisor caiu de 10 WARN para 1.**
    O único que sobrou é o toggle de **proteção de senha vazada** no dashboard —
    um clique, sem código nem migration. Nada mais de segurança pende no repo.
    O advisor também passou a mostrar **1 INFO** (`rls_enabled_no_policy` em
    `webhook_events`), que é o desenho pretendido e não um defeito: RLS ligada com
    zero policies é justamente como se diz "server-only". Não "conserte"
    adicionando policy.
-6. **A cadeia de migrations continua sem ter sido replicada do zero.** A nova
+7. **A cadeia de migrations continua sem ter sido replicada do zero.** A nova
    `20260728030625` rodou num Postgres de verdade (`supabase db push`, e a
    verificação como papel `authenticated` passou), mas `supabase db reset` — as
    **dez** em sequência num banco vazio — segue pendente por exigir Docker. É o
    débito médio mais antigo e o único que ainda separa "aplica sobre o schema
    atual" de "o repo descreve o banco".
-7. **Fora do repo, pendente com o usuário:** o toggle de proteção de senha
+8. **Fora do repo, pendente com o usuário:** o toggle de proteção de senha
    vazada, e **rotacionar as credenciais de Postgres, Redis e partnr** que um
    `claude mcp list` imprimiu em texto claro na sessão de 2026-07-28. Esta
    segunda é a mais urgente das duas e não depende do projeto.
@@ -1171,6 +1195,93 @@ Todas as outras folhas do app usam `context.colors.error`.
 ⚠️ **Falta ainda entrar com o código de outra conta** — a metade que exige um
 segundo login.
 
+### Concluído na fatia de gestão de membros (branch `feat/gestao-de-membros`)
+
+Tocar num espaço deixou de trocar de contexto e passou a **abrir a tela dele**.
+E, ao medir a RLS antes de escrever a primeira linha de Dart, a fatia virou
+outra coisa: **três furos de escalonamento de privilégio em produção**.
+
+| Item | Onde |
+|---|---|
+| Policies e triggers que fecham os três furos | `supabase/migrations/20260728210321_papeis_de_membro.sql` |
+| `SpacePermissions` — as mesmas regras, em Dart puro | `.../spaces/domain/space_permissions.dart` |
+| `rename`, `changeRole`, `removeMember`, `leave`, `archive` | `.../spaces/{domain,data}/` |
+| `SpaceDetailPage` + resumo, ações de membro, renomear | `.../spaces/presentation/space_detail_page.dart` e vizinhos |
+| `currentUserIdProvider` — "sou eu?" sem sessão do Supabase | `apps/finance/lib/di/providers.dart` |
+| 24 testes novos; a `space_detail_sheet.dart` foi substituída | `test/features/spaces/` |
+
+#### Os três furos, medidos antes e depois
+
+Dois usuários de verdade criados e apagados no mesmo script, contra o Postgres
+da nuvem:
+
+| tentativa | antes | depois |
+|---|---|---|
+| editor `set role='admin'` na própria linha | **1 linha** | barrado (RLS) |
+| admin rebaixa a linha do **dono** | **1 linha** | "Quem criou o espaço é sempre admin." |
+| admin reescreve `spaces.owner_id` | **permitido** | "A posse não se transfere por edição." |
+| dono tenta sair | permitido | "…arquive o espaço." |
+| admin troca o `space_type` | permitido | "O tipo é escolhido na criação." |
+| admin renomeia / troca papel de outro / remove | ok | ok |
+| membro sai sozinho | ok | ok |
+| RPC de convite reativa quem voltou | ok | ok |
+
+A causa dos dois primeiros era um ramo só: `using (user_id = auth.uid() or
+has_space_role(...))` **com o mesmo texto no `with check`**. "É a minha linha"
+autorizava qualquer mudança nela — inclusive a coluna que decide o que eu posso
+fazer.
+
+**A regra que fica: policy separa linhas, trigger congela colunas.** Não existe
+`OLD` numa policy, então ela não consegue perguntar "esta coluna mudou?". Onde a
+pergunta for sobre a *transição*, e não sobre a *linha*, o lugar é um trigger.
+
+#### O que a medição ensinou de quebra
+
+Duas tentativas que eu esperava ver passar foram barradas, e o motivo generaliza
+o bug do espaço que sumia:
+
+> **A policy de SELECT governa a linha velha e a linha nova de todo UPDATE.**
+> A velha porque o `WHERE` precisa achá-la (invisível ⇒ **0 linhas, em
+> silêncio**); a nova porque o comando ainda a lê depois de escrita (invisível ⇒
+> `42501`).
+
+É a migration `20260728204229` vista do outro lado: lá a linha nascia invisível
+a si mesma, aqui ela *ficaria* invisível depois do UPDATE. E é por isso que
+"sair" funcionava só por sorte — `is_space_member` é `stable` e lê o snapshot do
+início do comando, onde eu ainda estou `active`. O ramo `user_id = auth.uid()`
+acrescentado ao SELECT tirou a sorte da equação.
+
+#### Por que a regra existe duas vezes
+
+`SpacePermissions` repete em Dart o que a migration grava em policy e trigger, e
+a duplicação é deliberada: o `SupabaseConnector` descarta o batch em
+`PostgrestException`, então **escrita recusada pela RLS não vira erro na tela** —
+ela aparece aplicada e some no checkpoint seguinte. Dos dois lados, o cliente é
+o único que fala com a pessoa. Se um dos dois mudar sem o outro, um está
+mentindo.
+
+#### Decisões de tela
+
+- **Abrir ≠ usar.** O toque abre o espaço; o círculo à direita troca para ele.
+  Eram o mesmo gesto, e a fusão escondia a gestão atrás de um efeito colateral.
+  Trocar continua a um toque.
+- **Confirmação no lugar do botão**, não em diálogo: a frase de consequência
+  precisa ser lida ao lado de quem vai ser removido.
+- **Remover ≠ sair**, e as duas frases dizem o que *fica*: sem isso é razoável
+  temer que remover alguém apague os lançamentos dela.
+- **Arquivar, não excluir.** Apagar um espaço apagaria lançamento de outras
+  pessoas, que não é dado de quem arquiva.
+- O espaço sumido do banco local **explica** em vez de fechar sozinho — e um
+  `_hasSeenSpace` separa "ainda não sincronizou" de "você saiu", que chegam como
+  o mesmo `null`.
+
+⚠️ **Não foi visto rodando ainda**, e **membro ainda não tem nome**: a linha se
+identifica por "Você" / "Quem criou" / "No espaço desde 12 de julho". Trazer
+`display_name` de outro membro exige um bucket novo nas sync rules e
+**republicar no dashboard** — passo manual que é a causa conhecida de "tela vazia
+sem erro" aqui, e por isso ficou fora desta fatia em vez de virar pré-requisito
+dela.
+
 ### O que falta na Fase 1
 
 | Item | Estado |
@@ -1194,7 +1305,7 @@ Nada de código. O que existe é **desenho**, não implementação.
 
 | Fase | Escopo (PRD §14) | Estado |
 |---|---|---|
-| **2 — Colaboração** | Espaços `group` (split, saldos, liquidação Pix) e `household` (transparência total, contas vinculadas), convites, matriz de papéis | 🔨 **Em andamento.** Criar espaço, convidar por código e entrar já existem (fatia acima), com a matriz de papéis lida (`myRoleInSpace`). Falta `expense_splits`, saldos "quem deve a quem", liquidação Pix, contas vinculadas ao household, e gestão de membro (trocar papel, remover, sair). `Money.allocate()` já resolve a matemática do split (RN-2.1). |
+| **2 — Colaboração** | Espaços `group` (split, saldos, liquidação Pix) e `household` (transparência total, contas vinculadas), convites, matriz de papéis | 🔨 **Em andamento.** Criar espaço, convidar por código, entrar, e **gerir o espaço** (papéis, remover, sair, arquivar, renomear) já existem — com a matriz de papéis aplicada dos dois lados (`SpacePermissions` + policy/trigger). Falta `expense_splits`, saldos "quem deve a quem", liquidação Pix, contas vinculadas ao household, e **nome de membro na tela**. `Money.allocate()` já resolve a matemática do split (RN-2.1). |
 | **3 — Social + gamificação** | `friendships`, feed, reações, desafios com ranking, push | Streak e conquistas já existem no app, derivados. Falta tudo do social. ⚠️ É aqui que `achievements` passa a ser necessária — não como cache, mas como registro de que a conquista **foi anunciada** ([ADR 0009](adr/0009-conquista-derivada-ate-ser-anunciada.md)). |
 | **4 — Monetização + escala** | Paywall premium, relatórios com IA, widget | Nada. `profiles` não tem `subscription_tier`. |
 
@@ -1393,6 +1504,18 @@ Ordenados por risco. Todos verificados no código.
       notado porque nenhum teste digitava um valor grande. Agora um `FittedBox`
       reduz a escala em vez de vazar. **Lição transferível:** teste de entrada de
       valor precisa de um valor grande, não só de `R$ 12,34`.
+- [x] **Qualquer membro podia se promover a admin — e estava em produção.** A
+      policy de UPDATE de `space_members` tinha o ramo `user_id = auth.uid()` nos
+      dois lados (`using` e `with check`), e "é a minha linha" autorizava mudar
+      qualquer coluna dela, `role` inclusive. Junto vinham "admin rebaixa o dono"
+      e "admin reescreve `spaces.owner_id`". Fechado na migration
+      `20260728210321`, com as três tentativas medidas antes e depois.
+      **Lição transferível:** policy diz *quais linhas*; quem diz *quais colunas*
+      e *quais transições* é trigger, porque não existe `OLD` numa policy.
+- [x] **Não dá para sair de um espaço, nem trocar papel de ninguém.** Existe
+      agora, na `SpaceDetailPage`: trocar papel, remover, sair, arquivar e
+      renomear, com as regras em `SpacePermissions` e espelhadas em policy e
+      trigger. ⚠️ Ainda não visto rodando com um segundo login.
 
 ### Médio
 
@@ -1401,17 +1524,18 @@ Ordenados por risco. Todos verificados no código.
       hoje são os ~6,6·10¹¹ códigos possíveis e a expiração de 7 dias — nada
       mais. O caminho é contar tentativas por usuário (uma tabela, ou o rate
       limit do gateway) antes de a base de usuários crescer.
-- [ ] **Membro não tem nome na tela.** A folha do espaço mostra o **papel** de
-      cada um ("Quem criou", "Editor") porque não há nome a mostrar:
-      `profiles.display_name` não é sincronizado para os outros membros (o
-      bucket `user_owned` é do próprio dono), e `username` não existe. Com três
-      pessoas no grupo, a lista fica com três linhas quase iguais. Resolver
-      exige decidir o que um membro pode ver do outro — e é a mesma decisão que
-      o débito de `username` já pedia.
-- [ ] **Não dá para sair de um espaço, nem trocar papel de ninguém.** A matriz
-      do PRD §7 é **lida** (`myRoleInSpace` esconde o convite de quem não é
-      admin), mas não há UI para remover membro, promover a admin ou sair. Quem
-      entrar num grupo por engano fica nele. A RLS já suporta as três operações.
+- [ ] **Membro não tem nome na tela** — e agora isso dói mais, porque a tela
+      existe para gerenciá-los. A linha se identifica por "Você", "Quem criou" ou
+      "No espaço desde 12 de julho" (`MemberCopy.identity`): distinguível, mas
+      não é um nome. `profiles.display_name` não sincroniza para outros membros
+      — o bucket `user_owned` é do próprio dono. **O caminho já está mapeado:**
+      um `space_peers` em `sync_rules.yaml` com parameter query juntando
+      `space_members` consigo mesma, mais uma policy de SELECT em `profiles`
+      para quem compartilha espaço. Ficou fora desta fatia porque exige
+      **republicar as sync rules no dashboard** — passo manual e a causa
+      conhecida de "tela vazia sem erro" aqui —, e não valia transformar isso em
+      pré-requisito da gestão de membro. Se não for republicado, o app cai no
+      texto atual sem quebrar.
 
 - [ ] **O histórico ingerido antes da detecção nunca é proposto.** A detecção de
       poupança só olha linha **recém-inserida**, para reprocessar não ressuscitar

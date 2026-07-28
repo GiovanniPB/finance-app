@@ -4,7 +4,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../domain/space.dart';
 import 'join_space_sheet.dart';
-import 'space_detail_sheet.dart';
+import 'space_detail_page.dart';
 import 'space_form_sheet.dart';
 import 'spaces_providers.dart';
 
@@ -16,10 +16,18 @@ import 'spaces_providers.dart';
 /// colar o código que recebeu. Por isso as duas ficam lado a lado, e não uma
 /// escondida dentro da outra.
 ///
-/// O toque num espaço **troca de contexto**; ver quem está nele é um segundo
-/// gesto, no ícone de pessoas. Trocar é o que se faz o tempo todo, e gerenciar
-/// é raro: pôr a gestão no toque principal cobraria um gesto extra da ação
-/// frequente para favorecer a rara.
+/// ─────────────────────────────────────────────────────────────────────────
+/// O TOQUE ABRE O ESPAÇO; O CÍRCULO À DIREITA TROCA PARA ELE
+///
+/// Era o contrário: tocar trocava de contexto, e um ícone de pessoas abria uma
+/// folha com a lista de membros. Inverteu porque o que há para fazer com um
+/// espaço deixou de caber numa folha — papéis, convite, renomear, arquivar,
+/// sair — e porque "abrir" e "passar a usar" são perguntas diferentes que
+/// estavam grudadas numa só.
+///
+/// Trocar continua a **um** toque: o círculo à direita é o controle, e ele lê
+/// como seleção porque é isso que ele é. O que mudou é que trocar de espaço
+/// virou uma escolha explícita em vez de efeito colateral de abrir.
 class SpacesPage extends ConsumerWidget {
   const SpacesPage({super.key});
 
@@ -48,11 +56,17 @@ class SpacesPage extends ConsumerWidget {
           _SpaceTile(
             space: space,
             isActive: space.id == active?.id,
-            onTap: () =>
+            // `Navigator.push` e não uma rota do go_router: é o idioma que o
+            // app já usa para tela de detalhe (orçamentos, lançamentos), e o
+            // router aqui existe para os portões de auth, não para navegação
+            // interna. Vira rota nomeada quando deep link for requisito.
+            onOpen: () => Navigator.of(context).push(
+              MaterialPageRoute<void>(
+                builder: (_) => SpaceDetailPage(spaceId: space.id),
+              ),
+            ),
+            onUse: () =>
                 ref.read(activeSpaceIdProvider.notifier).select(space.id),
-            onManage: space.isPersonal
-                ? null
-                : () => SpaceDetailSheet.show(context, space: space),
           ),
         if (ref.watch(sharedSpacesProvider).isEmpty)
           const Padding(
@@ -103,17 +117,19 @@ class _SpaceTile extends StatelessWidget {
   const _SpaceTile({
     required this.space,
     required this.isActive,
-    required this.onTap,
-    required this.onManage,
+    required this.onOpen,
+    required this.onUse,
   });
 
   final Space space;
   final bool isActive;
-  final VoidCallback onTap;
 
-  /// Nulo no Espaço Pessoal: ele tem um membro só e não recebe convite
-  /// (PRD §4.3), então um botão de gerenciar ali abriria uma tela sem nada.
-  final VoidCallback? onManage;
+  /// Abre a tela do espaço. Vale para o Pessoal também: ele tem resumo e nome,
+  /// mesmo sem membros para gerenciar — e uma linha que não responde ao toque,
+  /// no meio de outras que respondem, lê como bug.
+  final VoidCallback onOpen;
+
+  final VoidCallback onUse;
 
   @override
   Widget build(BuildContext context) {
@@ -132,7 +148,8 @@ class _SpaceTile extends StatelessWidget {
             : context.colors.surfaceContainerLow,
         borderRadius: AppRadii.brXl,
         child: InkWell(
-          onTap: onTap,
+          key: Key('space_open_${space.id}'),
+          onTap: onOpen,
           borderRadius: AppRadii.brXl,
           child: Container(
             padding: const EdgeInsets.all(AppSpacing.lg),
@@ -161,15 +178,20 @@ class _SpaceTile extends StatelessWidget {
                     ],
                   ),
                 ),
-                if (isActive)
-                  Icon(Icons.check_circle, size: 20, color: tokens.brandText),
-                if (onManage != null)
-                  IconButton(
-                    key: Key('space_manage_${space.id}'),
-                    icon: const Icon(Icons.people_outline),
-                    tooltip: 'Quem está aqui',
-                    onPressed: onManage,
+                // Marca **e** controle na mesma posição: o círculo cheio diz
+                // "é este" e o vazio convida a trocar. Dois widgets diferentes
+                // aqui fariam a coluna dançar entre as linhas.
+                IconButton(
+                  key: Key('space_use_${space.id}'),
+                  icon: Icon(
+                    isActive
+                        ? Icons.check_circle
+                        : Icons.radio_button_unchecked,
+                    color: isActive ? tokens.brandText : tokens.textMuted,
                   ),
+                  tooltip: isActive ? 'Em uso' : 'Usar este espaço',
+                  onPressed: isActive ? null : onUse,
+                ),
               ],
             ),
           ),
