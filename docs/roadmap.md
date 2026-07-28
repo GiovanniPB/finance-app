@@ -4,11 +4,15 @@ Documento vivo. O **PRD** define *o quê* e *por quê*; este arquivo registra
 *onde estamos*. Atualize junto com o PR que muda o estado.
 
 - Última atualização: **2026-07-28**
-- Branch de trabalho atual: `fix/rls-privada-e-auth-em-portugues`. Os PRs #21,
-  #22 e #23 da sessão anterior estão **mergeados** — a `main` está em `84d905c`.
-  Os únicos PRs abertos são quatro do dependabot (#1, #2, #8, #9), deixados para
-  depois por decisão; os dois de pub (`sqlite3`, `sqlite_async`) tocam a camada
-  do PowerSync e merecem uma passada pelos testes de integração.
+- Branch de trabalho atual: `feat/open-finance-fundacao`. O PR #24 (segurança e
+  idioma) está **mergeado**. Os únicos outros PRs abertos são quatro do
+  dependabot (#1, #2, #8, #9), deixados para depois por decisão; os dois de pub
+  (`sqlite3`, `sqlite_async`) tocam a camada do PowerSync e merecem uma passada
+  pelos testes de integração.
+- ⚠️ **Pendência operacional que bloqueia o Open Finance no cliente:** as sync
+  rules ganharam `open_finance_connections` e **não foram publicadas** no
+  dashboard do PowerSync. Tabela nova exige publicação manual, e o sintoma de
+  esquecer é tabela vazia **sem erro nenhum**.
 
 ---
 
@@ -293,9 +297,18 @@ manual, no simulador, e cada fatia a registra no PR.
 
 Estado em 2026-07-28, fim da sessão:
 
+0. **Publicar as sync rules no dashboard do PowerSync.** É o primeiro passo da
+   próxima sessão, e sem ele o resto do Open Finance não tem como funcionar no
+   cliente: `open_finance_connections` é **tabela nova**, e tabela nova não sobe
+   sozinha. Cole o `powersync/sync_rules.yaml` no editor de Sync Rules e faça
+   Deploy. Para conferir depois, inspecione `ps_buckets` no SQLite local do app.
 1. **A exposição das funções está fechada, e o advisor caiu de 10 WARN para 1.**
    O único que sobrou é o toggle de **proteção de senha vazada** no dashboard —
    um clique, sem código nem migration. Nada mais de segurança pende no repo.
+   O advisor também passou a mostrar **1 INFO** (`rls_enabled_no_policy` em
+   `webhook_events`), que é o desenho pretendido e não um defeito: RLS ligada com
+   zero policies é justamente como se diz "server-only". Não "conserte"
+   adicionando policy.
 2. **Ver o app rodando ficou pela metade** (item herdado, ainda válido). O build
    e o launch funcionaram no iPhone 17 Pro, o app chegou à tela de login, e o
    login é passo manual. O roteiro que ainda não foi percorrido: a folha
@@ -500,11 +513,82 @@ papel `authenticated` com JWT de verdade devolveu os dados do dono e zero para u
 `sub` estranho (que ainda vê as 10 categorias de sistema, como manda o
 `is_system or is_space_member`). O advisor foi de 10 WARN para 1.
 
+### Concluído na fatia de fundação do Open Finance (branch `feat/open-finance-fundacao`)
+
+| Item | Onde |
+|---|---|
+| Migration: `open_finance_connections` (RLS por dono), `webhook_events` (server-only), `external_id` + `description_raw` em `transactions`, `connection_id` + `external_id` em `accounts`, uniques parciais | `supabase/migrations/20260728033219_open_finance_fundacao.sql` |
+| Schema PowerSync das colunas e da tabela nova | `packages/database/lib/src/schema.dart` |
+| Sync rules: conexão no bucket `user_owned` (**publicação manual pendente**) | `powersync/sync_rules.yaml` |
+| Primeira Edge Function do projeto: `pluggy-connect-token` | `supabase/functions/pluggy-connect-token/index.ts` |
+| `verify_jwt` declarado por função | `supabase/config.toml` |
+| README das functions: segredos, deploy e o que **não** foi feito | `supabase/functions/README.md` |
+| Revisão do ADR 0005: allowlist não-bloqueante e `external_id` único | `docs/adr/0005-*.md` |
+| Widget do Pluggy Connect **internalizado**, com as guardas que o pacote oficial não tem | `.../open_finance/presentation/pluggy_connect/` |
+| 9 testes de integração da fundação + 28 testes das guardas e do parser | `test_integration/open_finance_persistence_test.dart`, `test/features/open_finance/` |
+
+Quatro decisões que não se leem no código:
+
+- **A conexão é do usuário, não do espaço.** Escopada por `owner_id` como
+  `accounts`: o `clientUserId` que vai para a Pluggy é `auth.uid()`, o
+  consentimento é pessoal, e quem revoga é o titular. Um household vê as
+  **contas** vinculadas, não a credencial que as alimenta.
+- **Dois campos de status.** `status` é vocabulário nosso, curto e estável, que é
+  o que a UI lê; `provider_execution_status` guarda o texto cru da Pluggy. Mapear
+  os mais de doze `executionStatus` deles para estados de tela faria a UI mudar
+  quando o fornecedor renomeasse um enum.
+- **`webhook_events` é server-only, e o jeito de dizer isso é nenhuma policy.**
+  Ela também não é fila: é o log que garante idempotência, porque a Pluggy
+  re-tenta um webhook até nove vezes. A fila (pgmq) entra com o worker —
+  instalar extensão antes de haver consumidor seria schema sem uso.
+- **`clientUserId` sai do JWT verificado, nunca do corpo da requisição.** Se o
+  cliente pudesse informá-lo, um autenticado criaria item no nome de outro.
+
+**Os testes de integração documentam o que o banco local NÃO garante:** o check
+de `status` não vale ali, e a `unique` de dedup não existe — tabela local do
+PowerSync é view, e nem FK nem unique atravessam. A consequência prática está
+escrita no teste: o worker de ingestão não pode delegar a dedup ao banco local.
+
+**Medido na nuvem:** conexão visível só para o titular (0 para um `sub`
+estranho), e `webhook_events` com uma linha real devolvendo **0** para
+autenticado — a negação por ausência de policy funciona de fato, e não é a tabela
+estar vazia.
+
+#### O widget: internalizado em vez de adotado
+
+O `flutter_pluggy_connect` é da própria Pluggy (publisher `pluggy.ai`), mas foi
+lido inteiro (436 linhas) e **reescrito como código nosso**, por três lacunas
+verificadas na 3.0.1: nenhum `onNavigationRequest` em lugar nenhum do pacote;
+`launchUrl` recebendo URL do canal JS sem validar esquema; e mensagem de tipo
+desconhecido caindo em `dynamic` sem tratamento. Some o argumento de seguir o
+upstream — ele está parado desde nov/2024, tem 3 likes e não suporta web.
+
+Três coisas que não se leem no código:
+
+- **Uma dependência nova, não três.** `webview_flutter` foi a única a entrar no
+  lockfile. `url_launcher` já estava na árvore transitivamente (via
+  `supabase_flutter`, que a usa para OAuth) e só virou direta; `app_links` ficou
+  de fora, porque no pacote oficial ela serve a um contorno que eles mesmos
+  marcam com "TODO: find a better way to solve this".
+- **Export condicional porque `webview_flutter` não suporta web**, e o CI compila
+  `main_dev.dart` para web. Sem a divisão, uma tela de conexão bancária derrubaria
+  um gate de CI que não tem relação com Open Finance. Verificado com um entrypoint
+  descartável que forçou o compilador web a resolver o export.
+- **A lógica de segurança vive em funções puras**, exercitáveis sem WebView, sem
+  device e sem rede — e foi um desses testes que pegou um bug real: query
+  malformada chega por **duas** famílias de exceção, e a primeira versão só
+  tratava `FormatException`, deixando o `ArgumentError` de percent-encoding
+  inválido subir até a tela.
+
 ### O que falta na Fase 1
 
 | Item | Estado |
 |---|---|
-| Open Finance (limitado no grátis) | Pipeline Pluggy **inteiramente desenhado** em [ADR 0005](adr/0005-open-finance-pluggy-server-side.md) — zero linhas escritas. Nenhuma Edge Function existe. |
+| Open Finance — schema | ✅ Fundação pronta e na nuvem (fatia acima). |
+| Open Finance — `pluggy-connect-token` | Escrita, **não deployada e nunca exercitada contra a Pluggy**. Deno não está instalado, então o TS também não foi typecheckado: o primeiro `deploy` será a primeira compilação. |
+| Open Finance — `pluggy-webhook` e `pluggy-sync-worker` | Não existem. O webhook precisa de `verify_jwt = false` e do header secreto; o worker é quem faz `GET /items` → `/accounts` → `/v2/transactions` e o UPSERT com as regras de propriedade de coluna. |
+| Open Finance — widget Connect | ✅ Internalizado, com 28 testes das partes puras. **Nunca rodou num device**: nenhuma tela o instancia ainda. |
+| Open Finance — caminho no app | Falta o que liga as pontas: domínio, dados e providers de conexão; a chamada à Edge Function; o botão "Conectar banco" no Perfil; e gravar `open_finance_connections` no `onEvent` de sucesso. |
 | Detecção/confirmação automática de contribuição | Metade pronta: schema e UI existem; falta quem crie a linha (ingestão Pluggy). O `transaction_id` já espera por ela: a detecção pode ligar a contribuição ao lançamento importado |
 | Streaks e badges básicos | Nada. Agora há histórico de contribuição para derivá-los |
 | Categorização por IA (premium) | Nada |
@@ -653,9 +737,9 @@ Ordenados por risco. Todos verificados no código.
 ### Médio
 
 - [ ] **A cadeia de migrations nunca foi replicada do zero.** As duas mais
-      recentes (`20260728000822` e `20260728030625`) subiram para a nuvem por
+      recentes (`20260728030625` e `20260728033219`) subiram para a nuvem por
       `supabase db push`, então o SQL **rodou** num Postgres de verdade e foi
-      aceito. Mas ninguém rodou `supabase db reset`, que aplica as **dez** em
+      aceito. Mas ninguém rodou `supabase db reset`, que aplica as **onze** em
       sequência num banco vazio. É a diferença entre "aplica sobre o schema
       atual" e "o repo descreve o banco" — e a segunda é a promessa que o
       `CLAUDE.md` faz. Exige Docker.
@@ -665,6 +749,36 @@ Ordenados por risco. Todos verificados no código.
       dos `if exists` — num banco vazio ela encontra as três em `public` (criadas
       pela `20260717120000`) e move; num banco já migrado, não faz nada. Rodar do
       zero é o que prova as duas metades.
+- [ ] **As sync rules com `open_finance_connections` não foram publicadas.**
+      O arquivo do repo mudou; o dashboard do PowerSync, não. Até publicar, a
+      tabela existe no Postgres e no schema local e **nunca recebe linha** — sem
+      erro em lugar nenhum. É a pendência que bloqueia todo o resto do Open
+      Finance no cliente.
+- [ ] **A Edge Function nunca foi compilada nem exercitada.** Deno não está
+      instalado na máquina e `supabase functions serve` exige Docker, então o
+      primeiro `supabase functions deploy` será a primeira compilação do
+      `index.ts`. Os contratos seguem `docs/pluggy-api-reference.md` §3.3 e §3.4,
+      mas nenhuma chamada real à Pluggy aconteceu. Mesma família da lição do
+      `UPSERT` de orçamento: código que nunca rodou não é código que funciona.
+- [ ] **O protocolo do widget Connect é contrato interno da Pluggy.** Os tipos de
+      mensagem (`OAUTH_OPEN`, `LINK_OPEN`, `LOCATION`) e os nomes de evento na
+      query (`SUCCESS`, `ERROR`, `CLOSE`, `LOGIN_SUCCESS`…) **não são
+      documentados publicamente** — só se conhecem por leitura do fonte do
+      pacote oficial. É a dívida que se aceitou ao internalizar o widget, e ela
+      existiria igual usando o pacote deles (que também está parado). Se o fluxo
+      parar sem nada nosso mudar, `pluggy_connect_event.dart` é o primeiro lugar
+      a olhar.
+- [ ] **O widget Connect nunca rodou num device.** As partes puras têm 28 testes,
+      mas o WebView em si não foi instanciado: nenhuma tela o usa ainda, então
+      não há prova de que o canal JS conversa, de que a allowlist não bloqueia
+      algo legítimo do fluxo real, nem de que o salto para o OAuth do banco
+      volta. Fecha junto com o caminho no app.
+- [ ] **`Account` não conhece as colunas novas.** `connection_id` e `external_id`
+      existem no Postgres e no schema PowerSync, mas não na entidade — então a UI
+      não tem como distinguir conta importada de conta digitada, e a regra do ADR
+      0005 (em conta de Open Finance o saldo é da Pluggy, não snapshot do
+      usuário) não é aplicável ainda. É a versão pequena do débito de "entidade
+      incompleta" já fechado, e fecha junto com a fatia do cliente.
 - [ ] **O vínculo depende do cliente para não desincronizar no local.** No
       Postgres o `on delete cascade` garante que apagar o lançamento apaga a
       contribuição. As tabelas locais do PowerSync são views e não cascateiam:
@@ -783,7 +897,7 @@ Ordenados por risco. Todos verificados no código.
 | **MCP do Supabase** | ⚠️ Armadilha custosa. Duas coisas o quebram: (1) um **header `Authorization` fixo** na config desliga o OAuth por completo — o erro é `OAuth fallback is disabled when headers.Authorization is set`, e reautorizar não resolve enquanto o header existir; (2) o consentimento OAuth é **por organização**, e o `Finance App` vive na org `Giovanni's Org` (`rwilajfjocmzyqyyikko`), não na `OTM Tecnologia`. Sintoma: `list_projects` devolve os projetos errados e `get_project(ivfcypfljxvwkvnvmuum)` dá `You do not have permission`. Para diagnosticar sem o MCP, use o CLI — `supabase orgs list` e `supabase projects list` mostram as quatro orgs da conta. |
 | Supabase local | ✅ Configurado nas portas 553xx (offset +1000, coexiste com `finance-dashboard`). Exige Docker de pé. |
 | **PowerSync** | ✅ Instância Cloud (ambiente Development) ligada ao Supabase da nuvem, com as sync rules do repo publicadas. ⚠️ **Publicar é manual**: o arquivo do repo não sobe sozinho, e regras velhas se manifestam como tabela vazia no cliente sem erro nenhum. **Coluna nova não exige republicar** — os buckets usam `select *`, e a fatia de contas confirmou isso rodando: as quatro colunas novas chegaram ao SQLite local sem tocar no dashboard. Tabela ou bucket novo, sim. |
-| **Supabase (nuvem)** | ✅ Projeto `ivfcypfljxvwkvnvmuum`, as **10** migrations do repo aplicadas (`supabase migration list` casa nos dois lados — o `migration repair` da armadilha segurou), 10 categorias de sistema semeadas, 7 tabelas com `REPLICA IDENTITY FULL` na publication `powersync`. As funções de autorização vivem no schema `private`. É o que o `env/dev.json` usa. ⚠️ **Nunca aplique schema por outro caminho que não `supabase db push`** — ver a armadilha do histórico abaixo. |
+| **Supabase (nuvem)** | ✅ Projeto `ivfcypfljxvwkvnvmuum`, as **11** migrations do repo aplicadas (`supabase migration list` casa nos dois lados — o `migration repair` da armadilha segurou), 10 categorias de sistema semeadas, 7 tabelas com `REPLICA IDENTITY FULL` na publication `powersync`. As funções de autorização vivem no schema `private`. É o que o `env/dev.json` usa. ⚠️ **Nunca aplique schema por outro caminho que não `supabase db push`** — ver a armadilha do histórico abaixo. |
 | Web (Chrome) | ⚠️ Compila, mas falta `sqlite3.wasm` + worker em `apps/finance/web/`. `PowerSyncService.open()` falharia. |
 | Android | ⚠️ Três bloqueios: `cmdline-tools` ausente, nenhum AVD criado, e o `env/dev.json` não serve (no emulador o host é `10.0.2.2`, não `127.0.0.1`, e o Android 9+ bloqueia cleartext — o `AndroidManifest.xml` não tem exceção). Precisaria de `env/dev-android.json` + network security config. |
 

@@ -60,12 +60,47 @@ const appSchema = Schema([
       // numa renomeação — por isso não é o `updated_at`.
       Column.text('balance_as_of'),
       Column.integer('is_savings_target'),
+      // Conexão de Open Finance que alimenta esta conta, e o id dela na Pluggy.
+      // Nulos em conta manual — e é isso que distingue as duas: com
+      // `connection_id`, o saldo é da Pluggy (ADR 0005); sem, é snapshot que o
+      // usuário informou.
+      Column.text('connection_id'),
+      Column.text('external_id'),
       Column.text('created_at'),
       Column.text('updated_at'),
     ],
     indexes: [
       Index('owner', [IndexedColumn('owner_id')]),
       Index('linked_space', [IndexedColumn('linked_space_id')]),
+      Index('connection', [IndexedColumn('connection_id')]),
+    ],
+  ),
+  // Conexão de Open Finance: um `item` da Pluggy = uma instituição conectada.
+  // Escopada pelo **dono**, não por espaço (ver o item 1 do cabeçalho da
+  // migration 20260728033219): o consentimento é pessoal, e um household vê as
+  // contas vinculadas, não a credencial que as alimenta.
+  //
+  // `status` é o nosso vocabulário, curto e estável — é o que a UI lê.
+  // `provider_execution_status` é o texto cru da Pluggy, para diagnóstico.
+  Table(
+    'open_finance_connections',
+    [
+      Column.text('owner_id'),
+      Column.text('item_id'),
+      Column.integer('connector_id'),
+      Column.text('connector_name'),
+      Column.text('connector_image_url'),
+      Column.text('status'),
+      Column.text('provider_execution_status'),
+      Column.text('provider_status_detail'),
+      Column.text('consent_expires_at'),
+      Column.text('last_synced_at'),
+      Column.text('next_auto_sync_at'),
+      Column.text('created_at'),
+      Column.text('updated_at'),
+    ],
+    indexes: [
+      Index('owner', [IndexedColumn('owner_id')]),
     ],
   ),
   // Categoria. `space_id` nulo = categoria de sistema (global, RN-1.2).
@@ -101,6 +136,13 @@ const appSchema = Schema([
       Column.text('description'),
       Column.text('occurred_at'),
       Column.text('source'),
+      // Colunas do Open Finance. `external_id` é a chave de dedup da ingestão
+      // (id da transação na Pluggy, ou o `providerId` quando a conexão é
+      // regulada). `description_raw` é a descrição como o banco a escreveu —
+      // `description` continua sendo a do usuário, e a ingestão nunca a
+      // sobrescreve (ADR 0005).
+      Column.text('external_id'),
+      Column.text('description_raw'),
       Column.integer('is_shared'),
       Column.integer('ai_categorized'),
       Column.text('recurrence_id'),
