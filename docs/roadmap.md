@@ -4,12 +4,11 @@ Documento vivo. O **PRD** define *o quê* e *por quê*; este arquivo registra
 *onde estamos*. Atualize junto com o PR que muda o estado.
 
 - Última atualização: **2026-07-28**
-- Branch de trabalho atual: `chore/limpeza-de-debitos`, com **dois PRs abertos e
-  verdes**: [#22](https://github.com/GiovanniPB/finance-app/pull/22) (contém os
-  dois commits: a armadilha do histórico de migrations + a limpeza de quatro
-  débitos) e [#21](https://github.com/GiovanniPB/finance-app/pull/21) (só o
-  commit de docs). **Mergear o #22 e fechar o #21** — o #21 não tem mais conteúdo
-  próprio. O #20 (fatia de poupança) já está na `main`.
+- Branch de trabalho atual: `fix/rls-privada-e-auth-em-portugues`. Os PRs #21,
+  #22 e #23 da sessão anterior estão **mergeados** — a `main` está em `84d905c`.
+  Os únicos PRs abertos são quatro do dependabot (#1, #2, #8, #9), deixados para
+  depois por decisão; os dois de pub (`sqlite3`, `sqlite_async`) tocam a camada
+  do PowerSync e merecem uma passada pelos testes de integração.
 
 ---
 
@@ -294,22 +293,31 @@ manual, no simulador, e cada fatia a registra no PR.
 
 Estado em 2026-07-28, fim da sessão:
 
-1. **Mergear o PR #22** (verde) e **fechar o #21** — o #22 contém os dois commits.
-2. **Ver o app rodando ficou pela metade.** O build e o launch funcionaram no
-   iPhone 17 Pro, o app chegou à tela de login, e o login é passo manual. O
-   roteiro que ainda não foi percorrido: a folha "Guardei um valor" com o campo
-   "Saiu de"; o lançamento de poupança na lista (ícone próprio + "Poupança" na
-   segunda linha); o toque nele abrindo **em leitura** com o caminho para a meta;
-   a confirmação de remover contribuição avisando que o lançamento sai junto;
-   pausar/retomar meta; a seção "Suas categorias" no Perfil; e o desvanecimento
-   na fila de categorias.
-3. **Débitos novos desta sessão**, todos nas listas abaixo: os três helpers de
-   RLS expostos, as duas funções de trigger expostas, e a mensagem de auth em
-   inglês.
-4. **Fora do repo, pendente com o usuário:** `supabase db reset` (exige Docker),
-   o toggle de proteção de senha vazada no dashboard, e rotacionar as credenciais
-   de Postgres, Redis e partnr que um `claude mcp list` imprimiu em texto claro
-   durante a sessão.
+1. **A exposição das funções está fechada, e o advisor caiu de 10 WARN para 1.**
+   O único que sobrou é o toggle de **proteção de senha vazada** no dashboard —
+   um clique, sem código nem migration. Nada mais de segurança pende no repo.
+2. **Ver o app rodando ficou pela metade** (item herdado, ainda válido). O build
+   e o launch funcionaram no iPhone 17 Pro, o app chegou à tela de login, e o
+   login é passo manual. O roteiro que ainda não foi percorrido: a folha
+   "Guardei um valor" com o campo "Saiu de"; o lançamento de poupança na lista
+   (ícone próprio + "Poupança" na segunda linha); o toque nele abrindo **em
+   leitura** com o caminho para a meta; a confirmação de remover contribuição
+   avisando que o lançamento sai junto; pausar/retomar meta; a seção "Suas
+   categorias" no Perfil; e o desvanecimento na fila de categorias. **O banco
+   confirma que esse roteiro não foi percorrido**: há 2 metas e **zero**
+   contribuições no Postgres.
+   Agora há um segundo motivo para percorrê-lo: a mensagem de erro de login
+   traduzida só se vê rodando (digite a senha errada e leia a frase).
+3. **A cadeia de migrations continua sem ter sido replicada do zero.** A nova
+   `20260728030625` rodou num Postgres de verdade (`supabase db push`, e a
+   verificação como papel `authenticated` passou), mas `supabase db reset` — as
+   **dez** em sequência num banco vazio — segue pendente por exigir Docker. É o
+   débito médio mais antigo e o único que ainda separa "aplica sobre o schema
+   atual" de "o repo descreve o banco".
+4. **Fora do repo, pendente com o usuário:** o toggle de proteção de senha
+   vazada, e **rotacionar as credenciais de Postgres, Redis e partnr** que um
+   `claude mcp list` imprimiu em texto claro na sessão de 2026-07-28. Esta
+   segunda é a mais urgente das duas e não depende do projeto.
 
 ---
 
@@ -457,6 +465,41 @@ limpeza: `BudgetPeriod.weekly` persiste, mas exibir "R$ 200/semana" ao lado de
 corrente é desenho novo. E o FAB "Novo limite" continua fora porque o próprio
 débito pede rodada de design em vez de arbitragem.
 
+### Concluído na fatia de segurança e idioma (branch `fix/rls-privada-e-auth-em-portugues`)
+
+| Item | Onde |
+|---|---|
+| Migration que cria o schema `private` e move `is_space_member`, `has_space_role` e `is_space_owner` para lá | `supabase/migrations/20260728030625_rls_helpers_schema_privado.sql` |
+| `revoke execute` de `handle_new_user` e `set search_path = ''` em `set_updated_at` | idem |
+| Regra no guia operacional: policy nova chama `private.…` | `CLAUDE.md` §5 |
+| `authErrorMessage` — tradução do erro de auth por código, na fronteira da `data` | `.../auth/data/auth_error_message.dart` |
+| Os dois `AuthFailure(e.message)` do repository passam a traduzir | `.../auth/data/auth_repository_impl.dart` |
+| 11 testes do tradutor + o teste do repository afirmando o novo contrato | `test/features/auth/auth_error_message_test.dart` |
+
+Três decisões que não se leem no código:
+
+- **Mover de schema em vez de recriar as policies.** Referência de policy é
+  gravada por OID, não por nome (`pg_policy` guarda a expressão já analisada),
+  então `alter function … set schema` levou as 27 policies junto sem tocá-las.
+  Recriar uma a uma seriam trezentas linhas de diff para o mesmo resultado, e
+  cada policy reescrita é uma chance nova de errar um `using` de tabela
+  sensível.
+- **O `grant` que sobra na migration é deliberado.** O que fecha a porta é o
+  schema não estar em `config.toml` — o PostgREST só roteia `/rest/v1/rpc/` para
+  os schemas que expõe. Conceder `usage`/`execute` explicitamente tornou
+  irrelevante uma pergunta que não se responde sem um Postgres na mão (se a
+  avaliação de policy checa `EXECUTE` contra o papel da sessão), em vez de
+  apostar numa das respostas.
+- **A tradução casa por código, não por texto, e não pelo enum do SDK.** Código é
+  contrato; frase é texto livre que muda entre versões do servidor. E o enum
+  `ErrorCode` do gotrue 2.26.0 não lista `invalid_credentials` — depender dele
+  faria o erro mais comum de todos cair no genérico.
+
+**Medido na nuvem, não deduzido:** depois do `db push`, uma leitura assumindo o
+papel `authenticated` com JWT de verdade devolveu os dados do dono e zero para um
+`sub` estranho (que ainda vê as 10 categorias de sistema, como manda o
+`is_system or is_space_member`). O advisor foi de 10 WARN para 1.
+
 ### O que falta na Fase 1
 
 | Item | Estado |
@@ -487,6 +530,44 @@ Ordenados por risco. Todos verificados no código.
 
 ### Resolvido
 
+- [x] **As funções de autorização saíram do schema exposto pela API**
+      (2026-07-28). O advisor caiu de **10 WARN para 1**, e o único que sobrou é
+      um toggle de dashboard (proteção de senha vazada). Duas coisas valem
+      registro:
+
+      **O enunciado do débito estava errado — de novo.** O roadmap dizia "três
+      helpers de RLS expostos" mais "duas funções de trigger expostas". Rodando
+      o `get_advisors` outra vez, a lista real era **quatro** funções executáveis
+      (as três de RLS **mais** `handle_new_user`), e `set_updated_at` aparecia só
+      por `search_path` mutável — ela não é `SECURITY DEFINER` e o PostgREST não
+      expõe função que retorna `trigger`. É a segunda vez nesta série que a
+      paráfrase de um achado envelhece pior que o achado: vale reler a fonte,
+      não o resumo dela.
+
+      **Duas saídas diferentes para o mesmo aviso, e o que decide é quem chama a
+      função.** `handle_new_user` só é chamada por trigger, então `revoke execute`
+      bastou — e o repo já tinha a prova disso na
+      `savings_contributions_inherit_space`. As três de RLS são chamadas de
+      dentro de 27 policies, então foram para um schema `private`, movidas com
+      `alter function … set schema`: referência de policy é gravada por **OID**,
+      não por nome, então as 27 seguiram a função sem serem recriadas.
+
+      **A pergunta aberta ficou respondida ao aplicar.** A migration documentou
+      não saber se a avaliação de uma policy checa `EXECUTE` contra o papel da
+      sessão, e resolveu isso concedendo `usage`/`execute` explicitamente. Com o
+      SQL na nuvem, a medição foi feita assumindo o papel `authenticated` com um
+      JWT de verdade: leitura devolve os dados do dono (1 espaço, 8 lançamentos,
+      2 metas, 11 categorias) e **zero** para um `sub` estranho, que ainda vê
+      exatamente as 10 categorias de sistema. Ou seja: a RLS alcança a função em
+      `private`, e continua isolando.
+- [x] **Erro de autenticação não sai mais em inglês.** `authErrorMessage` traduz
+      na fronteira da camada `data`, casando por `code` (contrato de API) em vez
+      de por `message` (texto livre que muda entre versões do servidor). Não usa
+      o enum `ErrorCode` do gotrue de propósito: a versão 2.26.0 **não lista
+      `invalid_credentials`**, justamente o caso mais comum, então depender do
+      enum faria o erro principal cair no genérico. Código desconhecido cai numa
+      frase genérica em português em vez de mostrar o inglês — o `AppLogger` já
+      guarda a exceção original, então não se perde diagnóstico.
 - [x] **`get_advisors` rodou depois da mudança de schema** (2026-07-28): 10 WARN,
       **zero ERROR**. E o que importava confirmar passou: a
       `savings_contributions_inherit_space`, recriada pela `20260728000822` como
@@ -571,43 +652,19 @@ Ordenados por risco. Todos verificados no código.
 
 ### Médio
 
-- [ ] **A cadeia de migrations nunca foi replicada do zero.** A
-      `20260728000822` subiu para a nuvem por `supabase db push` (então o SQL
-      **rodou** num Postgres de verdade e foi aceito), mas ninguém rodou
-      `supabase db reset`, que aplica as nove em sequência num banco vazio. É a
-      diferença entre "aplica sobre o schema atual" e "o repo descreve o banco" —
-      e a segunda é a promessa que o `CLAUDE.md` faz. Exige Docker.
-- [ ] **Três helpers de RLS estão expostos como endpoint REST.**
-      `is_space_member`, `has_space_role` e `is_space_owner` (migration
-      `20260717120000`) são `SECURITY DEFINER` e chamáveis por `anon` e
-      `authenticated` via `/rest/v1/rpc/…`. Achado pelo `get_advisors` em
-      2026-07-28 (10 WARN, zero ERROR).
+- [ ] **A cadeia de migrations nunca foi replicada do zero.** As duas mais
+      recentes (`20260728000822` e `20260728030625`) subiram para a nuvem por
+      `supabase db push`, então o SQL **rodou** num Postgres de verdade e foi
+      aceito. Mas ninguém rodou `supabase db reset`, que aplica as **dez** em
+      sequência num banco vazio. É a diferença entre "aplica sobre o schema
+      atual" e "o repo descreve o banco" — e a segunda é a promessa que o
+      `CLAUDE.md` faz. Exige Docker.
 
-      **Cuidado com o conselho do linter.** Ele oferece três saídas — revogar
-      `EXECUTE`, virar `SECURITY INVOKER`, ou tirar do schema exposto. As duas
-      primeiras são arriscadas **nestas três**, porque elas são chamadas de
-      dentro das policies de RLS. A saída documentada é a terceira: mover para um
-      schema `private`, que o PostgREST não expõe. Os docs são explícitos — "As
-      such functions should never be in an API exposed schema" — e o PostgREST
-      não precisa vê-las desde que a policy qualifique o schema.
-
-      Severidade real: baixa mas não nula. Para `anon`, `auth.uid()` é nulo e
-      elas retornam falso; um autenticado consegue sondar se é membro de um
-      espaço arbitrário.
-- [ ] **Duas funções de trigger também estão expostas**, e essas são baratas de
-      fechar: `handle_new_user` e `set_updated_at` não são chamadas por policy,
-      então revogar `EXECUTE` de `anon`/`authenticated` é seguro (trigger roda
-      pelo mecanismo do Postgres, não pelo papel que consulta). A
-      `set_updated_at` ainda tem `search_path` mutável — falta o
-      `set search_path = ''` que as funções mais novas já têm.
-- [ ] **Mensagem de erro de autenticação sai em inglês.**
-      `auth_repository_impl.dart:44` e `:60` fazem `AuthFailure(e.message)`,
-      passando a frase do Supabase crua para a tela — "Invalid login
-      credentials" aparece assim na tela de login. Visto rodando no simulador em
-      2026-07-28. É inconsistência dentro do próprio arquivo: as outras
-      `AuthFailure` dele têm texto em português. Mesma família do débito de
-      localização já fechado, e do mesmo tipo: nenhuma revisão de código pega,
-      porque o texto não está no repo.
+      Um detalhe que só aparece do zero: a `20260728030625` move três funções de
+      `public` para `private` com `alter function`, e é **idempotente** por causa
+      dos `if exists` — num banco vazio ela encontra as três em `public` (criadas
+      pela `20260717120000`) e move; num banco já migrado, não faz nada. Rodar do
+      zero é o que prova as duas metades.
 - [ ] **O vínculo depende do cliente para não desincronizar no local.** No
       Postgres o `on delete cascade` garante que apagar o lançamento apaga a
       contribuição. As tabelas locais do PowerSync são views e não cascateiam:
@@ -726,7 +783,7 @@ Ordenados por risco. Todos verificados no código.
 | **MCP do Supabase** | ⚠️ Armadilha custosa. Duas coisas o quebram: (1) um **header `Authorization` fixo** na config desliga o OAuth por completo — o erro é `OAuth fallback is disabled when headers.Authorization is set`, e reautorizar não resolve enquanto o header existir; (2) o consentimento OAuth é **por organização**, e o `Finance App` vive na org `Giovanni's Org` (`rwilajfjocmzyqyyikko`), não na `OTM Tecnologia`. Sintoma: `list_projects` devolve os projetos errados e `get_project(ivfcypfljxvwkvnvmuum)` dá `You do not have permission`. Para diagnosticar sem o MCP, use o CLI — `supabase orgs list` e `supabase projects list` mostram as quatro orgs da conta. |
 | Supabase local | ✅ Configurado nas portas 553xx (offset +1000, coexiste com `finance-dashboard`). Exige Docker de pé. |
 | **PowerSync** | ✅ Instância Cloud (ambiente Development) ligada ao Supabase da nuvem, com as sync rules do repo publicadas. ⚠️ **Publicar é manual**: o arquivo do repo não sobe sozinho, e regras velhas se manifestam como tabela vazia no cliente sem erro nenhum. **Coluna nova não exige republicar** — os buckets usam `select *`, e a fatia de contas confirmou isso rodando: as quatro colunas novas chegaram ao SQLite local sem tocar no dashboard. Tabela ou bucket novo, sim. |
-| **Supabase (nuvem)** | ✅ Projeto `ivfcypfljxvwkvnvmuum`, as 9 migrations do repo aplicadas, 10 categorias de sistema semeadas, 7 tabelas com `REPLICA IDENTITY FULL` na publication `powersync`. É o que o `env/dev.json` usa. ⚠️ **Nunca aplique schema por outro caminho que não `supabase db push`** — ver a armadilha do histórico abaixo. |
+| **Supabase (nuvem)** | ✅ Projeto `ivfcypfljxvwkvnvmuum`, as **10** migrations do repo aplicadas (`supabase migration list` casa nos dois lados — o `migration repair` da armadilha segurou), 10 categorias de sistema semeadas, 7 tabelas com `REPLICA IDENTITY FULL` na publication `powersync`. As funções de autorização vivem no schema `private`. É o que o `env/dev.json` usa. ⚠️ **Nunca aplique schema por outro caminho que não `supabase db push`** — ver a armadilha do histórico abaixo. |
 | Web (Chrome) | ⚠️ Compila, mas falta `sqlite3.wasm` + worker em `apps/finance/web/`. `PowerSyncService.open()` falharia. |
 | Android | ⚠️ Três bloqueios: `cmdline-tools` ausente, nenhum AVD criado, e o `env/dev.json` não serve (no emulador o host é `10.0.2.2`, não `127.0.0.1`, e o Android 9+ bloqueia cleartext — o `AndroidManifest.xml` não tem exceção). Precisaria de `env/dev-android.json` + network security config. |
 

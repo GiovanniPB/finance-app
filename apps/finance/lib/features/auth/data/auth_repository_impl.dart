@@ -2,6 +2,7 @@ import 'package:core/core.dart';
 import 'package:supabase_flutter/supabase_flutter.dart' hide AuthUser;
 
 import '../domain/auth_repository.dart';
+import 'auth_error_message.dart';
 
 /// Implementação sobre o Supabase Auth.
 class AuthRepositoryImpl implements AuthRepository {
@@ -41,7 +42,7 @@ class AuthRepositoryImpl implements AuthRepository {
       return const Ok(null);
     } on AuthException catch (e, st) {
       _log.warning('Falha no signOut', e, st);
-      return Err(AuthFailure(e.message, cause: e));
+      return Err(AuthFailure(authErrorMessage(e), cause: e));
     }
   }
 
@@ -57,7 +58,7 @@ class AuthRepositoryImpl implements AuthRepository {
       return Ok(user);
     } on AuthException catch (e, st) {
       _log.warning('Falha de autenticação', e, st);
-      return Err(AuthFailure(e.message, cause: e));
+      return Err(AuthFailure(authErrorMessage(e), cause: e));
     }
   }
 
