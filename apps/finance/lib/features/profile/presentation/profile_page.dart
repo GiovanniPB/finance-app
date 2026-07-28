@@ -13,6 +13,7 @@ import '../../categories/presentation/category_form_sheet.dart';
 import '../../categories/presentation/category_icons.dart';
 import '../../open_finance/domain/open_finance_connection.dart';
 import '../../open_finance/presentation/connect_bank_page.dart';
+import '../../open_finance/presentation/connection_sheet.dart';
 import '../../open_finance/presentation/connection_tile.dart';
 import '../../open_finance/presentation/open_finance_providers.dart';
 
@@ -116,15 +117,15 @@ class ProfilePage extends ConsumerWidget {
               key: Key('connection_${connection.id}'),
               connection: connection,
               accountCount: accountCounts[connection.id] ?? 0,
-              // Só conexão que precisa de ação responde ao toque, e o que ela
-              // abre é o re-consentimento. Um detalhe de conexão que só
-              // mostrasse o que a linha já diz seria um toque sem resposta.
-              onTap: connection.status.needsUserAction
-                  ? () => ConnectBankPage.show(
-                      context,
-                      updateItemId: connection.itemId,
-                    )
-                  : null,
+              // Toda conexão responde ao toque, e o que ela abre é a folha de
+              // ações. Antes só a que pedia re-consentimento respondia, o que
+              // deixava a linha saudável inerte — e não havia lugar nenhum para
+              // "Remover banco", que existia no repository e em nenhuma tela.
+              onTap: () => ConnectionSheet.show(
+                context,
+                connection: connection,
+                accountCount: accountCounts[connection.id] ?? 0,
+              ),
             ),
           Padding(
             padding: const EdgeInsets.fromLTRB(

@@ -1,3 +1,4 @@
+import 'package:core/core.dart';
 import 'package:design_system/design_system.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
@@ -16,6 +17,14 @@ import 'accounts_providers.dart';
 /// O saldo usa o mesmo teclado do registro rápido e do orçamento. Informar
 /// saldo é digitar um valor, e o produto já tem um jeito de digitar valor —
 /// abrir o teclado do sistema aqui seria um gesto a mais para aprender.
+///
+/// **Conta de Open Finance é editável só em parte**, e a divisão vem do
+/// ADR 0005: tipo, moeda e saldo pertencem à Pluggy (a sincronização os
+/// reescreve), então eles não aparecem como campo — aparecem como fato, com a
+/// data do saldo. Nome, instituição, alvo de poupança e espaço vinculado seguem
+/// do usuário, porque a ingestão nunca os toca depois do primeiro INSERT.
+/// Deixar o saldo editável era oferecer um campo cujo valor desaparece na
+/// próxima sincronização.
 class AccountFormSheet extends ConsumerStatefulWidget {
   const AccountFormSheet({this.editing, super.key});
 
@@ -57,6 +66,7 @@ class _AccountFormSheetState extends ConsumerState<AccountFormSheet> {
   Widget build(BuildContext context) {
     final state = ref.watch(accountFormControllerProvider(widget.editing));
     final linkable = ref.watch(linkableSpacesProvider);
+    final imported = widget.editing?.isFromOpenFinance ?? false;
 
     return ConstrainedBox(
       // Seis campos e um teclado não cabem numa tela pequena: os campos rolam
@@ -87,10 +97,13 @@ class _AccountFormSheetState extends ConsumerState<AccountFormSheet> {
                   crossAxisAlignment: CrossAxisAlignment.stretch,
                   children: [
                     const SizedBox(height: AppSpacing.lg),
-                    _TypePicker(
-                      selected: state.type,
-                      onSelected: _controller.selectType,
-                    ),
+                    if (imported)
+                      _ProviderOwnedSummary(account: widget.editing!)
+                    else
+                      _TypePicker(
+                        selected: state.type,
+                        onSelected: _controller.selectType,
+                      ),
                     const SizedBox(height: AppSpacing.lg),
                     AppTextField(
                       label: 'Nome',
@@ -116,13 +129,17 @@ class _AccountFormSheetState extends ConsumerState<AccountFormSheet> {
                       controller: _institution,
                       onChanged: _controller.editInstitution,
                     ),
-                    const SizedBox(height: AppSpacing.lg),
-                    _BalanceField(state: state),
-                    const SizedBox(height: AppSpacing.lg),
-                    AmountKeypad(
-                      onDigit: _controller.pressDigit,
-                      onBackspace: _controller.pressBackspace,
-                    ),
+                    // Saldo e teclado só na conta manual: numa importada o
+                    // número é da Pluggy e aparece em `_ProviderOwnedSummary`.
+                    if (!imported) ...[
+                      const SizedBox(height: AppSpacing.lg),
+                      _BalanceField(state: state),
+                      const SizedBox(height: AppSpacing.lg),
+                      AmountKeypad(
+                        onDigit: _controller.pressDigit,
+                        onBackspace: _controller.pressBackspace,
+                      ),
+                    ],
                     const SizedBox(height: AppSpacing.lg),
                     _SavingsTargetToggle(
                       value: state.isSavingsTarget,
@@ -149,7 +166,15 @@ class _AccountFormSheetState extends ConsumerState<AccountFormSheet> {
               isLoading: state.isSaving,
               onPressed: state.canSave ? _save : null,
             ),
-            if (state.isEditing) ...[
+            // Excluir não existe em conta importada, e não é zelo excessivo: a
+            // sincronização a **recria** (o worker insere quando não encontra o
+            // `external_id`), com nome padrão, sem o alvo de poupança nem o
+            // espaço vinculado. E como a dedup de lançamento é por
+            // `account_id`, a conta nova reimportaria o extrato inteiro
+            // enquanto o antigo ficaria órfão — a FK põe `account_id` em nulo.
+            // Um toque viraria histórico duplicado. Quem termina o vínculo é
+            // "Remover banco", no Perfil.
+            if (state.isEditing && !imported) ...[
               const SizedBox(height: AppSpacing.sm),
               AppButton(
                 key: const Key('account_delete'),
@@ -198,6 +223,63 @@ class _AccountFormSheetState extends ConsumerState<AccountFormSheet> {
 
     final removed = await _controller.remove();
     if (removed && mounted) Navigator.of(context).pop(true);
+  }
+}
+
+/// O que a Pluggy é dona, numa conta importada: tipo e saldo, como fato.
+///
+/// **Não é um campo desabilitado.** Campo cinza convida a tocar e não responde;
+/// isto é uma afirmação, com a data do saldo e a frase que explica por que não
+/// há o que editar. O mesmo desenho que a folha de lançamento usa quando
+/// detecta que o lançamento pertence a uma meta: ela vira leitura e aponta para
+/// onde a coisa se resolve.
+class _ProviderOwnedSummary extends StatelessWidget {
+  const _ProviderOwnedSummary({required this.account});
+
+  final Account account;
+
+  @override
+  Widget build(BuildContext context) {
+    final tokens = context.tokens;
+    // Minúscula porque a data entra no meio da frase: `formatDayLabel` devolve
+    // "Hoje", e "de Hoje" lê como erro de digitação.
+    final asOf = formatDayLabel(account.balanceAsOf.toLocal()).toLowerCase();
+
+    return DecoratedBox(
+      decoration: BoxDecoration(
+        color: context.colors.surfaceContainerLow,
+        borderRadius: AppRadii.brMd,
+        border: Border.all(color: tokens.hairline),
+      ),
+      child: Padding(
+        padding: const EdgeInsets.all(AppSpacing.md),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Row(
+              children: [
+                Expanded(
+                  child: Text(
+                    account.type.label,
+                    style: context.texts.labelMedium,
+                  ),
+                ),
+                MoneyText(account.signedBalance, size: MoneySize.small),
+              ],
+            ),
+            const SizedBox(height: AppSpacing.xxs),
+            Text(
+              'Tipo e saldo vêm do banco — saldo de $asOf. Editar aqui seria '
+              'desfeito na próxima sincronização.',
+              key: const Key('account_provider_owned'),
+              style: context.texts.bodySmall?.copyWith(
+                color: tokens.textMuted,
+              ),
+            ),
+          ],
+        ),
+      ),
+    );
   }
 }
 

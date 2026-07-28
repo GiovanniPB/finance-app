@@ -428,3 +428,9 @@ verify_jwt = false
 # webhook, com a service-role key — não há caminho de cliente até aqui.
 [functions.pluggy-sync-worker]
 verify_jwt = true
+
+# Cancela o acesso ao banco (`DELETE /items/{id}`, que exige a API Key). Chamada
+# pelo app com a sessão do usuário, e é a **RLS** que decide se aquela conexão é
+# dele — daí `verify_jwt = true` e nenhuma checagem de dono escrita na função.
+[functions.pluggy-disconnect]
+verify_jwt = true

@@ -8,10 +8,10 @@ import 'open_finance_connection.dart';
 ///
 ///  * **Local e offline-first** ([watchAll], [save], [delete]) — SQL sobre o
 ///    SQLite do PowerSync, que sincroniza sozinho.
-///  * **Rede, agora** ([requestConnectToken]) — chama a Edge Function
-///    `pluggy-connect-token`. Não tem versão offline: sem internet não há como
-///    conectar um banco, e fingir o contrário deixaria o usuário num widget que
-///    não carrega.
+///  * **Rede, agora** ([requestConnectToken], [revokeAccess]) — chamam Edge
+///    Functions. Não têm versão offline: sem internet não há como conectar um
+///    banco nem cancelar um acesso, e fingir o contrário deixaria o usuário num
+///    widget que não carrega ou com um consentimento que ele acha revogado.
 abstract interface class OpenFinanceRepository {
   /// Conexões do usuário, reativas. Vazio sem sessão.
   Stream<List<OpenFinanceConnection>> watchAll();
@@ -34,12 +34,28 @@ abstract interface class OpenFinanceRepository {
     String? connectorName,
   });
 
+  /// Cancela o acesso ao banco no provedor (`DELETE /items/{id}`, pela Edge
+  /// Function `pluggy-disconnect` — a chamada exige a API Key, que não sai do
+  /// servidor).
+  ///
+  /// **Chame antes de [delete], e só apague a linha se isto deu certo.** Na
+  /// ordem inversa, a linha desapareceria do app enquanto o consentimento
+  /// continuasse valendo no banco, sem nada que apontasse para ele: a tela
+  /// teria dito que o acesso foi cancelado e não haveria mais como cancelá-lo.
+  ///
+  /// Falhar aqui é o caso normal quando não há internet. Revogação é
+  /// inerentemente online, e o erro diz isso.
+  Future<Result<void, Failure>> revokeAccess(String connectionId);
+
   /// Remove a conexão **do nosso banco**.
   ///
-  /// Não revoga nada na Pluggy: isso exige a API Key e é trabalho de servidor
-  /// (`DELETE /items/{id}`), que entra com o worker. Até lá, remover aqui para
-  /// de mostrar a conexão e **não** apaga as contas nem os lançamentos que ela
-  /// trouxe — a FK é `on delete set null`, porque o dinheiro passou de verdade
-  /// e quem terminou foi o vínculo.
+  /// **Não** apaga as contas nem os lançamentos que ela trouxe — a FK é
+  /// `on delete set null`, porque o dinheiro passou de verdade e quem terminou
+  /// foi o vínculo. As contas viram contas comuns, com o histórico intacto.
+  ///
+  /// Quem cancela o acesso do lado do banco é [revokeAccess]. Se esta linha
+  /// sobreviver a uma revogação bem-sucedida, o estado **se autocura**: a
+  /// próxima passada do worker leva 404 no item e marca a conexão como
+  /// removida.
   Future<Result<void, Failure>> delete(String id);
 }

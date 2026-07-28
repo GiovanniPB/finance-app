@@ -49,6 +49,7 @@ class OpenFinanceRepositoryImpl implements OpenFinanceRepository {
 
   /// Nome da Edge Function que emite o Connect Token.
   static const connectTokenFunction = 'pluggy-connect-token';
+  static const disconnectFunction = 'pluggy-disconnect';
 
   final SqliteConnection db;
   final SupabaseClient supabase;
@@ -190,6 +191,45 @@ class OpenFinanceRepositoryImpl implements OpenFinanceRepository {
       _log.severe('Falha ao salvar conexão de Open Finance', e, st);
       return const Err(
         DatabaseFailure('Não foi possível salvar a conexão com o banco.'),
+      );
+    }
+  }
+
+  @override
+  Future<Result<void, Failure>> revokeAccess(String connectionId) async {
+    if (supabase.auth.currentUser == null) {
+      return const Err(
+        AuthFailure('Entre na sua conta para remover um banco.'),
+      );
+    }
+
+    try {
+      await supabase.functions.invoke(
+        disconnectFunction,
+        body: {'connectionId': connectionId},
+      );
+      return const Ok(null);
+    } on FunctionException catch (e, st) {
+      // Mesma regra do Connect Token: a frase que a função devolve foi escrita
+      // para a tela, e é melhor que qualquer genérica.
+      _log.warning('Edge Function de desconexão falhou', e, st);
+      final details = e.details;
+      final message = details is Map ? details['error'] : null;
+      return Err(
+        NetworkFailure(
+          message is String && message.isNotEmpty
+              ? message
+              : 'Não foi possível cancelar o acesso no banco. '
+                    'Tente de novo em instantes.',
+        ),
+      );
+    } on Exception catch (e, st) {
+      _log.warning('Falha de rede ao cancelar acesso ao banco', e, st);
+      return const Err(
+        NetworkFailure(
+          'Sem conexão com o servidor. Cancelar o acesso no banco precisa de '
+          'internet — verifique a sua e tente de novo.',
+        ),
       );
     }
   }

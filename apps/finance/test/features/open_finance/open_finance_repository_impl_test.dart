@@ -204,6 +204,64 @@ void main() {
     });
   });
 
+  group('revokeAccess', () {
+    test('sem sessão não chama a função', () async {
+      final result = await buildRepo().revokeAccess('conn-1');
+
+      expect(result.failureOrNull, isA<AuthFailure>());
+      verifyNever(() => functions.invoke(any(), body: any(named: 'body')));
+    });
+
+    test('manda o id da conexão, não o do item — quem resolve o item é o '
+        'servidor, pela RLS', () async {
+      signedIn();
+      when(() => functions.invoke(any(), body: any(named: 'body'))).thenAnswer(
+        (_) async =>
+            const FunctionResponse(data: {'revoked': true}, status: 200),
+      );
+
+      final result = await buildRepo().revokeAccess('conn-42');
+
+      expect(result.isOk, isTrue);
+      final captured = verify(
+        () => functions.invoke(captureAny(), body: captureAny(named: 'body')),
+      ).captured;
+      expect(captured[0], 'pluggy-disconnect');
+      expect(captured[1], {'connectionId': 'conn-42'});
+    });
+
+    test('a frase que a função escreveu chega à tela', () async {
+      signedIn();
+      when(() => functions.invoke(any(), body: any(named: 'body'))).thenThrow(
+        const FunctionException(
+          status: 404,
+          details: {'error': 'Essa conexão não existe mais.'},
+        ),
+      );
+
+      final result = await buildRepo().revokeAccess('conn-1');
+
+      expect(
+        result.failureOrNull?.message,
+        'Essa conexão não existe mais.',
+      );
+    });
+
+    test('sem internet o erro diz que revogar precisa dela', () async {
+      signedIn();
+      when(
+        () => functions.invoke(any(), body: any(named: 'body')),
+      ).thenThrow(Exception('socket'));
+
+      final result = await buildRepo().revokeAccess('conn-1');
+
+      // Revogação é inerentemente online: prometer fila offline aqui deixaria o
+      // usuário achando que cancelou um acesso que segue valendo.
+      expect(result.failureOrNull, isA<NetworkFailure>());
+      expect(result.failureOrNull?.message, contains('internet'));
+    });
+  });
+
   group('save', () {
     test('sem sessão devolve AuthFailure', () async {
       final result = await buildRepo().save(itemId: 'item-1');

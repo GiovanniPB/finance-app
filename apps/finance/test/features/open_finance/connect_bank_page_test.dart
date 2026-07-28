@@ -52,6 +52,10 @@ class _ControlledRepository implements OpenFinanceRepository {
   }) async => Ok(testConnection(itemId: itemId));
 
   @override
+  Future<Result<void, Failure>> revokeAccess(String connectionId) async =>
+      const Ok(null);
+
+  @override
   Future<Result<void, Failure>> delete(String id) async => const Ok(null);
 }
 
