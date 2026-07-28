@@ -2,6 +2,7 @@ import 'package:core/core.dart';
 import 'package:finance/features/savings/data/savings_repository_impl.dart';
 import 'package:finance/features/savings/domain/savings_contribution.dart';
 import 'package:finance/features/savings/domain/savings_goal.dart';
+import 'package:finance/features/transactions/domain/transaction.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:mocktail/mocktail.dart';
 import 'package:sqlite3/common.dart';
@@ -13,6 +14,8 @@ import '../../helpers/app_harness.dart';
 
 class MockSqliteConnection extends Mock implements SqliteConnection {}
 
+class MockSqliteWriteContext extends Mock implements SqliteWriteContext {}
+
 class MockSupabaseClient extends Mock implements SupabaseClient {}
 
 class MockGoTrueClient extends Mock implements GoTrueClient {}
@@ -21,19 +24,39 @@ class MockUser extends Mock implements User {}
 
 ResultSet emptyResultSet() => ResultSet(const [], const [], const []);
 
+/// A forma do callback de `writeTransaction`, para o `registerFallbackValue`.
+typedef WriteTx = Future<void> Function(SqliteWriteContext tx);
+
+Future<void> _noopTx(SqliteWriteContext tx) async {}
+
 void main() {
-  setUpAll(() => registerFallbackValue(<Object?>[]));
+  setUpAll(() {
+    registerFallbackValue(<Object?>[]);
+    // O tipo vem da declaração de `_noopTx` (`WriteTx`), não de um argumento de
+    // tipo: `registerFallbackValue` do mocktail 1.x recebe `dynamic`.
+    registerFallbackValue(_noopTx);
+  });
 
   late MockSqliteConnection db;
+  late MockSqliteWriteContext tx;
   late MockSupabaseClient supabase;
   late MockGoTrueClient auth;
 
-  SavingsRepositoryImpl buildRepo() => SavingsRepositoryImpl(
-    db: db,
-    supabase: supabase,
-    now: () => DateTime.utc(2026, 7, 27, 13),
-    genId: () => 'goal-1',
-  );
+  /// SQL executado dentro da `writeTransaction`, na ordem.
+  late List<String> txSql;
+
+  SavingsRepositoryImpl buildRepo() {
+    var generated = 0;
+    return SavingsRepositoryImpl(
+      db: db,
+      supabase: supabase,
+      now: () => DateTime.utc(2026, 7, 27, 13),
+      // Contador, e não constante: `addContribution` gera **dois** ids — o do
+      // lançamento e o da contribuição —, e um genId constante os faria iguais,
+      // escondendo justamente o vínculo que o teste precisa verificar.
+      genId: () => ++generated == 1 ? 'goal-1' : 'gen-$generated',
+    );
+  }
 
   void signedIn() {
     final user = MockUser();
@@ -43,12 +66,23 @@ void main() {
 
   setUp(() {
     db = MockSqliteConnection();
+    tx = MockSqliteWriteContext();
     supabase = MockSupabaseClient();
     auth = MockGoTrueClient();
+    txSql = [];
+
     when(() => supabase.auth).thenReturn(auth);
     when(() => auth.currentUser).thenReturn(null);
     when(() => db.execute(any(), any())).thenAnswer((_) async {
       return emptyResultSet();
+    });
+    when(() => tx.execute(any(), any())).thenAnswer((invocation) async {
+      txSql.add(invocation.positionalArguments.first as String);
+      return emptyResultSet();
+    });
+    when(() => db.writeTransaction<void>(any())).thenAnswer((invocation) async {
+      final callback = invocation.positionalArguments.first as WriteTx;
+      await callback(tx);
     });
   });
 
@@ -208,6 +242,44 @@ void main() {
       expect(contribution.spaceId, 'space-1');
       expect(contribution.createdBy, 'user-1');
     });
+
+    test('grava lançamento e contribuição na mesma transação', () async {
+      signedIn();
+
+      final result = await buildRepo().addContribution(
+        goal: testGoal(),
+        amount: const Money.fromMinor(40000),
+        accountId: 'acc-1',
+      );
+
+      // As duas faces do evento, e nesta ordem: o lançamento primeiro, porque é
+      // ele que a contribuição referencia.
+      expect(txSql, [
+        SavingsSql.insertTransaction,
+        SavingsSql.insertContribution,
+      ]);
+      // E nada fora da transação: uma das duas escritas solta seria a
+      // desincronização que o vínculo existe para evitar.
+      verifyNever(() => db.execute(any(), any()));
+
+      expect(result.valueOrNull!.transactionId, 'goal-1');
+    });
+
+    test(
+      'a contribuição aponta para o lançamento, e não para si mesma',
+      () async {
+        signedIn();
+
+        final contribution = (await buildRepo().addContribution(
+          goal: testGoal(),
+          amount: const Money.fromMinor(40000),
+        )).valueOrNull!;
+
+        // Guarda contra o genId ser chamado uma vez só e os dois ids colidirem:
+        // a contribuição e o lançamento são linhas distintas.
+        expect(contribution.transactionId, isNot(contribution.id));
+      },
+    );
   });
 
   // Teste de guarda: os mocks acima verificam o *texto* do SQL, então não pegam
@@ -232,7 +304,19 @@ void main() {
           CREATE TABLE savings_contributions_data (
             id TEXT PRIMARY KEY, goal_id TEXT, space_id TEXT, created_by TEXT,
             amount_minor INTEGER, currency TEXT, detected_via TEXT,
-            confirmed INTEGER, contributed_at TEXT,
+            confirmed INTEGER, contributed_at TEXT, transaction_id TEXT,
+            created_at TEXT, updated_at TEXT
+          );
+        ''')
+        // A tabela de lançamentos entra aqui porque `addContribution` e
+        // `deleteContribution` escrevem nela: guardar dinheiro é um evento com
+        // duas faces, e o SQL das duas precisa rodar contra views de verdade.
+        ..execute('''
+          CREATE TABLE transactions_data (
+            id TEXT PRIMARY KEY, space_id TEXT, account_id TEXT,
+            created_by TEXT, type TEXT, amount_minor INTEGER, currency TEXT,
+            category_id TEXT, description TEXT, occurred_at TEXT, source TEXT,
+            is_shared INTEGER, ai_categorized INTEGER, recurrence_id TEXT,
             created_at TEXT, updated_at TEXT
           );
         ''')
@@ -243,6 +327,27 @@ void main() {
           'CREATE VIEW savings_contributions AS '
           'SELECT * FROM savings_contributions_data;',
         )
+        ..execute(
+          'CREATE VIEW transactions AS SELECT * FROM transactions_data;',
+        )
+        ..execute('''
+          CREATE TRIGGER tx_insert INSTEAD OF INSERT ON transactions BEGIN
+            INSERT INTO transactions_data (id, space_id, account_id, created_by,
+              type, amount_minor, currency, category_id, description,
+              occurred_at, source, is_shared, ai_categorized, recurrence_id,
+              created_at, updated_at)
+            VALUES (new.id, new.space_id, new.account_id, new.created_by,
+              new.type, new.amount_minor, new.currency, new.category_id,
+              new.description, new.occurred_at, new.source, new.is_shared,
+              new.ai_categorized, new.recurrence_id, new.created_at,
+              new.updated_at);
+          END;
+        ''')
+        ..execute('''
+          CREATE TRIGGER tx_delete INSTEAD OF DELETE ON transactions BEGIN
+            DELETE FROM transactions_data WHERE id = old.id;
+          END;
+        ''')
         ..execute('''
           CREATE TRIGGER goals_insert INSTEAD OF INSERT ON savings_goals BEGIN
             INSERT INTO savings_goals_data (id, space_id, created_by, goal_type,
@@ -275,10 +380,11 @@ void main() {
           ON savings_contributions BEGIN
             INSERT INTO savings_contributions_data (id, goal_id, space_id,
               created_by, amount_minor, currency, detected_via, confirmed,
-              contributed_at, created_at, updated_at)
+              contributed_at, transaction_id, created_at, updated_at)
             VALUES (new.id, new.goal_id, new.space_id, new.created_by,
               new.amount_minor, new.currency, new.detected_via, new.confirmed,
-              new.contributed_at, new.created_at, new.updated_at);
+              new.contributed_at, new.transaction_id,
+              new.created_at, new.updated_at);
           END;
         ''')
         ..execute('''
@@ -410,6 +516,128 @@ void main() {
       // A contribuição da outra meta sobrevive: o DELETE é por `goal_id`.
       final left = local.select('SELECT * FROM savings_contributions').single;
       expect(left['goal_id'], 'goal-2');
+    });
+
+    test('lançamento e contribuição entram juntos e ligados', () {
+      final transaction = testTransaction(
+        id: 'tx-savings',
+        minor: 40000,
+        type: TransactionType.savings,
+        categoryId: null,
+        description: 'Viagem ao Chile',
+      );
+
+      local
+        ..execute(
+          SavingsSql.insertGoal,
+          SavingsSql.insertGoalParams(testGoal().toColumns()),
+        )
+        ..execute(
+          SavingsSql.insertTransaction,
+          SavingsSql.insertTransactionParams(transaction.toColumns()),
+        )
+        ..execute(
+          SavingsSql.insertContribution,
+          SavingsSql.insertContributionParams(
+            testContribution(
+              minor: 40000,
+              transactionId: 'tx-savings',
+            ).toColumns(),
+          ),
+        );
+
+      final saved = local.select('SELECT * FROM savings_contributions').single;
+      expect(saved['transaction_id'], 'tx-savings');
+
+      final ledger = local.select('SELECT * FROM transactions').single;
+      // O lançamento é saída (`savings`) com valor positivo na coluna: a
+      // direção vem do tipo, como em qualquer despesa.
+      expect(ledger['type'], 'savings');
+      expect(ledger['amount_minor'], 40000);
+      // Sem categoria, senão o valor debitaria um orçamento.
+      expect(ledger['category_id'], isNull);
+      expect(ledger['description'], 'Viagem ao Chile');
+    });
+
+    test('remover contribuição leva o lançamento dela', () {
+      local
+        ..execute(
+          SavingsSql.insertGoal,
+          SavingsSql.insertGoalParams(testGoal().toColumns()),
+        )
+        ..execute(
+          SavingsSql.insertTransaction,
+          SavingsSql.insertTransactionParams(
+            testTransaction(
+              id: 'tx-savings',
+              minor: 40000,
+              type: TransactionType.savings,
+              categoryId: null,
+            ).toColumns(),
+          ),
+        )
+        // Um segundo lançamento, comum, para provar que o DELETE é por id e não
+        // varre a tabela.
+        ..execute(
+          SavingsSql.insertTransaction,
+          SavingsSql.insertTransactionParams(
+            testTransaction(id: 'tx-2', minor: 5000).toColumns(),
+          ),
+        )
+        ..execute(
+          SavingsSql.insertContribution,
+          SavingsSql.insertContributionParams(
+            testContribution(
+              minor: 40000,
+              transactionId: 'tx-savings',
+            ).toColumns(),
+          ),
+        )
+        // A ordem do repository: contribuição primeiro, lançamento depois.
+        ..execute(SavingsSql.deleteContribution, ['contrib-1'])
+        ..execute(SavingsSql.deleteTransaction, ['tx-savings']);
+
+      expect(local.select('SELECT * FROM savings_contributions'), isEmpty);
+      final left = local.select('SELECT * FROM transactions').single;
+      expect(left['id'], 'tx-2');
+      // A meta continua de pé: quem saiu foi o aporte, não o objetivo.
+      expect(local.select('SELECT * FROM savings_goals'), hasLength(1));
+    });
+
+    test('excluir meta deixa os lançamentos das contribuições de pé', () {
+      local
+        ..execute(
+          SavingsSql.insertGoal,
+          SavingsSql.insertGoalParams(testGoal().toColumns()),
+        )
+        ..execute(
+          SavingsSql.insertTransaction,
+          SavingsSql.insertTransactionParams(
+            testTransaction(
+              id: 'tx-savings',
+              minor: 40000,
+              type: TransactionType.savings,
+              categoryId: null,
+            ).toColumns(),
+          ),
+        )
+        ..execute(
+          SavingsSql.insertContribution,
+          SavingsSql.insertContributionParams(
+            testContribution(
+              minor: 40000,
+              transactionId: 'tx-savings',
+            ).toColumns(),
+          ),
+        )
+        ..execute(SavingsSql.deleteContributionsOfGoal, ['goal-1'])
+        ..execute(SavingsSql.deleteGoal, ['goal-1']);
+
+      // A assimetria deliberada: desistir da meta não reescreve o extrato. O
+      // dinheiro saiu de verdade, e apagá-lo apagaria história.
+      expect(local.select('SELECT * FROM transactions'), hasLength(1));
+      expect(local.select('SELECT * FROM savings_contributions'), isEmpty);
+      expect(local.select('SELECT * FROM savings_goals'), isEmpty);
     });
 
     test('a view recusa UPSERT — é por isso que não existe um aqui', () {

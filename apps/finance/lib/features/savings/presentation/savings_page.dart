@@ -5,6 +5,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../../spaces/presentation/spaces_providers.dart';
 import '../../transactions/presentation/transactions_providers.dart';
+import '../domain/savings_goal.dart';
 import 'goal_card.dart';
 import 'goal_detail_page.dart';
 import 'goal_form_sheet.dart';
@@ -30,7 +31,12 @@ class SavingsPage extends ConsumerWidget {
     if (space == null) return const _WaitingSync();
 
     final progress = ref.watch(goalProgressListProvider);
-    if (progress.isEmpty) return const _NoGoalsYet();
+    final paused = ref.watch(pausedGoalsProvider);
+
+    // O estado vazio precisa das duas listas: com todas as metas pausadas,
+    // `progress` fica vazia, e sair por aqui esconderia metas que existem —
+    // pausar viraria um esconder sem volta.
+    if (progress.isEmpty && paused.isEmpty) return const _NoGoalsYet();
 
     final month = ref.watch(focusedMonthProvider);
     final total = ref.watch(savingsTotalProvider);
@@ -43,25 +49,47 @@ class SavingsPage extends ConsumerWidget {
             padding: const EdgeInsets.only(bottom: AppSpacing.xxl),
             children: [
               _Header(spaceName: space.name),
-              Padding(
-                padding: const EdgeInsets.fromLTRB(
-                  AppSpacing.screenGutter,
-                  AppSpacing.xl,
-                  AppSpacing.screenGutter,
-                  AppSpacing.xxl,
-                ),
-                child: BalanceHeader(
-                  label: _totalLabel(progress.length),
-                  amount: total ?? const Money.zero(),
-                  caption: monthTotal.isZero
-                      ? 'Nada guardado em ${monthLabel(month)} ainda'
-                      : '${monthTotal.format()} em ${monthLabel(month)}',
-                ),
-              ),
+              // Sem meta ativa não há momento alto: um "R$ 0,00" em 40px com
+              // metas apenas pausadas anunciaria fracasso onde houve uma
+              // escolha deliberada de pausar.
+              if (progress.isNotEmpty)
+                Padding(
+                  padding: const EdgeInsets.fromLTRB(
+                    AppSpacing.screenGutter,
+                    AppSpacing.xl,
+                    AppSpacing.screenGutter,
+                    AppSpacing.xxl,
+                  ),
+                  child: BalanceHeader(
+                    label: _totalLabel(progress.length),
+                    amount: total ?? const Money.zero(),
+                    caption: monthTotal.isZero
+                        ? 'Nada guardado em ${monthLabel(month)} ainda'
+                        : '${monthTotal.format()} em ${monthLabel(month)}',
+                  ),
+                )
+              else
+                const SizedBox(height: AppSpacing.xl),
               _SectionTitle(
                 title: 'Suas metas',
                 onNew: () => GoalFormSheet.show(context),
               ),
+              if (progress.isEmpty)
+                Padding(
+                  padding: const EdgeInsets.fromLTRB(
+                    AppSpacing.screenGutter,
+                    0,
+                    AppSpacing.screenGutter,
+                    AppSpacing.md,
+                  ),
+                  child: Text(
+                    'Nenhuma meta ativa — todas estão pausadas.',
+                    key: const Key('all_goals_paused'),
+                    style: context.texts.bodySmall?.copyWith(
+                      color: context.tokens.textMuted,
+                    ),
+                  ),
+                ),
               for (final item in progress)
                 Padding(
                   padding: const EdgeInsets.fromLTRB(
@@ -80,6 +108,7 @@ class SavingsPage extends ConsumerWidget {
                     ),
                   ),
                 ),
+              if (paused.isNotEmpty) _PausedSection(goals: paused),
             ],
           ),
         ),
@@ -153,6 +182,97 @@ class _SectionTitle extends StatelessWidget {
       ],
     ),
   );
+}
+
+/// As metas pausadas, no fim da lista.
+///
+/// **Sem barra de progresso e sem valor.** Meta pausada não tem ritmo a
+/// comparar nem prazo a cobrar, e desenhar a barra aqui seria a cobrança que
+/// pausar existe para calar. A seção é só o caminho de volta: tocar abre o
+/// detalhe, e de lá o "Editar" tem o interruptor para retomar.
+class _PausedSection extends StatelessWidget {
+  const _PausedSection({required this.goals});
+
+  final List<SavingsGoal> goals;
+
+  @override
+  Widget build(BuildContext context) => Column(
+    crossAxisAlignment: CrossAxisAlignment.stretch,
+    children: [
+      Padding(
+        padding: const EdgeInsets.fromLTRB(
+          AppSpacing.screenGutter,
+          AppSpacing.xl,
+          AppSpacing.screenGutter,
+          AppSpacing.md,
+        ),
+        child: Text(
+          goals.length == 1
+              ? '1 meta pausada'
+              : '${goals.length} metas pausadas',
+          style: context.texts.titleSmall?.copyWith(
+            color: context.tokens.textMuted,
+          ),
+        ),
+      ),
+      for (final goal in goals)
+        Padding(
+          padding: const EdgeInsets.fromLTRB(
+            AppSpacing.screenGutter,
+            0,
+            AppSpacing.screenGutter,
+            AppSpacing.sm,
+          ),
+          child: _PausedGoalRow(goal: goal),
+        ),
+    ],
+  );
+}
+
+class _PausedGoalRow extends StatelessWidget {
+  const _PausedGoalRow({required this.goal});
+
+  final SavingsGoal goal;
+
+  @override
+  Widget build(BuildContext context) {
+    final tokens = context.tokens;
+
+    return Material(
+      color: tokens.surfaceSunken,
+      borderRadius: AppRadii.brLg,
+      child: InkWell(
+        key: Key('paused_goal_${goal.id}'),
+        borderRadius: AppRadii.brLg,
+        onTap: () => Navigator.of(context).push(
+          MaterialPageRoute<void>(
+            builder: (_) => GoalDetailPage(goalId: goal.id),
+          ),
+        ),
+        child: Padding(
+          padding: const EdgeInsets.symmetric(
+            horizontal: AppSpacing.lg,
+            vertical: AppSpacing.md,
+          ),
+          child: Row(
+            children: [
+              Icon(Icons.pause_rounded, size: 18, color: tokens.textMuted),
+              const SizedBox(width: AppSpacing.sm),
+              Expanded(
+                child: Text(
+                  goal.name,
+                  style: context.texts.bodyMedium?.copyWith(
+                    color: tokens.textMuted,
+                  ),
+                ),
+              ),
+              Icon(Icons.chevron_right, size: 18, color: tokens.textMuted),
+            ],
+          ),
+        ),
+      ),
+    );
+  }
 }
 
 /// Estado vazio: ocupa a tela toda e carrega a única ação.

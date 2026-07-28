@@ -10,6 +10,12 @@ import '../../categories/domain/category.dart';
 import '../../categories/presentation/categories_providers.dart';
 import '../../categories/presentation/category_form_sheet.dart';
 import '../../categories/presentation/category_picker.dart';
+// Lê o lado da poupança para saber se este lançamento é de uma meta. Só
+// presentation → presentation, e simétrico ao que `savings_providers` já faz
+// lendo o mês em foco deste lado.
+import '../../savings/domain/savings_goal.dart';
+import '../../savings/presentation/goal_detail_page.dart';
+import '../../savings/presentation/savings_providers.dart';
 import '../domain/transaction.dart';
 import 'transaction_edit_controller.dart';
 
@@ -56,6 +62,13 @@ class _TransactionEditSheetState extends ConsumerState<TransactionEditSheet> {
 
   @override
   Widget build(BuildContext context) {
+    // Lançamento que financia uma meta não é editável aqui — ver
+    // `_OwnedByGoal`.
+    final owner = ref.watch(goalByTransactionIdProvider)[widget.transaction.id];
+    if (owner != null) {
+      return _OwnedByGoal(transaction: widget.transaction, goal: owner);
+    }
+
     final state = ref.watch(
       transactionEditControllerProvider(widget.transaction),
     );
@@ -241,6 +254,69 @@ class _Header extends StatelessWidget {
 
 /// Tipo que a folha exibe mas não deixa trocar.
 ///
+/// Um lançamento que financia uma meta: leitura, e o caminho para a meta.
+///
+/// A folha se recusa a editar por coerência, não por preguiça. Guardar dinheiro
+/// grava **duas linhas** — o lançamento e a contribuição — e elas são o mesmo
+/// evento. Mudar o valor daqui faria a meta contar R$ 500 e o extrato mostrar
+/// R$ 300; excluir daqui deixaria a meta com progresso de dinheiro que o
+/// extrato não explica. A dona do evento é a contribuição, então quem edita e
+/// remove é a tela da meta.
+class _OwnedByGoal extends StatelessWidget {
+  const _OwnedByGoal({required this.transaction, required this.goal});
+
+  final Transaction transaction;
+  final SavingsGoal goal;
+
+  @override
+  Widget build(BuildContext context) => Padding(
+    padding: const EdgeInsets.fromLTRB(
+      AppSpacing.sheetPadding,
+      AppSpacing.sm,
+      AppSpacing.sheetPadding,
+      AppSpacing.lg,
+    ),
+    child: Column(
+      mainAxisSize: MainAxisSize.min,
+      crossAxisAlignment: CrossAxisAlignment.stretch,
+      children: [
+        const SheetGrabHandle(),
+        _Header(transaction: transaction),
+        const SizedBox(height: AppSpacing.lg),
+        AmountDisplay(
+          label: transaction.amount.abs.format(withSymbol: false),
+        ),
+        const SizedBox(height: AppSpacing.lg),
+        Text(
+          'Este lançamento é o dinheiro que você guardou em ${goal.name}. '
+          'O valor e a data pertencem à contribuição da meta — mudá-los aqui '
+          'faria os dois lados discordarem.',
+          key: const Key('transaction_owned_by_goal'),
+          textAlign: TextAlign.center,
+          style: context.texts.bodySmall?.copyWith(
+            color: context.tokens.textMuted,
+          ),
+        ),
+        const SizedBox(height: AppSpacing.lg),
+        AppButton(
+          key: const Key('open_owning_goal'),
+          label: 'Abrir ${goal.name}',
+          icon: Icons.savings_outlined,
+          // `pushReplacement`, e não pop-e-push: numa chamada só a folha sai e
+          // o detalhe entra, sem depender de capturar o navigator antes de o
+          // `context` da folha morrer. Voltar do detalhe leva à lista, e não a
+          // uma folha que o usuário já deixou.
+          onPressed: () => Navigator.of(context).pushReplacement(
+            MaterialPageRoute<void>(
+              builder: (_) => GoalDetailPage(goalId: goal.id),
+            ),
+          ),
+        ),
+      ],
+    ),
+  );
+}
+
 /// `savings` e `transfer` não cabem no segmento de duas posições, e trocá-los
 /// por despesa/receita perderia a informação que os distingue.
 class _FixedType extends StatelessWidget {

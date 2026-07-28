@@ -391,6 +391,11 @@ class _DetailsStep extends ConsumerWidget {
       ],
       const SizedBox(height: AppSpacing.lg),
       _Chips(state: state, controller: controller),
+      // Só ao editar: não há o que pausar numa meta que ainda não existe.
+      if (state.isEditing) ...[
+        const SizedBox(height: AppSpacing.lg),
+        _PauseSwitch(state: state, controller: controller),
+      ],
       if (state.needsAmount) ...[
         const SizedBox(height: AppSpacing.lg),
         AmountKeypad(
@@ -398,6 +403,51 @@ class _DetailsStep extends ConsumerWidget {
           onBackspace: controller.pressBackspace,
         ),
       ],
+    ],
+  );
+}
+
+/// Pausar é a saída para a meta que incomoda sem ser um erro.
+///
+/// Interruptor, e não botão de ação: pausar e retomar são o mesmo controle em
+/// dois estados, e a reversibilidade é o ponto — antes disto, a única forma de
+/// calar uma meta era excluí-la, que apaga o histórico de contribuições junto.
+///
+/// A forma copia o "Guardo dinheiro aqui" da folha de conta: título, uma linha
+/// dizendo a consequência, e o `Switch` do Material à direita.
+class _PauseSwitch extends StatelessWidget {
+  const _PauseSwitch({required this.state, required this.controller});
+
+  final GoalFormState state;
+  final GoalFormController controller;
+
+  @override
+  Widget build(BuildContext context) => Row(
+    children: [
+      Expanded(
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Text('Pausar esta meta', style: context.texts.titleSmall),
+            const SizedBox(height: AppSpacing.xxs),
+            Text(
+              'Ela sai da lista e para de cobrar ritmo. O que já foi guardado '
+              'fica no histórico, e retomar traz tudo de volta.',
+              style: context.texts.bodySmall?.copyWith(
+                color: context.tokens.textMuted,
+              ),
+            ),
+          ],
+        ),
+      ),
+      const SizedBox(width: AppSpacing.md),
+      Switch(
+        key: const Key('goal_pause'),
+        value: state.isPaused,
+        onChanged: state.isSaving
+            ? null
+            : (value) => controller.setPaused(value: value),
+      ),
     ],
   );
 }

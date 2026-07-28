@@ -199,6 +199,13 @@ class FakeSavingsRepository implements SavingsRepository {
   final List<SavingsGoal> updated = [];
   final List<String> deletedGoals = [];
   final List<SavingsContribution> addedContributions = [];
+
+  /// Conta passada em cada `addContribution`, na mesma ordem.
+  ///
+  /// Lista à parte, e não campo da contribuição: a conta é do **lançamento**, e
+  /// a contribuição não a carrega. É o que permite ao teste afirmar que a folha
+  /// respeitou o padrão de conta única.
+  final List<String?> addedAccountIds = [];
   final List<String> confirmed = [];
   final List<String> deletedContributions = [];
 
@@ -259,18 +266,25 @@ class FakeSavingsRepository implements SavingsRepository {
   Future<Result<SavingsContribution, Failure>> addContribution({
     required SavingsGoal goal,
     required Money amount,
+    String? accountId,
     DateTime? contributedAt,
   }) async {
     final failure = writeFailure;
     if (failure != null) return Err(failure);
 
+    final index = addedContributions.length + 1;
     final contribution = testContribution(
-      id: 'contrib-${addedContributions.length + 1}',
+      id: 'contrib-$index',
       goalId: goal.id,
       minor: amount.amountMinor,
       contributedAt: contributedAt,
+      // O fake não grava lançamento, mas devolve a contribuição já ligada a um:
+      // é o que o repository de verdade faz, e sem isso a tela testaria uma
+      // contribuição que não existe em produção.
+      transactionId: 'tx-contrib-$index',
     );
     addedContributions.add(contribution);
+    addedAccountIds.add(accountId);
     return Ok(contribution);
   }
 
@@ -286,11 +300,11 @@ class FakeSavingsRepository implements SavingsRepository {
 
   @override
   Future<Result<void, Failure>> deleteContribution(
-    String contributionId,
+    SavingsContribution contribution,
   ) async {
     final failure = writeFailure;
     if (failure != null) return Err(failure);
-    deletedContributions.add(contributionId);
+    deletedContributions.add(contribution.id);
     return const Ok(null);
   }
 }
@@ -455,6 +469,11 @@ SavingsContribution testContribution({
   DateTime? contributedAt,
   ContributionSource source = ContributionSource.manual,
   bool isConfirmed = true,
+
+  /// Nulo por padrão: é o estado de toda linha anterior à migration
+  /// 20260728000822, e o caso que a UI precisa tratar sem prometer que há
+  /// lançamento a excluir junto.
+  String? transactionId,
 }) {
   final when = contributedAt ?? testNow;
   return SavingsContribution(
@@ -468,6 +487,7 @@ SavingsContribution testContribution({
     contributedAt: when,
     createdAt: when,
     updatedAt: when,
+    transactionId: transactionId,
   );
 }
 
