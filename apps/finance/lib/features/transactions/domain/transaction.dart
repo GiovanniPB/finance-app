@@ -23,8 +23,10 @@ enum TransactionType {
   /// Se o valor **sai** do saldo disponível.
   ///
   /// `savings` conta como saída porque o dinheiro deixa o saldo gastável mesmo
-  /// sem ser despesa. `transfer` ainda não é produzido pela UI: modelar direito
-  /// exige conta de origem e destino, o que fica para depois da Fase 0.
+  /// sem ser despesa. `transfer` **não** conta em nenhum dos dois lados: o
+  /// dinheiro só trocou de bolso. Quem o produz é a ingestão do Open Finance,
+  /// no crédito de cartão (pagar a fatura); a UI não o oferece, porque escolher
+  /// origem e destino à mão é desenho que ainda não existe.
   bool get isOutflow =>
       this == TransactionType.expense || this == TransactionType.savings;
 }

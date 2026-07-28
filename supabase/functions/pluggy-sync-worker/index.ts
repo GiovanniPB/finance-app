@@ -28,7 +28,7 @@
 // Pluggy, não dado duplicado.
 //
 // ─────────────────────────────────────────────────────────────────────────
-// 3. PROPRIEDADE DE COLUNA: POR QUE NÃO SE USA `upsert`
+// 3. PROPRIEDADE DE COLUNA: POR QUE NÃO SE USA `upsert` QUE ATUALIZA
 //
 // O `upsert` do supabase-js manda todas as colunas do payload no `DO UPDATE`.
 // Isso apagaria `category_id` e a `description` que o usuário editou a cada
@@ -37,8 +37,28 @@
 // UPDATE carrega **só** colunas da Pluggy. `description` é escrita **apenas no
 // INSERT**; depois disso ela é do usuário.
 //
+// O INSERT usa `ignoreDuplicates: true`, que gera `ON CONFLICT DO NOTHING` —
+// não é o `upsert` que a regra proíbe, porque ele **nunca atualiza coluna
+// nenhuma**. Ele existe para uma colisão não derrubar a página inteira: um
+// `INSERT` de várias linhas é atômico, e foi assim que três páginas de um cartão
+// desapareceram em silêncio na primeira ingestão real (item 4).
+//
 // ─────────────────────────────────────────────────────────────────────────
-// 4. O QUE ESTA FATIA NÃO FAZ
+// 4. FALHA DE ESCRITA SOBE, E FICA GRAVADA
+//
+// A primeira versão engolia erro de leitura (`return 0`) e tratava `23505` como
+// benigno sem conferir quantas linhas entraram — então "página perdida" e
+// "página gravada" eram indistinguíveis, e o evento era marcado como processado
+// com sucesso nos dois casos. 1.433 lançamentos sumiram assim.
+//
+// Agora toda falha de escrita **lança**: o `attempts` sobe, a mensagem vai para
+// `last_error` (legível por SQL, diferente de `console.log`) e o evento volta na
+// próxima passada. E o resultado de cada página — quantas chegaram, quantas
+// foram filtradas, quantas colidiram, quantas entraram — é gravado no `payload`
+// do evento, ao lado da convenção observada.
+//
+// ─────────────────────────────────────────────────────────────────────────
+// 5. O QUE ESTA FATIA NÃO FAZ
 //
 //  * `transactions/deleted` — a Pluggy apaga transação depois de merge. Aqui o
 //    evento é registrado e **não** apaga nada: apagar lançamento que o usuário
@@ -60,6 +80,13 @@ import {
   pluggyGet,
   requiredEnv,
 } from '../_shared/pluggy.ts';
+
+import {
+  dedupeByExternalId,
+  type Direction,
+  directionByType,
+  resolveDirection,
+} from '../_shared/ingest.ts';
 
 /// Quantos eventos uma execução processa. Baixo de propósito: o webhook aciona
 /// o worker a cada evento, então a fila raramente acumula — e um lote grande
@@ -154,8 +181,9 @@ function mapAccountType(account: PluggyAccount): string {
 ///
 /// O valor absoluto é deliberado: a coluna é positiva por constraint e a direção
 /// mora em `type` na nossa tabela, como em todo o resto do app. Quem decide essa
-/// direção a partir do dado da Pluggy é [resolveDirection] — e é lá que está
-/// registrado por que o **sinal** manda, não o `type` deles.
+/// direção a partir do dado da Pluggy é `resolveDirection`, em
+/// `_shared/ingest.ts` — e é lá que está a tabela-verdade medida nos dois
+/// conectores, com teste.
 function toMinor(amount: number | undefined): number | null {
   if (typeof amount !== 'number' || !Number.isFinite(amount)) return null;
   const minor = Math.round(Math.abs(amount) * 100);
@@ -163,55 +191,28 @@ function toMinor(amount: number | undefined): number | null {
 }
 
 /**
- * Direção do lançamento: **o sinal decide, não o `type`.**
+ * Aplica a regra de direção (`_shared/ingest.ts`) e conta a discordância com o
+ * `type` declarado.
  *
- * ─────────────────────────────────────────────────────────────────────────
- * MEDIDO, NÃO DEDUZIDO (2026-07-28, sandbox Pluggy Bank)
- *
- * | Conta    | `type`              | sinal do `amount` |
- * |----------|---------------------|-------------------|
- * | corrente | 14 DEBIT / 3 CREDIT | 14 neg / 3 pos    |
- * | cartão   | 9 CREDIT, 0 DEBIT   | **9 negativos**   |
- *
- * As compras do cartão (Netflix, Spotify, academia) chegam como
- * `CREDIT -89.9`. A primeira versão confiava em `type` e gravou 27 compras como
- * **receita** — R$ 1.509,30 de gasto virando entrada, com a soma delas batendo
- * exatamente com a fatura. Bug encontrado conferindo o extrato, não por teste.
- *
- * O sinal, por outro lado, é coerente nas duas contas: negativo é dinheiro que
- * saiu. É nele que a direção passa a se basear.
- *
- * ─────────────────────────────────────────────────────────────────────────
- * POR QUE O CRUZAMENTO CONTINUA SENDO FEITO
- *
- * A doc oficial da Pluggy afirma o **oposto** do sandbox: compra em cartão
- * seria `DEBIT` com valor **positivo**. Divergem nos dois campos, então não há
- * regra derivável da documentação que seja segura.
- *
- * Como não se sabe qual dos dois mundos é o de produção, a discordância entre
- * sinal e `type` é **contada e logada** em vez de ignorada. Se conta real vier
- * na convenção da doc, isso aparece no log em vez de virar dinheiro errado
- * descoberto por alguém conferindo extrato — que é como este bug apareceu.
+ * A tabela-verdade, o porquê de o tipo de conta decidir e o caso conhecido do
+ * sandbox moram no módulo puro, junto do teste que os exercita. Aqui fica só a
+ * parte que precisa de estado: quantas linhas da página discordaram.
  */
-function resolveDirection(
+function directionOf(
   transaction: PluggyTransaction,
   accountType: string,
-): 'income' | 'expense' {
-  const amount = transaction.amount;
-  const bySign = typeof amount === 'number' && amount < 0
-    ? 'expense'
-    : 'income';
-  const byType = transaction.type === 'CREDIT' ? 'income' : 'expense';
+  disagreements: { count: number },
+): Direction {
+  const bySign = resolveDirection(transaction.amount, accountType);
+  const byType = directionByType(transaction.type, accountType);
 
-  if (bySign !== byType) {
-    // Esperado hoje em cartão; inesperado em conta corrente. Os dois valem
-    // registro, porque uma mudança de convenção do fornecedor aparece aqui.
-    console.warn('Sinal e type discordam sobre a direção', {
-      accountType,
-      type: transaction.type ?? 'ausente',
-      sinal: typeof amount === 'number' && amount < 0 ? 'negativo' : 'positivo',
-      escolhido: bySign,
-    });
+  if (byType !== null && byType !== bySign) {
+    // Com a regra ciente do tipo de conta, os dois eixos concordaram em **tudo**
+    // que chegou de conta real. Discordância aqui é anomalia de verdade — uma
+    // convenção nova do fornecedor —, não o barulho esperado que era antes. A
+    // contagem vai para o `payload` do evento; `console.warn` não é legível por
+    // SQL nem pelo CLI desta versão.
+    disagreements.count += 1;
   }
 
   return bySign;
@@ -245,8 +246,7 @@ async function personalSpaceId(
     .maybeSingle();
 
   if (error) {
-    console.error('Falha ao resolver o espaço pessoal', error);
-    return null;
+    throw new Error(`Falha ao resolver o espaço pessoal: ${error.message}`);
   }
   return data?.id ?? null;
 }
@@ -415,9 +415,10 @@ async function syncAccounts(
     .select('id, external_id')
     .eq('connection_id', connection.id);
 
+  // Lança pelo mesmo motivo da leitura de transações (item 4): devolver o mapa
+  // vazio aqui encerraria o evento com sucesso e sem ingerir nada.
   if (readError) {
-    console.error('Falha ao ler as contas existentes', readError);
-    return byExternalId;
+    throw new Error(`Falha ao ler as contas existentes: ${readError.message}`);
   }
   const existingByExternal = new Map<string, string>(
     (existing ?? [])
@@ -445,7 +446,11 @@ async function syncAccounts(
           balance_as_of: now,
         })
         .eq('id', known);
-      if (error) console.error('Falha ao atualizar conta importada', error);
+      if (error) {
+        throw new Error(
+          `Falha ao atualizar conta importada: ${error.message}`,
+        );
+      }
       byExternalId.set(account.id, {
         id: known,
         accountType: mapAccountType(account),
@@ -469,8 +474,7 @@ async function syncAccounts(
       .maybeSingle();
 
     if (error) {
-      console.error('Falha ao inserir conta importada', error);
-      continue;
+      throw new Error(`Falha ao inserir conta importada: ${error.message}`);
     }
     if (inserted?.id) {
       byExternalId.set(account.id, {
@@ -510,18 +514,37 @@ async function syncTransactions(
     );
 
     if (transactions.length > 0) {
-      await recordConvention(
-        supabase,
-        eventRowId,
-        observeDirectionConvention(account, transactions),
-      );
-      written += await writeTransactions(
-        supabase,
-        transactions,
-        connection,
-        account,
-        spaceId,
-      );
+      const observation = {
+        ...observeDirectionConvention(account, transactions),
+        pagina: pages,
+      };
+
+      // A observação é gravada **junto** com o resultado da escrita, e também
+      // quando a escrita falha: uma página que não entrou tem de deixar rastro
+      // legível por SQL, que é justamente o que faltava quando três delas
+      // desapareceram.
+      try {
+        const outcome = await writeTransactions(
+          supabase,
+          transactions,
+          connection,
+          account,
+          spaceId,
+        );
+        await recordConvention(supabase, eventRowId, {
+          ...observation,
+          escrita: outcome,
+        });
+        written += outcome.inseridas + outcome.atualizadas;
+      } catch (error) {
+        await recordConvention(supabase, eventRowId, {
+          ...observation,
+          escrita: {
+            erro: error instanceof Error ? error.message : String(error),
+          },
+        });
+        throw error;
+      }
     }
 
     // O cursor volta como query relativa (`?accountId=...&after=...`); o
@@ -541,12 +564,30 @@ async function syncTransactions(
   return written;
 }
 
+/// O que uma página de transação produziu. Gravado no `payload` do evento: é a
+/// única forma de saber, por SQL, se uma página entrou ou se sumiu.
+interface WriteOutcome {
+  /// Chegaram na página (já sem as `PENDING`).
+  readonly recebidas: number;
+  /// Recusadas por não ter valor utilizável ou data válida.
+  readonly semValorOuData: number;
+  /// Descartadas por repetir um `external_id` da **mesma** página.
+  readonly colididas: number;
+  readonly existentes: number;
+  readonly atualizadas: number;
+  readonly inseridas: number;
+  /// Linhas que o INSERT não gravou por já existirem (corrida entre execuções).
+  readonly ignoradas: number;
+  /// Linhas cujo sinal discordou do `type` declarado.
+  readonly direcaoEmDuvida: number;
+}
+
 /**
  * Grava um lote de transações respeitando a propriedade de coluna.
  *
- * Ver o item 3 do cabeçalho: nada de `upsert`. O UPDATE das linhas conhecidas
- * carrega só colunas da Pluggy; `description` e `category_id` nunca aparecem
- * nele.
+ * Ver o item 3 do cabeçalho: o UPDATE das linhas conhecidas carrega só colunas
+ * da Pluggy; `description` e `category_id` nunca aparecem nele. E o item 4:
+ * falha de escrita **lança** em vez de virar um número que parece sucesso.
  */
 async function writeTransactions(
   supabase: SupabaseClient,
@@ -554,20 +595,38 @@ async function writeTransactions(
   connection: ConnectionRow,
   account: IngestedAccount,
   spaceId: string,
-): Promise<number> {
+): Promise<WriteOutcome> {
+  const disagreements = { count: 0 };
+
   // `providerId` é preferido quando existe (conexão regulada): ele é o mesmo
   // para a mesma transação em items diferentes, então sobrevive a reconectar o
   // banco. Ver o item 4 do cabeçalho da migration 20260728033219.
-  const keyed = transactions
+  const usable = transactions
     .map((transaction) => ({
-      transaction,
       externalId: transaction.providerId?.trim() || transaction.id,
-      amountMinor: toMinor(transaction.amount),
-      occurredAt: isoOrNull(transaction.date),
+      value: {
+        transaction,
+        amountMinor: toMinor(transaction.amount),
+        occurredAt: isoOrNull(transaction.date),
+      },
     }))
-    .filter((entry) => entry.amountMinor !== null && entry.occurredAt !== null);
+    .filter((entry) =>
+      entry.value.amountMinor !== null && entry.value.occurredAt !== null
+    );
 
-  if (keyed.length === 0) return 0;
+  const { unique: keyed, collided } = dedupeByExternalId(usable);
+
+  const empty: WriteOutcome = {
+    recebidas: transactions.length,
+    semValorOuData: transactions.length - usable.length,
+    colididas: collided,
+    existentes: 0,
+    atualizadas: 0,
+    inseridas: 0,
+    ignoradas: 0,
+    direcaoEmDuvida: 0,
+  };
+  if (keyed.length === 0) return empty;
 
   const { data: existing, error: readError } = await supabase
     .from('transactions')
@@ -575,9 +634,12 @@ async function writeTransactions(
     .eq('account_id', account.id)
     .in('external_id', keyed.map((entry) => entry.externalId));
 
+  // Lança: uma leitura que falhou não distingue "nada existe" de "não sei o que
+  // existe", e a primeira versão tratava as duas como a primeira.
   if (readError) {
-    console.error('Falha ao ler transações existentes', readError);
-    return 0;
+    throw new Error(
+      `Falha ao ler transações existentes: ${readError.message}`,
+    );
   }
   const existingByExternal = new Map<string, string>(
     (existing ?? [])
@@ -588,11 +650,12 @@ async function writeTransactions(
   const toInsert: Record<string, unknown>[] = [];
   let updated = 0;
 
-  for (const entry of keyed) {
-    const { transaction, externalId, amountMinor, occurredAt } = entry;
+  for (const { externalId, value } of keyed) {
+    const { transaction, amountMinor, occurredAt } = value;
     const known = existingByExternal.get(externalId);
     const descriptionRaw = transaction.descriptionRaw?.trim()
       || transaction.description?.trim() || null;
+    const type = directionOf(transaction, account.accountType, disagreements);
 
     if (known) {
       const { error } = await supabase
@@ -601,15 +664,18 @@ async function writeTransactions(
           amount_minor: amountMinor,
           currency: transaction.currencyCode ?? 'BRL',
           occurred_at: occurredAt,
-          type: resolveDirection(transaction, account.accountType),
+          type,
           description_raw: descriptionRaw,
         })
         .eq('id', known);
+      // Este UPDATE é também o reparo: uma direção gravada errado numa versão
+      // anterior é corrigida no reprocessamento.
       if (error) {
-        console.error('Falha ao atualizar transação importada', error);
-      } else {
-        updated += 1;
+        throw new Error(
+          `Falha ao atualizar transação importada: ${error.message}`,
+        );
       }
+      updated += 1;
       continue;
     }
 
@@ -617,7 +683,7 @@ async function writeTransactions(
       space_id: spaceId,
       account_id: account.id,
       created_by: connection.owner_id,
-      type: resolveDirection(transaction, account.accountType),
+      type,
       amount_minor: amountMinor,
       currency: transaction.currencyCode ?? 'BRL',
       occurred_at: occurredAt,
@@ -630,18 +696,37 @@ async function writeTransactions(
     });
   }
 
+  let inserted = 0;
   if (toInsert.length > 0) {
-    const { error } = await supabase.from('transactions').insert(toInsert);
+    // `ignoreDuplicates: true` gera `ON CONFLICT DO NOTHING`: não atualiza
+    // coluna nenhuma (a regra do item 3 continua valendo) e uma linha que
+    // apareceu entre o SELECT e o INSERT deixa de derrubar a página inteira.
+    // O `select` devolve **só o que entrou**, que é como a contagem passa a ser
+    // verdade em vez de `toInsert.length`.
+    const { data, error } = await supabase
+      .from('transactions')
+      .upsert(toInsert, {
+        onConflict: 'account_id,external_id',
+        ignoreDuplicates: true,
+      })
+      .select('id');
+
     if (error) {
-      // `23505` = alguém inseriu a mesma transação entre o nosso SELECT e o
-      // INSERT (duas execuções do worker). É benigno: a linha existe.
-      if (error.code !== '23505') {
-        console.error('Falha ao inserir transações importadas', error);
-      }
+      throw new Error(
+        `Falha ao inserir transações importadas: ${error.message}`,
+      );
     }
+    inserted = data?.length ?? 0;
   }
 
-  return updated + toInsert.length;
+  return {
+    ...empty,
+    existentes: existingByExternal.size,
+    atualizadas: updated,
+    inseridas: inserted,
+    ignoradas: toInsert.length - inserted,
+    direcaoEmDuvida: disagreements.count,
+  };
 }
 
 /** Processa um evento. Lança para o chamador registrar a tentativa. */

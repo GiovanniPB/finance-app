@@ -386,10 +386,10 @@ Campos de `Transaction`:
 | `description` | string | Descrição limpa/normalizada. |
 | `descriptionRaw` | string\|null | Descrição original da instituição. |
 | `currencyCode` | string | ISO da moeda. |
-| `amount` | number | Valor. |
+| `amount` | number | Valor, **com sinal que depende do tipo de conta**. Em conta corrente/poupança: negativo saiu, positivo entrou. **Em cartão a convenção é invertida** — a doc oficial diz *"For credit cards, it will be positive (debit) when its an expense (adds to the balance), while it will be negative (credit) when the person pays the bill"*, e foi isso que chegou de conta real. É deste campo que a direção é derivada, em `_shared/ingest.ts` (`resolveDirection`), que tem a tabela-verdade medida e teste. |
 | `amountInAccountCurrency` | number | Valor na moeda da conta (se diferente). |
 | `date` | date-time | Data da transação. |
-| `type` | `DEBIT` \| `CREDIT` | Direção declarada. ⚠️ **NÃO CONFIE NELE — use o sinal de `amount`.** Medido no sandbox em 2026-07-28: compra de cartão chega como `CREDIT` com `amount` **negativo**, e confiar em `type` gravou 27 compras como receita. O sinal é coerente nas duas contas: negativo = saiu. A doc oficial afirma o oposto (compra = `DEBIT`, valor positivo), então os dois campos divergem entre doc e sandbox. Ver `resolveDirection` em `pluggy-sync-worker`. |
+| `type` | `DEBIT` \| `CREDIT` | Direção declarada: `DEBIT` saiu, `CREDIT` entrou (num cartão a "entrada" é o abatimento da fatura). Concorda com o sinal em tudo que chegou de **conta real**, e é usado só para **cruzar** com ele — discordância é contada no `payload` do evento. ⚠️ O **cartão do sandbox** inverte os dois campos ao mesmo tempo (compra chega como `CREDIT` negativa), então nenhuma regra acerta aquele caso e nenhum cruzamento o detecta. Duas regras já foram tiradas de um conector só e as duas gravaram dinheiro errado: uma amostra de tamanho um não é uma convenção. |
 | `balance` | number\|null | Saldo após a transação (pode ser null). |
 | `status` | `POSTED` \| `PENDING` | Liquidada / autorizada mas não liquidada. |
 | `category` / `categoryId` | string | Categoria e ID (ver Categories). |

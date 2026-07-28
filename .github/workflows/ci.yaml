@@ -44,6 +44,13 @@ jobs:
       - name: Test (with coverage)
         run: dart pub global run melos run coverage --no-select
 
+      # As regras puras das Edge Functions. Node executa TypeScript direto e o
+      # módulo não importa nada, então isto não custa Deno nem Docker — e é o
+      # único gate que cobre a direção do lançamento importado, que já foi
+      # gravada errada duas vezes.
+      - name: Test (regras da ingestão)
+        run: node --test 'supabase/functions/_shared/*.test.ts'
+
       - name: Coverage gate (>= 80%)
         run: bash tool/check_coverage.sh 80
 

@@ -4,15 +4,14 @@ Documento vivo. O **PRD** define *o quê* e *por quê*; este arquivo registra
 *onde estamos*. Atualize junto com o PR que muda o estado.
 
 - Última atualização: **2026-07-28**
-- Branch de trabalho atual: `feat/open-finance-ingestao`, terceira de uma pilha
-  sobre `feat/open-finance-fundacao` (PR #25, verde) e `feat/open-finance-cliente`
-  (PR #26). ⚠️ **PR empilhado não tem CI**: o workflow dispara só em
-  `pull_request` para `main`, então o #26 nunca teve check — a verificação dele foi
-  local (Definição de Pronto completa), não do CI. O PR #24
-  (segurança e idioma) está **mergeado**. Os únicos outros PRs abertos são quatro do
-  dependabot (#1, #2, #8, #9), deixados para depois por decisão; os dois de pub
-  (`sqlite3`, `sqlite_async`) tocam a camada do PowerSync e merecem uma passada
-  pelos testes de integração.
+- Branch de trabalho atual: `fix/direcao-e-perda-na-ingestao`, a partir da
+  `main`. **A pilha inteira do Open Finance está mergeada** (PRs #27, #28 e #29;
+  o #28 passou com CI verde). ⚠️ Fica registrada a armadilha que a pilha revelou:
+  **PR empilhado não tem CI**, porque o workflow dispara só em `pull_request` para
+  `main` — o #26 nunca teve check, e a verificação dele foi local, o que não é a
+  mesma coisa. Os únicos PRs abertos são quatro do dependabot (#1, #2, #8, #9),
+  deixados para depois por decisão; os dois de pub (`sqlite3`, `sqlite_async`)
+  tocam a camada do PowerSync e merecem uma passada pelos testes de integração.
 - ✅ **Sync rules publicadas** e **segredos da Pluggy configurados** (confirmado
   por `supabase secrets list`, que mostra só os digests). A Edge Function
   `pluggy-connect-token` está **deployada e no ar**: `POST` sem `Authorization`
@@ -22,7 +21,8 @@ Documento vivo. O **PRD** define *o quê* e *por quê*; este arquivo registra
 
 ## Estado em uma frase
 
-**A Fase 1 começou pelo Pilar 3, e a fatia de poupança está fechada.** A Fase 0
+**O pipeline de Open Finance ingere dado de banco real — e foi conferir esse
+dado que achou os dois bugs que teste nenhum acharia.** A Fase 0
 está fechada (apresentação, gasto em três toques, edição, orçamento com alerta
 em 80% e 100%, categoria própria, troca de espaço, contas completas), o
 lançamento sabe de que conta saiu, e a camada local tem 31 testes de integração
@@ -69,13 +69,19 @@ categorização por IA.
 8. **Nunca aplique schema na nuvem por fora de `supabase db push`.** O
    `apply_migration` do MCP grava um histórico que o repo não reproduz — leia a
    seção "A armadilha do histórico de migrations" antes de tocar em schema.
-9. **Se as telas ficarem vazias ou o registro rápido travar em "nenhuma
-   categoria", suspeite das sync rules publicadas.** O arquivo
-   `powersync/sync_rules.yaml` do repo **não é publicado automaticamente**: toda
-   vez que ele muda, é preciso colar o conteúdo no editor de Sync Rules do
-   dashboard do PowerSync e fazer Deploy. Para diagnosticar, inspecione o SQLite
-   local do app (`ps_buckets` mostra quais buckets chegaram) — foi assim que se
-   descobriu que faltava o bucket `global`.
+9. **Antes de mexer na direção do lançamento importado, leia
+   `supabase/functions/_shared/ingest.ts`.** A regra já foi trocada duas vezes,
+   nas duas direções, e as duas vezes gravou dinheiro errado — porque cada uma
+   foi tirada de **um** conector. A tabela-verdade medida nos dois está lá, com
+   teste (`node --test 'supabase/functions/_shared/*.test.ts'`), inclusive o caso
+   do sandbox que fica errado de propósito. Não "conserte" esse caso.
+10. **Se as telas ficarem vazias ou o registro rápido travar em "nenhuma
+    categoria", suspeite das sync rules publicadas.** O arquivo
+    `powersync/sync_rules.yaml` do repo **não é publicado automaticamente**: toda
+    vez que ele muda, é preciso colar o conteúdo no editor de Sync Rules do
+    dashboard do PowerSync e fazer Deploy. Para diagnosticar, inspecione o SQLite
+    local do app (`ps_buckets` mostra quais buckets chegaram) — foi assim que se
+    descobriu que faltava o bucket `global`.
 
 ---
 
@@ -301,33 +307,70 @@ manual, no simulador, e cada fatia a registra no PR.
 
 Estado em 2026-07-28, fim da sessão:
 
-0. **Reconectar um banco e ver o dado chegar.** O pipeline inteiro está no ar
-   pela primeira vez: schema, sync rules, as três Edge Functions deployadas e o
-   app com a ponte JS corrigida. Credenciais de sandbox: `user-ok` /
-   `password-ok`, MFA `123456`. O que se prova nessa passagem é o que ainda não
-   tem prova nenhuma: se o worker roda, se o mapeamento de status/subtipo/sinal
-   está certo, e se conta e lançamento aparecem no app.
+0. **Deployar o worker corrigido e reprocessar.** É o único passo pendente da
+   fatia atual, e depende de permissão: o `supabase functions deploy` foi
+   bloqueado pelo classificador de permissões nesta sessão.
 
-   **O que já foi provado rodando** (2026-07-28, iPhone 17 Pro): a
-   `pluggy-connect-token` responde 200 contra a Pluggy real, o widget carrega, a
-   allowlist não bloqueia o fluxo legítimo, o sandbox aparece, e o fluxo completa
-   com "dados coletados com sucesso". As guardas do webhook também: 405 em GET,
-   400 em corpo inválido e em payload sem `eventId`, e **200 + zero linhas
-   gravadas** em item que não é nosso.
+   ```bash
+   supabase functions deploy pluggy-sync-worker
+   ```
 
-   **Para conta real**, as credenciais precisam ser de uma aplicação de
-   **produção** — a atual é uma aplicação Demo, que só conecta sandbox. O
-   [Meu Pluggy](https://www.pluggy.ai/meu-pluggy) dá isso de graça para contas
-   nominais do próprio titular. Trocar troca de aplicação: os items da anterior
-   deixam de ser visíveis.
-1. **A exposição das funções está fechada, e o advisor caiu de 10 WARN para 1.**
+   Depois, reprocessar os dois items (o worker drena a fila; o SQL e o `curl`
+   estão em `supabase/functions/README.md`, seção Diagnóstico) e conferir:
+
+   | O que conferir | Esperado |
+   |---|---|
+   | cartão `ultraviolet-black` | 305 compras viram **despesa**; os 12 créditos viram **transferência** |
+   | contagem de linhas do cartão | sai de 317 para ~1.750, se a perda de página estava na colisão de `external_id` |
+   | `payload -> '_convencao' -> N -> 'escrita'` | `colididas` diz se `providerId` colapsa parcela; `erro` diz o que falhou |
+   | cartão do sandbox | as 9 compras viram **transferência** — é o custo conhecido e documentado (ver abaixo) |
+
+1. **A ingestão gravou dinheiro errado duas vezes, e a segunda medição é a que
+   vale.** O que a primeira ingestão real provou, e que teste nenhum pegaria:
+
+   **A convenção de sinal depende do tipo de conta.** Em conta corrente,
+   negativo saiu. **Em cartão é invertido**: compra é positiva, e negativo é
+   abatimento de fatura. A doc oficial diz exatamente isso, e foi o que chegou do
+   Nubank — 305 compras de cartão que a regra "o sinal manda" (tirada só do
+   sandbox) gravou como **receita**. Duas regras já foram derivadas de um
+   conector só, e as duas erraram: **uma amostra de tamanho um não é uma
+   convenção.**
+
+   **O cartão do sandbox continua errado, de propósito.** Ele manda compra como
+   `CREDIT` **negativa** — inverte os dois campos ao mesmo tempo, o que é
+   exatamente a assinatura de um pagamento de fatura. Nenhuma regra derivada da
+   doc acerta esse caso e nenhum cruzamento o detecta. É fixture defeituosa; o
+   que precisa estar certo é conta real. Está escrito no teste para ninguém
+   "consertar" isso e quebrar produção de novo.
+
+   **Crédito de cartão é `transfer`, não receita.** Pagar a fatura é dinheiro
+   trocando de bolso: `transfer` não entra em `inflow` nem em `outflow`, e o
+   gasto já foi contado quando a compra entrou. Sem isso, um pagamento de
+   R$ 10.139,02 apareceria como receita do mês. Custo aceito: estorno também fica
+   invisível no resumo.
+
+   **1.433 lançamentos sumiram em silêncio.** O worker buscou 4 páginas de um
+   cartão (1.750 transações) e só a última virou linha. O código engolia `23505`
+   como benigno e devolvia `toInsert.length` mesmo com o INSERT falhando — e um
+   INSERT de várias linhas é **atômico**, então uma colisão derruba as outras 499.
+   O evento foi marcado como processado com sucesso. Agora falha de escrita
+   **lança**, o INSERT usa `ON CONFLICT DO NOTHING`, a contagem vem do que
+   entrou de verdade, e o resultado de cada página é gravado no `payload` do
+   evento.
+
+   **`console.log` de Edge Function não é diagnóstico.** A saída não é legível
+   por SQL nem pelo CLI desta versão, só pelo dashboard — a primeira
+   instrumentação rodou e não houve como ler o resultado. Toda observação nova
+   vai para o banco.
+
+2. **A exposição das funções está fechada, e o advisor caiu de 10 WARN para 1.**
    O único que sobrou é o toggle de **proteção de senha vazada** no dashboard —
    um clique, sem código nem migration. Nada mais de segurança pende no repo.
    O advisor também passou a mostrar **1 INFO** (`rls_enabled_no_policy` em
    `webhook_events`), que é o desenho pretendido e não um defeito: RLS ligada com
    zero policies é justamente como se diz "server-only". Não "conserte"
    adicionando policy.
-2. **Ver o app rodando ficou pela metade** (item herdado, ainda válido). O build
+3. **Ver o app rodando ficou pela metade** (item herdado, ainda válido). O build
    e o launch funcionaram no iPhone 17 Pro, o app chegou à tela de login, e o
    login é passo manual. O roteiro que ainda não foi percorrido: a folha
    "Guardei um valor" com o campo "Saiu de"; o lançamento de poupança na lista
@@ -339,13 +382,13 @@ Estado em 2026-07-28, fim da sessão:
    contribuições no Postgres.
    Agora há um segundo motivo para percorrê-lo: a mensagem de erro de login
    traduzida só se vê rodando (digite a senha errada e leia a frase).
-3. **A cadeia de migrations continua sem ter sido replicada do zero.** A nova
+4. **A cadeia de migrations continua sem ter sido replicada do zero.** A nova
    `20260728030625` rodou num Postgres de verdade (`supabase db push`, e a
    verificação como papel `authenticated` passou), mas `supabase db reset` — as
    **dez** em sequência num banco vazio — segue pendente por exigir Docker. É o
    débito médio mais antigo e o único que ainda separa "aplica sobre o schema
    atual" de "o repo descreve o banco".
-4. **Fora do repo, pendente com o usuário:** o toggle de proteção de senha
+5. **Fora do repo, pendente com o usuário:** o toggle de proteção de senha
    vazada, e **rotacionar as credenciais de Postgres, Redis e partnr** que um
    `claude mcp list` imprimiu em texto claro na sessão de 2026-07-28. Esta
    segunda é a mais urgente das duas e não depende do projeto.
@@ -646,15 +689,82 @@ outras para fora do viewport, e `find.text` de item que o `ListView` não constr
 falhava como se a seção tivesse sumido. Virou o helper `scrollTo`, e `tapVisible`
 agora rola sozinho quando o alvo ainda não existe.
 
+### Concluído na fatia de ingestão (branch `feat/open-finance-ingestao`, PR #28)
+
+| Item | Onde |
+|---|---|
+| `pluggy-webhook`: enfileira em `webhook_events`, sem confiar no payload | `supabase/functions/pluggy-webhook/index.ts` |
+| `pluggy-sync-worker`: `GET /items` → `/accounts` → `/v2/transactions` (cursor) → escrita | `supabase/functions/pluggy-sync-worker/index.ts` |
+| Instrumentação da convenção de sinal, gravada no `payload` do evento | idem |
+| `PluggyNotFound` — 404 tem tipo próprio, porque não é falha: é fato | `supabase/functions/_shared/pluggy.ts` |
+
+Quatro decisões que não se leem no código:
+
+- **O header secreto do webhook não existe neste caminho, e o ADR pedia.** A
+  Pluggy só envia `headers` customizados em webhook registrado por
+  `POST /webhooks`; o nosso `webhookUrl` vai no Connect Token, e por ali o POST
+  chega sem header algum. Exigi-lo recusaria 100% dos webhooks. A autoridade vem
+  de três lugares que não dependem de quem chama: o payload nunca é confiado, só
+  item que já existe é aceito, e `event_id` é `unique`.
+- **pgmq não entrou.** `webhook_events` já tinha `processed_at`, `attempts`,
+  `last_error` e índice parcial; pgmq guardaria os mesmos fatos num segundo lugar
+  e criaria duas verdades para reconciliar.
+- **`item/deleted` era inalcançável.** O worker fazia `GET /items/{id}` antes de
+  olhar o tipo do evento, e para item deletado esse GET é 404 por definição —
+  então o ramo que marcava a conexão como removida nunca executava, e três
+  conexões ficaram `active` apontando para items mortos.
+- **Lançamento importado nasce no espaço pessoal do dono**, não no espaço ativo
+  da sessão: senão o mesmo extrato cairia em lugares diferentes conforme a aba
+  que estivesse aberta quando o webhook chegou.
+
+### Concluído na fatia de correção da ingestão (branch `fix/direcao-e-perda-na-ingestao`)
+
+Duas correções que só a **primeira ingestão real** revelou, e nenhuma das duas
+aparecia em teste porque as Edge Functions não tinham teste nenhum.
+
+| Item | Onde |
+|---|---|
+| `_shared/ingest.ts` — as decisões puras da ingestão, com a tabela-verdade medida nos dois conectores | `supabase/functions/_shared/ingest.ts` |
+| 16 testes das regras, rodando em `node --test` (sem Deno, sem Docker, sem rede) | `supabase/functions/_shared/ingest.test.ts` |
+| Direção ciente do tipo de conta: em cartão o sinal é invertido, e crédito de cartão é `transfer` | idem |
+| Escrita que falha **lança** em vez de devolver número; `ON CONFLICT DO NOTHING`; contagem do que entrou de verdade | `pluggy-sync-worker/index.ts` |
+| Resultado de cada página gravado no `payload` do evento (chegaram, filtradas, colididas, entraram) | idem |
+| Lista de lançamentos nomeia "Transferência" e usa ícone próprio | `.../transactions/presentation/transaction_list.dart` |
+| Gate de CI para as regras da ingestão | `.github/workflows/ci.yaml` |
+| Referência da Pluggy corrigida nos campos `amount` e `type` | `docs/pluggy-api-reference.md` |
+
+Cinco coisas que não se leem no código:
+
+- **Uma amostra de tamanho um não é uma convenção.** A regra anterior foi tirada
+  do sandbox e gravou 305 compras de cartão real como receita; a anterior a ela
+  foi tirada da doc e gravou 27 compras de sandbox como receita. O que resolveu
+  não foi escolher melhor entre `type` e sinal, foi perceber que **o tipo de
+  conta é parte da regra**.
+- **O erro do sandbox está escrito no teste como esperado.** Compra lá chega
+  como `CREDIT` negativa, que é a assinatura exata de um pagamento de fatura —
+  indistinguível. Documentar o caso errado é o que impede a terceira inversão.
+- **Um INSERT de várias linhas é atômico**, e era esse o mecanismo da perda: uma
+  colisão de `external_id` derrubava a página de 500 inteira, `23505` era tratado
+  como benigno sem log, e a função devolvia `toInsert.length` de qualquer forma.
+  Três falhas pequenas compondo uma perda de 1.433 lançamentos que se reportou
+  como sucesso.
+- **`ON CONFLICT DO NOTHING` não é o `upsert` que o ADR proíbe.** O que a regra
+  proíbe é sobrescrever coluna do usuário no `DO UPDATE`; `DO NOTHING` não
+  atualiza nada. E o `select` depois dele é o que torna a contagem verdade.
+- **A contagem de colisão é o próximo dado a ler.** Se `colididas` vier alto, o
+  `providerId` do ADR 0005 está colapsando lançamentos distintos (parcela é o
+  suspeito) e o remédio é a chave de dedup, não o insert. A instrumentação
+  existe para responder isso com medição em vez de palpite.
+
 ### O que falta na Fase 1
 
 | Item | Estado |
 |---|---|
 | Open Finance — schema | ✅ Fundação pronta e na nuvem (fatia acima). |
-| Open Finance — `pluggy-connect-token` | ✅ Deployada e no ar (401 sem `Authorization` verificado). **Nunca exercitada contra a Pluggy de verdade**: o caminho 200 exige JWT de usuário e só acontece pelo app. |
-| Open Finance — `pluggy-webhook` e `pluggy-sync-worker` | Não existem. O webhook precisa de `verify_jwt = false` e do header secreto; o worker é quem faz `GET /items` → `/accounts` → `/v2/transactions` e o UPSERT com as regras de propriedade de coluna. |
-| Open Finance — widget Connect | ✅ Internalizado, com 28 testes das partes puras. **Nunca rodou num device.** |
-| Open Finance — caminho no app | ✅ Domínio, dados, providers, tela e a seção no Perfil. **O fluxo nunca foi percorrido de ponta a ponta** — é o item zero de "Onde retomar". |
+| Open Finance — `pluggy-connect-token` | ✅ Deployada e **exercitada de verdade**: responde 200 contra a Pluggy real, e o widget aceita o token que ela emite. |
+| Open Finance — `pluggy-webhook` e `pluggy-sync-worker` | ✅ Existem, deployados e rodaram contra sandbox **e** conta real: 6 eventos, 4 contas, 642 lançamentos, zero duplicata. ⚠️ A versão corrigida da direção e da perda de página **ainda não foi deployada** — é o item zero de "Onde retomar". |
+| Open Finance — widget Connect | ✅ Internalizado, com 28 testes das partes puras, e **rodou num device**: o canal JS conversa, a allowlist não bloqueia o fluxo legítimo e o `SUCCESS` chega com `item_id`. |
+| Open Finance — caminho no app | ✅ Percorrido de ponta a ponta no iPhone 17 Pro, com sandbox e com conta real. O que falta é conferir o **reparo** dos dados depois do próximo deploy. |
 | Detecção/confirmação automática de contribuição | Metade pronta: schema e UI existem; falta quem crie a linha (ingestão Pluggy). O `transaction_id` já espera por ela: a detecção pode ligar a contribuição ao lançamento importado |
 | Streaks e badges básicos | Nada. Agora há histórico de contribuição para derivá-los |
 | Categorização por IA (premium) | Nada |
@@ -680,6 +790,37 @@ Ordenados por risco. Todos verificados no código.
 
 ### Resolvido
 
+- [x] **A Edge Function nunca falou com a Pluggy de verdade** (2026-07-28). As
+      três falam: `pluggy-connect-token` emite token que o widget aceita, o
+      webhook recebeu 6 eventos reais, e o worker buscou item, conta e transação.
+      Foi essa passagem que produziu os dois bugs abaixo — o que confirma a
+      lição que ela mesma tinha registrado: código que nunca rodou não é código
+      que funciona.
+- [x] **O fluxo de conectar banco nunca foi percorrido** (2026-07-28). Percorrido
+      no iPhone 17 Pro com sandbox **e** com conta real: o canal JS conversa, a
+      allowlist não bloqueia o fluxo legítimo, o salto para o OAuth volta e o
+      `SUCCESS` chega com `item_id`.
+- [x] **O widget Connect nunca rodou num device** (2026-07-28). Fechou junto com
+      o item acima.
+- [x] **A direção do lançamento importado estava errada em cartão — duas vezes.**
+      A primeira regra veio da doc e gravou 27 compras de sandbox como receita; a
+      segunda veio do sandbox e gravou **305 compras de conta real** como receita.
+      A regra certa tem o **tipo de conta** dentro dela: em cartão o sinal é
+      invertido (compra positiva, abatimento negativo), como a doc oficial de
+      fato diz. **Lição transferível:** medir em um conector só não estabelece uma
+      convenção, e a instrumentação que mede precisa gravar no **banco** —
+      `console.log` de Edge Function não é legível por SQL nem pelo CLI.
+- [x] **A escrita de transação perdia página inteira em silêncio.** Um INSERT de
+      várias linhas é atômico; `23505` era tratado como benigno sem log; e a
+      função devolvia `toInsert.length` mesmo com o INSERT falhando. Três falhas
+      pequenas compondo 1.433 lançamentos perdidos que se reportaram como
+      sucesso. Agora falha de escrita lança, o INSERT usa
+      `ON CONFLICT DO NOTHING`, e a contagem vem do `select` do que entrou.
+- [x] **As Edge Functions não tinham teste nenhum.** As decisões puras da
+      ingestão moram em `_shared/ingest.ts`, com 16 testes que rodam em
+      `node --test` — sem Deno, sem Docker e sem rede — e um gate no CI. Era o
+      motivo pelo qual os dois bugs acima eram invisíveis: o único jeito de
+      exercitar a regra era ingerir dado de verdade e conferir fatura à mão.
 - [x] **As funções de autorização saíram do schema exposto pela API**
       (2026-07-28). O advisor caiu de **10 WARN para 1**, e o único que sobrou é
       um toggle de dashboard (proteção de senha vazada). Duas coisas valem
@@ -815,19 +956,26 @@ Ordenados por risco. Todos verificados no código.
       dos `if exists` — num banco vazio ela encontra as três em `public` (criadas
       pela `20260717120000`) e move; num banco já migrado, não faz nada. Rodar do
       zero é o que prova as duas metades.
-- [ ] **A Edge Function nunca falou com a Pluggy de verdade.** Ela compilou e
-      subiu (`functions deploy`), e o 401 sem `Authorization` foi verificado — mas
-      o caminho 200 exige JWT de usuário, então `POST /auth` e
-      `POST /connect_token` **nunca foram chamados**. Os contratos seguem
-      `docs/pluggy-api-reference.md` §3.3 e §3.4 e nada mais que isso os garante.
-      Mesma família da lição do `UPSERT` de orçamento: código que nunca rodou não
-      é código que funciona.
-- [ ] **O fluxo de conectar banco nunca foi percorrido.** Cada peça tem teste,
-      e nenhuma prova existe do conjunto: se o token que a função emite é aceito
-      pelo widget, se o canal JS conversa, se a allowlist não bloqueia algo
-      legítimo do fluxo real, se o salto para o OAuth do banco volta, e se o
-      `SUCCESS` chega com `item_id`. É o item zero de "Onde retomar", e os
-      conectores de sandbox permitem fazê-lo sem banco real.
+- [ ] **O pagamento de fatura conta duas vezes, e só um lado foi resolvido.** No
+      cartão ele agora é `transfer` (invisível no resumo, correto). Mas o outro
+      lado do mesmo pagamento — o débito na conta corrente — continua chegando
+      como `expense`, então o mês mostra o gasto das compras **e** o gasto de
+      pagar a fatura. Resolver exige reconhecer o débito de fatura no extrato da
+      corrente, o que depende de descrição ou da categoria da Pluggy: heurística,
+      e é exatamente o tipo de regra que já envelheceu mal duas vezes aqui.
+- [ ] **Estorno de cartão fica invisível no resumo.** Ele chega negativo, como
+      pagamento de fatura, e vira `transfer` junto. Deveria abater despesa. Não
+      há campo que os separe sem heurística de texto.
+- [ ] **A chave de dedup pode estar colapsando parcela.** O ADR 0005 escolhe
+      `providerId` quando existe, e a suspeita de que ele se repita entre parcelas
+      da mesma compra é o que explicaria a colisão que derrubou as páginas. A
+      instrumentação nova conta `colididas` por página; se vier alto, o remédio é
+      a chave (`id` da transação como desempate), não o insert.
+- [ ] **O cartão do sandbox mostra compra como transferência.** É o custo
+      conhecido da regra ciente do tipo de conta: lá compra chega como `CREDIT`
+      negativa, assinatura idêntica à de um pagamento de fatura. Se incomodar, o
+      caminho é remover a conexão de sandbox — não mexer na regra, que está certa
+      para conta real e tem teste dizendo isso.
 - [ ] **Remover conexão existe no repository e não na UI.** `delete` está
       implementado e testado, mas nenhuma tela o chama — a linha só responde ao
       toque quando precisa de re-consentimento. Falta decidir onde a ação mora e
@@ -849,11 +997,6 @@ Ordenados por risco. Todos verificados no código.
       existiria igual usando o pacote deles (que também está parado). Se o fluxo
       parar sem nada nosso mudar, `pluggy_connect_event.dart` é o primeiro lugar
       a olhar.
-- [ ] **O widget Connect nunca rodou num device.** As partes puras têm 28 testes,
-      mas o WebView em si não foi instanciado: nenhuma tela o usa ainda, então
-      não há prova de que o canal JS conversa, de que a allowlist não bloqueia
-      algo legítimo do fluxo real, nem de que o salto para o OAuth do banco
-      volta. Fecha junto com o caminho no app.
 - [ ] **O vínculo depende do cliente para não desincronizar no local.** No
       Postgres o `on delete cascade` garante que apagar o lançamento apaga a
       contribuição. As tabelas locais do PowerSync são views e não cascateiam:
