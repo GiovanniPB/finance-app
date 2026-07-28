@@ -3,24 +3,29 @@
 Documento vivo. O **PRD** define *o quê* e *por quê*; este arquivo registra
 *onde estamos*. Atualize junto com o PR que muda o estado.
 
-- Última atualização: **2026-07-27**
-- Branch de trabalho atual: `feat/metas-poupanca`
+- Última atualização: **2026-07-28**
+- Branch de trabalho atual: `feat/poupanca-fechamento`
 
 ---
 
 ## Estado em uma frase
 
-**A Fase 1 começou pelo Pilar 3: metas de poupança existem.** A Fase 0 está
-fechada (apresentação, gasto em três toques, edição, orçamento com alerta em 80%
-e 100%, categoria própria, troca de espaço, contas completas), o lançamento sabe
-de que conta saiu, e a camada local tem 27 testes de integração rodando no CI
-contra um PowerSync de verdade.
+**A Fase 1 começou pelo Pilar 3, e a fatia de poupança está fechada.** A Fase 0
+está fechada (apresentação, gasto em três toques, edição, orçamento com alerta
+em 80% e 100%, categoria própria, troca de espaço, contas completas), o
+lançamento sabe de que conta saiu, e a camada local tem 31 testes de integração
+rodando no CI contra um PowerSync de verdade.
 
 Agora dá para **criar meta por objetivo, valor fixo mensal ou percentual da
 renda, guardar valor e ver progresso** numa aba própria (Poupança, no lugar do
-placeholder Social). A detecção automática de contribuição fica pendente do Open
-Finance — o resto da Fase 1 é Open Finance (infra nova, credenciais Pluggy),
-streaks/badges e categorização por IA.
+placeholder Social) — e **guardar dinheiro finalmente aparece no resto do app**:
+a contribuição e o lançamento `savings` nascem juntos, então o valor sai do saldo
+gastável, entra no total de saídas do mês e aparece na lista. Meta pode ser
+pausada e retomada, e contribuição digitada errado pode ser removida.
+
+A detecção automática de contribuição fica pendente do Open Finance — o resto da
+Fase 1 é Open Finance (infra nova, credenciais Pluggy), streaks/badges e
+categorização por IA.
 
 ## Por onde começar numa sessão nova
 
@@ -39,12 +44,17 @@ streaks/badges e categorização por IA.
 5. Antes de criar coluna que guarde um total, leia
    [ADR 0007](adr/0007-agregado-derivado-vs-coluna.md). Agregado neste app é
    derivado; coluna é só para fato informado.
-6. Para rodar: **não precisa de Docker.** O `env/dev.json` aponta para um
+6. Antes de mexer em `transactions` ou em poupança, leia
+   [ADR 0008](adr/0008-guardar-dinheiro-e-um-evento-com-duas-faces.md). Guardar
+   dinheiro grava **duas** linhas na mesma transação, e a contribuição é a dona
+   do evento — a folha de lançamento se recusa a editar o que pertence a uma
+   meta.
+7. Para rodar: **não precisa de Docker.** O `env/dev.json` aponta para um
    Supabase e um PowerSync **na nuvem** (o `supabase start` local existe para
    testar migrations, não para rodar o app).
    `cd apps/finance && fvm flutter run -d iphone --target lib/main_dev.dart --dart-define-from-file=../../env/dev.json`.
    Criar conta é passo manual.
-7. **Se as telas ficarem vazias ou o registro rápido travar em "nenhuma
+8. **Se as telas ficarem vazias ou o registro rápido travar em "nenhuma
    categoria", suspeite das sync rules publicadas.** O arquivo
    `powersync/sync_rules.yaml` do repo **não é publicado automaticamente**: toda
    vez que ele muda, é preciso colar o conteúdo no editor de Sync Rules do
@@ -324,12 +334,71 @@ progresso e se sobrepõe ao conceito de `challenges` da Fase 3.
 da ingestão da Pluggy. O schema já nasce com `detected_via`/`confirmed`, a UI já
 sabe mostrar e confirmar uma linha pendente, e a ingestão só precisará gravar.
 
+### Concluído na fatia de fechamento da poupança (branch `feat/poupanca-fechamento`)
+
+| Item | Onde |
+|---|---|
+| Migration `savings_contributions.transaction_id` (FK `on delete cascade`, `unique`) e o trigger de espaço validando o lançamento | `supabase/migrations/20260728000822_savings_contribution_transaction.sql` |
+| Coluna e índice no schema PowerSync (**sem republicar sync rules** — os buckets usam `select *`) | `packages/database/lib/src/schema.dart` |
+| `addContribution` grava **lançamento + contribuição** numa `writeTransaction` | `.../savings/data/savings_repository_impl.dart` |
+| `deleteContribution` recebe a entidade e leva o lançamento junto | idem |
+| `SavingsSql.insertTransaction` / `deleteTransaction` (SQL de `transactions` mora aqui por causa da atomicidade) | idem |
+| Folha "Guardei um valor" com a conta de origem (`AccountPicker` + padrão de conta única) | `.../savings/presentation/contribution_sheet.dart` |
+| Pausar/retomar meta por interruptor na folha de edição | `goal_form_sheet.dart`, `goal_form_controller.dart` |
+| Seção de metas pausadas na aba, e detalhe que cala a cobrança | `savings_page.dart`, `goal_detail_page.dart` |
+| Remover contribuição por toque na linha + confirmação | `goal_detail_page.dart` |
+| Folha de edição de lançamento recusa editar o que pertence a uma meta | `.../transactions/presentation/transaction_edit_sheet.dart` |
+| `pausedGoalsProvider` e `goalByTransactionIdProvider` | `.../savings/presentation/savings_providers.dart` |
+| Lista de lançamentos mostra "Poupança" e ícone próprio | `.../transactions/presentation/transaction_list.dart` |
+| 17 testes novos da fatia + 4 de integração | `test/features/savings/`, `test/features/transactions/`, `test_integration/savings_persistence_test.dart` |
+
+**O enunciado do débito estava errado, e descobrir isso mudou a solução.** O
+roadmap dizia que "registrar um lançamento `TransactionType.savings` não cria
+contribuição nenhuma". Só que **nada no app produzia `savings`**: os dois
+segmentos (registro rápido e edição) têm duas posições e só emitem
+`expense`/`income`. O buraco real era o inverso — "Guardei um valor" gravava só a
+contribuição, e guardar R$ 500 não mexia no saldo, não entrava em
+`MonthSummary.outflow` e não aparecia na lista. O tipo `savings` existia
+exatamente para esse evento e ninguém o criava.
+
+Cinco decisões que não se leem no código:
+
+- **Guardar dinheiro é um evento com duas faces**, não dois eventos que se
+  falam. As duas linhas nascem na mesma `writeTransaction`, e o vínculo vive na
+  **contribuição** (`transaction_id`), não no lançamento: existe lançamento sem
+  meta em ~100% da tabela mais movimentada do app, e uma coluna
+  `savings_goal_id` lá seria nula em quase toda linha.
+- **A assimetria das exclusões é deliberada.** Remover a contribuição leva o
+  lançamento (o dinheiro não saiu). Excluir a **meta** apaga as contribuições e
+  **deixa os lançamentos de pé** (o dinheiro saiu de verdade; quem desistiu foi
+  a meta). Apagar o extrato porque a meta foi abandonada reescreveria o passado
+  financeiro do usuário.
+- **O lançamento de poupança não é editável pela folha de lançamento.** Mudar o
+  valor lá faria a meta contar R$ 500 e o extrato mostrar R$ 300; excluir lá
+  deixaria a meta com progresso que o extrato não explica. A folha detecta o
+  vínculo e vira leitura, com um botão para a meta. **O que trava é o vínculo,
+  não o tipo** — um `savings` sem contribuição (o que a ingestão da Pluggy pode
+  produzir) segue editável.
+- **Poupança não tem categoria, de propósito.** Atribuir uma faria o valor
+  debitar um orçamento — o usuário veria o limite de "Alimentação" andar porque
+  guardou dinheiro. A descrição recebe o nome da meta, senão a linha apareceria
+  como "Sem descrição"; e a lista diz "Poupança" no lugar da categoria.
+- **Pausar é um campo do formulário, não uma ação própria.** Um botão "Pausar"
+  que gravasse e fechasse a folha faria quem trocou o nome **e** pausou perder a
+  troca do nome sem aviso. Interruptor + Salvar preserva as duas coisas. E
+  `pausedGoalsProvider` existe porque `goalProgressListProvider` filtra pausadas:
+  sem uma lista própria, pausar seria um esconder sem volta.
+
+**A conta que a folha pergunta é a de origem** ("Saiu de"), não a de destino — o
+destino já é a meta. É o mesmo padrão de conta única do registro rápido, com
+`accountTouched` distinguindo "ainda não escolhi" de "tirei de propósito".
+
 ### O que falta na Fase 1
 
 | Item | Estado |
 |---|---|
 | Open Finance (limitado no grátis) | Pipeline Pluggy **inteiramente desenhado** em [ADR 0005](adr/0005-open-finance-pluggy-server-side.md) — zero linhas escritas. Nenhuma Edge Function existe. |
-| Detecção/confirmação automática de contribuição | Metade pronta: schema e UI existem; falta quem crie a linha (ingestão Pluggy) |
+| Detecção/confirmação automática de contribuição | Metade pronta: schema e UI existem; falta quem crie a linha (ingestão Pluggy). O `transaction_id` já espera por ela: a detecção pode ligar a contribuição ao lançamento importado |
 | Streaks e badges básicos | Nada. Agora há histórico de contribuição para derivá-los |
 | Categorização por IA (premium) | Nada |
 | `recurring_challenge` como quarto tipo de meta | Fora de escopo por decisão (ver acima) |
@@ -397,6 +466,28 @@ Ordenados por risco. Todos verificados no código.
       `ListView` (que dá altura infinita). Num `Center` de tela cheia — o caso da
       aba Poupança vazia, e também do "Sincronizando" da home — ele virava uma
       moldura do tamanho da tela e lia como caixa de placeholder.
+- [x] **A meta não sabia que o dinheiro tinha saído** — e o enunciado do débito
+      estava invertido. O texto antigo dizia que um lançamento
+      `TransactionType.savings` não criava contribuição; na verdade **nada
+      produzia `savings`** (os dois segmentos só emitem `expense`/`income`), e o
+      buraco era o contrário: "Guardei um valor" gravava só a contribuição, então
+      guardar R$ 500 não mexia no saldo, não entrava em `MonthSummary.outflow` e
+      não aparecia na lista. Agora as duas linhas nascem juntas na mesma
+      `writeTransaction`, ligadas por `savings_contributions.transaction_id`.
+      **Lição transferível:** o enunciado de um débito envelhece junto com o
+      código — vale reler o que ele afirma antes de agir sobre ele.
+- [x] **Meta pausada não tinha como ser pausada pela UI.** Virou um interruptor
+      na folha de edição (campo do formulário, não ação própria, para não perder
+      edições pendentes), mais uma seção de pausadas na aba — sem ela, pausar
+      esconderia a meta da única tela que leva ao detalhe dela. O detalhe de uma
+      meta pausada também cala o que cobra: sem marca de ritmo, sem "faltam R$ X
+      até tal data", sem projeção.
+- [x] **Excluir contribuição não existia na UI.** Virou toque na linha +
+      confirmação (não arrastar: não existe `Dismissible` em lugar nenhum do app,
+      e inventar um gesto só aqui faria esta lista se comportar diferente de
+      todas as outras). A confirmação nomeia o efeito colateral, e a frase muda
+      quando não há lançamento ligado — prometer que "o lançamento sai junto" numa
+      linha anterior à migration seria mentira.
 - [x] **`AmountDisplay` estourava com valor de cinco dígitos.** A partir de
       `R$ 8.000,00`, 40px mono não cabia na largura de uma folha em tela de
       390px, e o Flutter pintava a faixa de overflow — em **qualquer** folha que
@@ -407,23 +498,28 @@ Ordenados por risco. Todos verificados no código.
 
 ### Médio
 
-- [ ] **A meta não sabe que o gasto aconteceu.** Guardar valor é um evento
-      próprio (`savings_contributions`), e registrar um lançamento
-      `TransactionType.savings` **não** cria contribuição nenhuma — são dois
-      caminhos que hoje não se falam. Quem usa os dois vê o dinheiro sair na
-      lista e a meta não andar. As saídas são fazer o lançamento de poupança
-      oferecer a meta no momento do registro, ou derivar contribuição de
-      lançamento com conta alvo de poupança. É decisão de produto: o segundo
-      caminho é o que a RN-3.2 chama de detecção, e ela foi desenhada para o
-      Open Finance, não para lançamento manual.
-- [ ] **Meta pausada não tem como ser pausada pela UI.**
-      `SavingsGoalStatus.paused` existe no schema e no domínio, os providers já a
-      excluem da lista, mas a folha só grava `active`. Uma meta que incomoda hoje
-      só sai por exclusão, que apaga o histórico junto.
-- [ ] **Excluir contribuição não existe na UI.** O repository tem
-      `deleteContribution` (com teste), mas nenhuma tela chama: um valor digitado
-      errado só sai excluindo a meta inteira. O desenho pendente é o gesto —
-      arrastar a linha ou tocar e confirmar.
+- [ ] **A migration nova não foi validada contra um Postgres de verdade.** O
+      Docker estava fora na sessão em que ela foi escrita, então
+      `20260728000822` passou só pela revisão e pelo lado SQLite (os testes de
+      integração cobrem as views locais, não o Postgres). Antes do merge:
+      `supabase start && supabase db reset` para validar do zero, e
+      `get_advisors` depois — a migration recria uma função `SECURITY DEFINER`.
+      **A coluna também ainda não foi aplicada no projeto da nuvem**, então o app
+      rodando contra `ivfcypfljxvwkvnvmuum` vai falhar ao gravar contribuição até
+      a migration subir.
+- [ ] **O vínculo depende do cliente para não desincronizar no local.** No
+      Postgres o `on delete cascade` garante que apagar o lançamento apaga a
+      contribuição. As tabelas locais do PowerSync são views e não cascateiam:
+      quem mantém as duas linhas juntas offline é a `writeTransaction` do
+      repository. A UI fecha os caminhos conhecidos (a folha de lançamento recusa
+      editar/excluir o que pertence a uma meta), mas SQL novo sobre
+      `transactions` precisa lembrar disto.
+- [ ] **Há uma janela em que o lançamento de meta parece editável.** A guarda da
+      folha usa `goalByTransactionIdProvider`, que lê as contribuições
+      sincronizadas. Num aparelho que recebeu o lançamento antes da contribuição
+      (ordem de bucket não é garantida), a folha abriria editável por alguns
+      instantes. Não acontece no caminho manual — as duas linhas nascem juntas —,
+      mas vai acontecer quando a ingestão da Pluggy gravar dos dois lados.
 - [ ] **`GoalProgress` descarta silenciosamente aporte em outra moeda.** Somar
       BRL com USD lançaria e derrubaria a lista toda por causa de uma linha, e
       por isso a linha é ignorada. Não acontece hoje (o formulário só cria na
@@ -468,7 +564,16 @@ Ordenados por risco. Todos verificados no código.
 - [ ] **Duplicação de fakes nos testes.** `test/helpers/app_harness.dart`
       centraliza os fakes, mas quatro arquivos de teste anteriores ainda têm a
       sua própria cópia. Vale migrá-los. O harness já aceita repositório
-      injetado, então o caminho está aberto.
+      injetado, então o caminho está aberto. O helper `tapVisible` está no mesmo
+      caso: quatro cópias idênticas, e `goal_detail_test.dart` agora **importa** a
+      de `goal_form_test.dart` em vez de criar a quinta — promovê-lo ao harness
+      resolve as cinco de uma vez.
+- [ ] **`savingsMonthTotal` e `MonthSummary.outflow` contam o mesmo dinheiro.**
+      Guardar R$ 500 agora aparece nos dois: no total guardado do mês (aba
+      Poupança) e nas saídas do mês (home). Está certo — são perguntas diferentes
+      ("quanto guardei?" e "quanto saiu do saldo?") —, mas a home não distingue
+      poupança de gasto no número agregado. Quando incomodar, o caminho é a home
+      dizer "saídas, das quais R$ X guardados".
 - [ ] **Editar lançamento não mexe em conta nem em rateio.** `account_id` e
       `is_shared` são preservados, mas não editáveis — conta pertence à entidade
       `Account` incompleta (acima) e rateio é Fase 2.
@@ -549,8 +654,9 @@ Ordenados por risco. Todos verificados no código.
 - [`CLAUDE.md`](../CLAUDE.md) — como trabalhar no repo (toolchain, comandos,
   Definição de Pronto, fluxo git)
 - [`docs/adr/`](adr) — decisões de arquitetura e seus porquês. O mais recente é
-  o [0007](adr/0007-agregado-derivado-vs-coluna.md): agregado é derivado, não
-  coluna
+  o [0008](adr/0008-guardar-dinheiro-e-um-evento-com-duas-faces.md): guardar
+  dinheiro grava lançamento **e** contribuição, e a contribuição é a dona do
+  evento
 - **PRD**: `PRD.pdf` na raiz (git-ignored — 11,7 MB). É a fonte de *o quê* e
   *por quê*; este arquivo é o *onde estamos*
 - [`docs/pluggy-api-reference.md`](pluggy-api-reference.md) — referência da API do

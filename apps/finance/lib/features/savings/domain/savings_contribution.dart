@@ -47,6 +47,15 @@ abstract class SavingsContribution with _$SavingsContribution {
     required DateTime contributedAt,
     required DateTime createdAt,
     required DateTime updatedAt,
+
+    /// Lançamento `savings` que produziu esta contribuição — a outra face do
+    /// mesmo evento (ver a migration 20260728000822).
+    ///
+    /// Nulo é legítimo: é dinheiro que a meta conta e o extrato não explica.
+    /// Acontece com toda linha gravada antes daquela migration, e vai acontecer
+    /// com a detecção do Open Finance enquanto ela não tiver um lançamento
+    /// nosso para apontar.
+    String? transactionId,
   }) = _SavingsContribution;
 
   const SavingsContribution._();
@@ -70,6 +79,7 @@ abstract class SavingsContribution with _$SavingsContribution {
         contributedAt: DateTime.parse(row['contributed_at']! as String),
         createdAt: DateTime.parse(row['created_at']! as String),
         updatedAt: DateTime.parse(row['updated_at']! as String),
+        transactionId: row['transaction_id'] as String?,
       );
 
   /// Colunas para INSERT/UPDATE no banco local.
@@ -89,10 +99,17 @@ abstract class SavingsContribution with _$SavingsContribution {
     'detected_via': source.db,
     'confirmed': isConfirmed ? 1 : 0,
     'contributed_at': contributedAt.toUtc().toIso8601String(),
+    'transaction_id': transactionId,
     'created_at': createdAt.toUtc().toIso8601String(),
     'updated_at': updatedAt.toUtc().toIso8601String(),
   };
 
   /// Detectada por terceiro e ainda esperando o sim do usuário.
   bool get isPending => !isConfirmed;
+
+  /// Se há um lançamento explicando de onde este dinheiro saiu.
+  ///
+  /// Falso é o caso a tratar com cuidado: excluir a contribuição não tem
+  /// lançamento para levar junto, e a tela não deve prometer que tem.
+  bool get hasTransaction => transactionId != null;
 }

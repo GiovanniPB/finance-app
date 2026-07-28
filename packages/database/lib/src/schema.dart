@@ -160,6 +160,12 @@ const appSchema = Schema([
   // Contribuição para uma meta (RN-3.2). `space_id` é denormalizado porque sync
   // rule não faz join; no Postgres um trigger o mantém igual ao da meta.
   // `confirmed` é coluna do usuário: só o que ele confirmou entra no progresso.
+  //
+  // `transaction_id` liga a contribuição ao lançamento `savings` que a produziu
+  // — as duas faces do mesmo evento (ver a migration 20260728000822). Aqui não
+  // há FK nem `unique`: tabela local do PowerSync é view, e a integridade vive
+  // no Postgres. Quem mantém as duas linhas juntas no cliente é a
+  // `writeTransaction` do `SavingsRepositoryImpl`.
   Table(
     'savings_contributions',
     [
@@ -171,6 +177,7 @@ const appSchema = Schema([
       Column.text('detected_via'),
       Column.integer('confirmed'),
       Column.text('contributed_at'),
+      Column.text('transaction_id'),
       Column.text('created_at'),
       Column.text('updated_at'),
     ],
@@ -181,6 +188,10 @@ const appSchema = Schema([
         IndexedColumn.descending('contributed_at'),
       ]),
       Index('space', [IndexedColumn('space_id')]),
+      // A lista de lançamentos precisa saber, por linha, se aquele lançamento
+      // pertence a uma meta — é o que decide se o toque abre a folha de edição
+      // ou o detalhe da meta.
+      Index('transaction', [IndexedColumn('transaction_id')]),
     ],
   ),
   // Preferências locais do app. **Não sincroniza** (`localOnly`): são escolhas

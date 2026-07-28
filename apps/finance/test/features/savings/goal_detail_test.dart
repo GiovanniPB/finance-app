@@ -6,6 +6,11 @@ import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 
 import '../../helpers/app_harness.dart';
+// Emprestado em vez de copiado: `tapVisible` já existe em quatro arquivos de
+// teste, e uma quinta cópia engordaria o débito de duplicação em vez de usá-la.
+// Mesmo padrão do `transaction_edit_sheet_test.dart`, que importa o
+// `RecordingTransactionsRepository` do teste do controller.
+import 'goal_form_test.dart' show tapVisible;
 
 void main() {
   Future<void> pumpDetail(
@@ -213,6 +218,112 @@ void main() {
       expect(savings.addedContributions.single.amount.amountMinor, 50000);
       expect(savings.addedContributions.single.goalId, 'goal-1');
     });
+
+    testWidgets('com uma conta só, ela vai no lançamento sem custar um toque', (
+      tester,
+    ) async {
+      // `pumpDetail` monta o espaço com uma conta. Mesmo padrão do registro
+      // rápido: perguntar custaria um toque para uma resposta já conhecida.
+      final savings = FakeSavingsRepository(goals: [testGoal()]);
+      await pumpDetail(tester, savings: savings);
+
+      await tester.tap(find.byKey(const Key('add_contribution')));
+      await tester.pumpAndSettle();
+
+      expect(find.text('Saiu de'), findsOneWidget);
+
+      for (final digit in [5, 0, 0, 0, 0]) {
+        await tester.tap(find.text('$digit').last);
+        await tester.pumpAndSettle();
+      }
+      await tester.tap(find.byKey(const Key('contribution_save')));
+      await tester.pumpAndSettle();
+
+      expect(savings.addedAccountIds, ['acc-1']);
+    });
+  });
+
+  group('remover contribuição', () {
+    testWidgets('a dica diz que o toque remove', (tester) async {
+      await pumpDetail(
+        tester,
+        savings: FakeSavingsRepository(
+          goals: [testGoal()],
+          contributions: [testContribution(minor: 50000)],
+        ),
+      );
+
+      // Toque destrutivo sem dica ninguém descobre — e quem descobrisse por
+      // acidente levaria um susto.
+      expect(find.byKey(const Key('goal_contributions_hint')), findsOneWidget);
+    });
+
+    testWidgets('confirmar remove, e o diálogo avisa do lançamento', (
+      tester,
+    ) async {
+      final savings = FakeSavingsRepository(
+        goals: [testGoal()],
+        contributions: [
+          testContribution(minor: 50000, transactionId: 'tx-savings'),
+        ],
+      );
+      await pumpDetail(tester, savings: savings);
+
+      await tapVisible(
+        tester,
+        find.byKey(const Key('contribution_row_contrib-1')),
+      );
+
+      // A cópia nomeia o efeito colateral, como nos outros três diálogos.
+      expect(find.textContaining('sai do extrato junto'), findsOneWidget);
+      expect(savings.deletedContributions, isEmpty);
+
+      await tapVisible(
+        tester,
+        find.byKey(const Key('confirm_delete_contribution')),
+      );
+
+      expect(savings.deletedContributions, ['contrib-1']);
+    });
+
+    testWidgets('cancelar não remove nada', (tester) async {
+      final savings = FakeSavingsRepository(
+        goals: [testGoal()],
+        contributions: [
+          testContribution(minor: 50000, transactionId: 'tx-savings'),
+        ],
+      );
+      await pumpDetail(tester, savings: savings);
+
+      await tapVisible(
+        tester,
+        find.byKey(const Key('contribution_row_contrib-1')),
+      );
+      await tapVisible(tester, find.text('Cancelar'));
+
+      expect(savings.deletedContributions, isEmpty);
+    });
+
+    testWidgets(
+      'sem lançamento ligado, o diálogo não promete mexer no extrato',
+      (tester) async {
+        // É o estado de toda linha anterior à migration 20260728000822:
+        // prometer que "o lançamento sai junto" ali seria mentira.
+        final savings = FakeSavingsRepository(
+          goals: [testGoal()],
+          contributions: [testContribution(minor: 50000)],
+        );
+        await pumpDetail(tester, savings: savings);
+
+        await tapVisible(
+          tester,
+          find.byKey(const Key('contribution_row_contrib-1')),
+        );
+
+        expect(find.textContaining('sai do extrato junto'), findsNothing);
+        expect(find.textContaining('o extrato não muda'), findsOneWidget);
+      },
+    );
   });
 
   group('meta que deixou de existir', () {
@@ -224,6 +335,53 @@ void main() {
       );
 
       expect(find.text('Meta não encontrada'), findsOneWidget);
+    });
+  });
+
+  group('meta pausada', () {
+    testWidgets('mostra o guardado e cala o que cobra', (tester) async {
+      await pumpDetail(
+        tester,
+        savings: FakeSavingsRepository(
+          goals: [
+            testGoal(
+              status: SavingsGoalStatus.paused,
+              targetDate: DateTime(2026, 12),
+            ),
+          ],
+          contributions: [testContribution(minor: 324000)],
+        ),
+      );
+
+      expect(
+        tester.widget<Text>(find.byKey(const Key('goal_status_line'))).data,
+        'Pausada · retome em Editar',
+      );
+
+      // Sem marca de ritmo: o tick diz "o prazo esperava você aqui".
+      final bar = tester.widget<SavingsProgress>(find.byType(SavingsProgress));
+      expect(bar.paceRatio, isNull);
+      // A barra fica: quanto já foi guardado é informação, não pressão.
+      expect(bar.ratio, greaterThan(0));
+
+      // Sem projeção: ela pressupõe um ritmo que a meta pausada não tem.
+      expect(find.byKey(const Key('goal_projection')), findsNothing);
+      expect(find.byKey(const Key('goal_required_monthly')), findsNothing);
+    });
+
+    testWidgets('segue alcançável e ainda aceita guardar valor', (
+      tester,
+    ) async {
+      await pumpDetail(
+        tester,
+        savings: FakeSavingsRepository(
+          goals: [testGoal(status: SavingsGoalStatus.paused)],
+        ),
+      );
+
+      // Pausar cala a cobrança, não tranca a porta.
+      expect(find.byKey(const Key('add_contribution')), findsOneWidget);
+      expect(find.byKey(const Key('goal_edit')), findsOneWidget);
     });
   });
 

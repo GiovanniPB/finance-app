@@ -15,6 +15,10 @@ import 'helpers/local_stack.dart';
 ///    o SQLite recusa (UPSERT, por exemplo) só falha aqui;
 ///  • a exclusão de meta é uma **transação com dois DELETEs**, e um mock não
 ///    prova que os dois rodam nem que a contribuição de outra meta sobrevive.
+///
+/// Desde a migration 20260728000822 há um terceiro motivo: guardar dinheiro
+/// escreve em **duas tabelas** na mesma transação, e só aqui as duas escritas
+/// encontram views de verdade.
 void main() {
   group('meta de poupança no banco local', () {
     test('cria, lê e altera pela view', () async {
@@ -244,10 +248,105 @@ void main() {
         amount: const Money.fromMinor(40000),
       )).valueOrNull!;
 
-      await repository.deleteContribution(contribution.id);
+      await repository.deleteContribution(contribution);
 
       expect(await repository.watchContributions('space-1').first, isEmpty);
       expect(await repository.watchGoals('space-1').first, hasLength(1));
+    });
+  });
+
+  group('o evento tem duas faces', () {
+    /// Cria uma meta e guarda [minor] nela, devolvendo a contribuição.
+    Future<SavingsContribution> guardar(
+      LocalStack stack, {
+      int minor = 40000,
+      String? accountId,
+    }) async {
+      final repository = stack.container.read(savingsRepositoryProvider);
+
+      final goal = (await repository.createGoal(
+        spaceId: 'space-1',
+        type: SavingsGoalType.objective,
+        name: 'Viagem',
+        targetAmount: const Money.fromMinor(800000),
+      )).valueOrNull!;
+
+      return (await repository.addContribution(
+        goal: goal,
+        amount: Money.fromMinor(minor),
+        accountId: accountId,
+      )).valueOrNull!;
+    }
+
+    test('guardar valor grava contribuição e lançamento', () async {
+      final stack = await localStack();
+      await seedSpace(stack.db);
+
+      final contribution = await guardar(stack, accountId: 'acc-1');
+
+      expect(contribution.transactionId, isNotNull);
+
+      final ledger = await stack.db.getAll('SELECT * FROM transactions');
+      expect(ledger, hasLength(1));
+      final row = ledger.single;
+      expect(row['id'], contribution.transactionId);
+      expect(row['type'], 'savings');
+      // Coluna positiva, direção no tipo — a convenção de `amount_minor`.
+      expect(row['amount_minor'], 40000);
+      // Sem categoria: poupança não debita orçamento de ninguém.
+      expect(row['category_id'], isNull);
+      expect(row['account_id'], 'acc-1');
+      // O nome da meta é o que a linha da lista mostra.
+      expect(row['description'], 'Viagem');
+    });
+
+    test('remover contribuição leva o lançamento', () async {
+      final stack = await localStack();
+      await seedSpace(stack.db);
+      final repository = stack.container.read(savingsRepositoryProvider);
+
+      final contribution = await guardar(stack);
+      await repository.deleteContribution(contribution);
+
+      expect(await repository.watchContributions('space-1').first, isEmpty);
+      expect(await stack.db.getAll('SELECT * FROM transactions'), isEmpty);
+      // A meta continua: quem saiu foi o aporte.
+      expect(await repository.watchGoals('space-1').first, hasLength(1));
+    });
+
+    test('contribuição sem lançamento sai sozinha, sem estourar', () async {
+      // O caso de toda linha anterior à migration 20260728000822, e o que a
+      // ingestão do Open Finance vai gravar antes de haver lançamento nosso.
+      final stack = await localStack();
+      await seedSpace(stack.db);
+      final repository = stack.container.read(savingsRepositoryProvider);
+
+      final contribution = await guardar(stack);
+      final orphan = contribution.copyWith(transactionId: null);
+
+      await repository.deleteContribution(orphan);
+
+      expect(await repository.watchContributions('space-1').first, isEmpty);
+      // O lançamento fica: ninguém disse a `deleteContribution` qual era.
+      expect(await stack.db.getAll('SELECT * FROM transactions'), hasLength(1));
+    });
+
+    test('excluir a meta não reescreve o extrato', () async {
+      final stack = await localStack();
+      await seedSpace(stack.db);
+      final repository = stack.container.read(savingsRepositoryProvider);
+
+      final contribution = await guardar(stack);
+      final goal = (await repository.watchGoals('space-1').first).single;
+
+      await repository.deleteGoal(goal.id);
+
+      expect(await repository.watchGoals('space-1').first, isEmpty);
+      expect(await repository.watchContributions('space-1').first, isEmpty);
+      // A assimetria deliberada: o dinheiro saiu de verdade, e apagá-lo porque
+      // a meta foi abandonada apagaria história.
+      final ledger = await stack.db.getAll('SELECT * FROM transactions');
+      expect(ledger.single['id'], contribution.transactionId);
     });
   });
 

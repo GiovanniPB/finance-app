@@ -160,18 +160,35 @@ class _Row extends StatelessWidget {
   final String? accountName;
   final void Function(Transaction)? onTap;
 
-  /// Segunda linha da tile: categoria e conta, o que houver. Nulo quando não
-  /// há nada a dizer — uma linha em branco é pior que nenhuma linha.
-  static String? _meta(String? categoryName, String? accountName) {
-    final parts = [?categoryName, ?accountName];
+  /// Segunda linha da tile: o que houver de categoria, natureza e conta. Nulo
+  /// quando não há nada a dizer — uma linha em branco é pior que nenhuma linha.
+  ///
+  /// Lançamento de poupança diz "Poupança" no lugar da categoria, porque ele
+  /// **não tem** categoria (dar-lhe uma faria o valor debitar um orçamento).
+  /// Sem isso a linha teria o nome da meta em cima e nada embaixo, sem nunca
+  /// dizer que aquele dinheiro foi guardado em vez de gasto.
+  static String? _meta(
+    String? categoryName,
+    String? accountName, {
+    required bool isSavings,
+  }) {
+    final parts = [
+      if (isSavings) 'Poupança' else ?categoryName,
+      ?accountName,
+    ];
     return parts.isEmpty ? null : parts.join(' · ');
   }
 
   @override
   Widget build(BuildContext context) {
     final categoryName = category?.name;
+    final isSavings = transaction.type == TransactionType.savings;
     final icon = transaction.isIncome
         ? CategoryIcons.income
+        : isSavings
+        // Ícone próprio: o de "sem categoria" leria como lançamento que falta
+        // classificar, e este não falta — ele não tem categoria por definição.
+        ? Icons.savings_outlined
         : category == null
         ? CategoryIcons.uncategorized
         : CategoryIcons.resolve(category!.iconKey);
@@ -190,7 +207,11 @@ class _Row extends StatelessWidget {
       // ("Alimentação / Alimentação") gasta uma linha para não dizer nada.
       // A conta entra ao lado dela, e só quando há mais de uma para distinguir
       // (ver `accountLabelsProvider`).
-      meta: _meta(hasDescription ? categoryName : null, accountName),
+      meta: _meta(
+        hasDescription ? categoryName : null,
+        accountName,
+        isSavings: isSavings,
+      ),
       isIncome: transaction.isIncome,
       onTap: onTap == null ? null : () => onTap!(transaction),
     );

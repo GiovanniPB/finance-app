@@ -313,4 +313,86 @@ void main() {
       expect(find.byKey(const Key('goal_form_save')), findsOneWidget);
     });
   });
+
+  group('pausar e retomar', () {
+    testWidgets('meta nova não oferece pausar', (tester) async {
+      await pumpSheet(tester, savings: FakeSavingsRepository());
+
+      await tapVisible(tester, find.byKey(const Key('goal_form_continue')));
+
+      // Não há o que pausar numa meta que ainda não existe.
+      expect(find.byKey(const Key('goal_pause')), findsNothing);
+    });
+
+    testWidgets('o interruptor nasce desligado numa meta ativa', (
+      tester,
+    ) async {
+      await pumpSheet(
+        tester,
+        savings: FakeSavingsRepository(),
+        editing: testGoal(),
+      );
+
+      final pause = find.byKey(const Key('goal_pause'));
+      await tester.ensureVisible(pause);
+      await tester.pumpAndSettle();
+
+      expect(tester.widget<Switch>(pause).value, isFalse);
+    });
+
+    testWidgets('pausar só grava no Salvar', (tester) async {
+      final savings = FakeSavingsRepository();
+      await pumpSheet(tester, savings: savings, editing: testGoal());
+
+      await tapVisible(tester, find.byKey(const Key('goal_pause')));
+
+      // Ligar o interruptor não escreve: quem escreve é o Salvar. É o que
+      // impede quem trocar o nome **e** pausar de perder a troca do nome.
+      expect(savings.updated, isEmpty);
+
+      await tapVisible(tester, find.byKey(const Key('goal_form_save')));
+
+      expect(savings.updated.single.status, SavingsGoalStatus.paused);
+    });
+
+    testWidgets('pausar preserva as outras edições da folha', (tester) async {
+      final savings = FakeSavingsRepository();
+      await pumpSheet(tester, savings: savings, editing: testGoal());
+
+      await tester.enterText(
+        find.byKey(const Key('goal_name')),
+        'Viagem ao Peru',
+      );
+      await tester.pumpAndSettle();
+      await tapVisible(tester, find.byKey(const Key('goal_pause')));
+      await tapVisible(tester, find.byKey(const Key('goal_form_save')));
+
+      final saved = savings.updated.single;
+      expect(saved.status, SavingsGoalStatus.paused);
+      expect(saved.name, 'Viagem ao Peru');
+    });
+
+    testWidgets('meta pausada abre ligada, e retomar volta para ativa', (
+      tester,
+    ) async {
+      final savings = FakeSavingsRepository();
+      await pumpSheet(
+        tester,
+        savings: savings,
+        editing: testGoal(status: SavingsGoalStatus.paused),
+      );
+
+      final pause = find.byKey(const Key('goal_pause'));
+      await tester.ensureVisible(pause);
+      await tester.pumpAndSettle();
+      expect(tester.widget<Switch>(pause).value, isTrue);
+
+      await tapVisible(tester, pause);
+      await tapVisible(tester, find.byKey(const Key('goal_form_save')));
+
+      // Retomar leva a `active`, nunca a `completed`: nada no app escreve
+      // `completed` — "meta atingida" é derivado do progresso.
+      expect(savings.updated.single.status, SavingsGoalStatus.active);
+    });
+  });
 }

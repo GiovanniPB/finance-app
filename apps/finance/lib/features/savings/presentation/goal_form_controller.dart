@@ -50,6 +50,13 @@ abstract class GoalFormState with _$GoalFormState {
     DateTime? targetDate,
     String? linkedAccountId,
 
+    /// Se a meta está pausada — o usuário dizendo "não me cobre disto agora".
+    ///
+    /// Campo do formulário, e não ação própria: pausar pelo Salvar evita que
+    /// quem trocar o nome **e** pausar perca a troca do nome sem aviso, como
+    /// aconteceria se pausar gravasse sozinho e fechasse a folha.
+    @Default(false) bool isPaused,
+
     /// Meta em edição. Nula quando é uma meta nova.
     SavingsGoal? editing,
     @Default(false) bool isSaving,
@@ -131,6 +138,7 @@ class GoalFormController extends _$GoalFormController {
       percentage: editing.percentage ?? _defaultPercentage,
       targetDate: editing.targetDate,
       linkedAccountId: editing.linkedAccountId,
+      isPaused: editing.status == SavingsGoalStatus.paused,
       editing: editing,
     );
   }
@@ -172,6 +180,10 @@ class GoalFormController extends _$GoalFormController {
     errorMessage: null,
   );
 
+  /// Pausa ou retoma a meta. Só vale ao salvar.
+  void setPaused({required bool value}) =>
+      state = state.copyWith(isPaused: value, errorMessage: null);
+
   /// Persiste a meta. Devolve `true` quando salvou.
   Future<bool> save() async {
     if (!state.canSave) {
@@ -192,6 +204,12 @@ class GoalFormController extends _$GoalFormController {
               targetDate: state.acceptsDeadline ? state.targetDate : null,
               percentage: state.needsAmount ? null : state.percentage,
               linkedAccountId: state.linkedAccountId,
+              // Retomar volta para `active`, nunca para `completed`: nada no
+              // app escreve `completed` — "meta atingida" é derivado de
+              // `GoalProgress.isComplete`, não guardado na coluna.
+              status: state.isPaused
+                  ? SavingsGoalStatus.paused
+                  : SavingsGoalStatus.active,
             ),
           );
 

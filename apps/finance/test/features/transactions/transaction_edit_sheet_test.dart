@@ -236,4 +236,61 @@ void main() {
       expect(find.text('Editar lançamento'), findsOneWidget);
     });
   });
+
+  group('lançamento que pertence a uma meta', () {
+    Transaction savingsTransaction() => testTransaction(
+      id: 'tx-savings',
+      minor: 50000,
+      type: TransactionType.savings,
+      categoryId: null,
+      description: 'Viagem ao Chile',
+    );
+
+    testWidgets('não é editável aqui, e aponta para a meta', (tester) async {
+      final transaction = savingsTransaction();
+
+      await pumpScreen(
+        tester,
+        TransactionEditSheet(transaction: transaction),
+        transactions: [transaction],
+        savingsRepository: FakeSavingsRepository(
+          goals: [testGoal()],
+          contributions: [
+            testContribution(minor: 50000, transactionId: 'tx-savings'),
+          ],
+        ),
+      );
+
+      expect(
+        find.byKey(const Key('transaction_owned_by_goal')),
+        findsOneWidget,
+      );
+      expect(find.text('Abrir Viagem ao Chile'), findsOneWidget);
+
+      // Nada de editar: valor e data pertencem à contribuição, e mudá-los aqui
+      // faria as duas faces do mesmo evento discordarem.
+      expect(find.byType(AmountKeypad), findsNothing);
+      expect(find.text('Salvar'), findsNothing);
+      // Nem de excluir: sobraria contribuição contando dinheiro que o extrato
+      // não explica.
+      expect(find.byKey(const Key('transaction_delete')), findsNothing);
+    });
+
+    testWidgets('o que trava é o vínculo, não o tipo', (tester) async {
+      // Um lançamento `savings` sem contribuição ligada (o que a ingestão do
+      // Open Finance pode produzir) segue editável: não há segunda face para
+      // desincronizar.
+      final transaction = savingsTransaction();
+
+      await pumpScreen(
+        tester,
+        TransactionEditSheet(transaction: transaction),
+        transactions: [transaction],
+        savingsRepository: FakeSavingsRepository(goals: [testGoal()]),
+      );
+
+      expect(find.byKey(const Key('transaction_owned_by_goal')), findsNothing);
+      expect(find.byKey(const Key('transaction_delete')), findsOneWidget);
+    });
+  });
 }

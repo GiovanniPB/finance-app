@@ -42,9 +42,20 @@ abstract interface class SavingsRepository {
   Future<Result<void, Failure>> deleteGoal(String goalId);
 
   /// Registra "guardei R\$ X" (RN-3.2, caminho manual). Já nasce confirmado.
+  ///
+  /// Grava **duas linhas**: um lançamento `savings` (o dinheiro saiu do saldo
+  /// gastável) e a contribuição que o referencia. São as duas faces de um
+  /// evento só — enquanto só a contribuição existia, guardar dinheiro movia a
+  /// meta e não aparecia em mais nenhum lugar do app: nem no total de saídas do
+  /// mês, nem no saldo, nem na lista de lançamentos.
+  ///
+  /// [accountId] é a conta de onde o dinheiro **saiu**, e não a conta da meta
+  /// (`linkedAccountId`, que é onde ele chegou). Nulo é aceito: o lançamento
+  /// fica sem conta, como qualquer outro sem conta informada.
   Future<Result<SavingsContribution, Failure>> addContribution({
     required SavingsGoal goal,
     required Money amount,
+    String? accountId,
     DateTime? contributedAt,
   });
 
@@ -54,5 +65,14 @@ abstract interface class SavingsRepository {
   /// existe e não conta.
   Future<Result<void, Failure>> confirmContribution(String contributionId);
 
-  Future<Result<void, Failure>> deleteContribution(String contributionId);
+  /// Remove a contribuição **e o lançamento que a produziu**.
+  ///
+  /// Recebe a entidade, e não o id, justamente por causa do lançamento: o
+  /// vínculo vive em `transactionId`, e pedir a entidade deixa explícito no
+  /// tipo que a exclusão precisa saber dele. Contribuição sem lançamento
+  /// (linha anterior à migration 20260728000822, ou detecção do Open Finance
+  /// ainda sem lançamento nosso) sai sozinha.
+  Future<Result<void, Failure>> deleteContribution(
+    SavingsContribution contribution,
+  );
 }

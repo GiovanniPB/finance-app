@@ -157,6 +157,54 @@ Money savingsMonthTotal(Ref ref) {
   return total;
 }
 
+/// Metas pausadas do espaço.
+///
+/// Existe porque [goalProgressListProvider] as exclui: sem uma lista própria,
+/// pausar uma meta a faria desaparecer da única tela que leva ao detalhe dela —
+/// pausar viraria um esconder irreversível.
+///
+/// Sem progresso calculado, de propósito. Meta pausada não tem ritmo a comparar
+/// nem projeção a fazer, e desenhar uma barra seria justamente a cobrança que
+/// pausar existe para calar.
+@riverpod
+List<SavingsGoal> pausedGoals(Ref ref) {
+  final goals = ref.watch(savingsGoalsProvider).asData?.value ?? const [];
+
+  return List.unmodifiable([
+    for (final goal in goals)
+      if (goal.status == SavingsGoalStatus.paused) goal,
+  ]);
+}
+
+/// A meta de cada lançamento que financiou uma contribuição, indexada pelo id
+/// do lançamento.
+///
+/// A folha de edição de lançamento consulta este mapa para saber que aquele
+/// lançamento não é dela: valor e data pertencem ao evento da meta, e editá-los
+/// de um lado só faria as duas faces discordarem.
+///
+/// O mapa é montado em memória em vez de por query com join porque
+/// [savingsContributionsProvider] já traz o espaço inteiro para a tela de
+/// Poupança — indexá-lo aqui não lê nenhuma linha nova.
+@riverpod
+Map<String, SavingsGoal> goalByTransactionId(Ref ref) {
+  final contributions =
+      ref.watch(savingsContributionsProvider).asData?.value ?? const [];
+  final goals = ref.watch(savingsGoalsProvider).asData?.value ?? const [];
+
+  final goalsById = {for (final goal in goals) goal.id: goal};
+
+  final byTransaction = <String, SavingsGoal>{};
+  for (final contribution in contributions) {
+    final transactionId = contribution.transactionId;
+    final goal = goalsById[contribution.goalId];
+    if (transactionId == null || goal == null) continue;
+    byTransaction[transactionId] = goal;
+  }
+
+  return Map.unmodifiable(byTransaction);
+}
+
 /// Quantas contribuições detectadas aguardam confirmação no espaço (RN-3.2).
 ///
 /// Zero em toda a Fase 1 sem Open Finance — só a ingestão da Pluggy cria linha

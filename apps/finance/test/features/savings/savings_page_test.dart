@@ -237,4 +237,68 @@ void main() {
       expect(find.byType(BalanceHeader), findsNothing);
     });
   });
+
+  group('metas pausadas', () {
+    testWidgets('saem da lista de metas e ganham seção própria', (
+      tester,
+    ) async {
+      await pumpScreen(
+        tester,
+        const SavingsPage(),
+        savingsRepository: FakeSavingsRepository(
+          goals: [
+            testGoal(),
+            testGoal(
+              id: 'goal-2',
+              name: 'Reserva de emergência',
+              targetAmountMinor: 1200000,
+              status: SavingsGoalStatus.paused,
+            ),
+          ],
+          contributions: [testContribution(id: 'c1', minor: 324000)],
+        ),
+      );
+
+      // Fora dos cards: pausada não é cobrada.
+      expect(find.byKey(const Key('goal_card_goal-2')), findsNothing);
+      // E alcançável: pausar não pode ser um esconder sem volta.
+      expect(find.byKey(const Key('paused_goal_goal-2')), findsOneWidget);
+      expect(find.text('1 meta pausada'), findsOneWidget);
+      // O total conta só o que está ativo.
+      expect(find.text('Guardado nesta meta'), findsOneWidget);
+    });
+
+    testWidgets('sem barra de progresso — é a cobrança que pausar cala', (
+      tester,
+    ) async {
+      await pumpScreen(
+        tester,
+        const SavingsPage(),
+        savingsRepository: FakeSavingsRepository(
+          goals: [testGoal(status: SavingsGoalStatus.paused)],
+        ),
+      );
+
+      expect(find.byType(SavingsProgress), findsNothing);
+    });
+
+    testWidgets('com todas pausadas, não cai no estado vazio', (tester) async {
+      // O bug que isto guarda: `goalProgressList` filtra pausadas, então uma
+      // checagem só nela mostraria "Nenhuma meta ainda" com metas existindo — e
+      // sem nenhum caminho até elas.
+      await pumpScreen(
+        tester,
+        const SavingsPage(),
+        savingsRepository: FakeSavingsRepository(
+          goals: [testGoal(status: SavingsGoalStatus.paused)],
+        ),
+      );
+
+      expect(find.text('Nenhuma meta ainda'), findsNothing);
+      expect(find.byKey(const Key('all_goals_paused')), findsOneWidget);
+      expect(find.byKey(const Key('paused_goal_goal-1')), findsOneWidget);
+      // Sem momento alto: não há meta ativa cujo total mostrar.
+      expect(find.byType(BalanceHeader), findsNothing);
+    });
+  });
 }

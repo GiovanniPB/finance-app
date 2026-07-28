@@ -7,6 +7,7 @@ import '../../../di/providers.dart';
 import '../../accounts/presentation/accounts_providers.dart';
 import '../domain/goal_progress.dart';
 import '../domain/savings_contribution.dart';
+import '../domain/savings_goal.dart';
 import 'contribution_sheet.dart';
 import 'goal_copy.dart';
 import 'goal_form_sheet.dart';
@@ -33,6 +34,12 @@ class GoalDetailPage extends ConsumerWidget {
 
     final goal = progress.goal;
     final contributions = ref.watch(goalContributionsProvider(goalId));
+
+    // Pausada, a tela mostra o que já foi guardado e cala o que cobra: sem
+    // marca de ritmo, sem "faltam R$ X até tal data", sem projeção. É o detalhe
+    // de uma meta que continua alcançável — a seção de pausadas da aba leva até
+    // aqui, e o "Editar" tem o interruptor para retomar.
+    final isPaused = goal.status == SavingsGoalStatus.paused;
 
     return Scaffold(
       appBar: AppBar(
@@ -75,15 +82,24 @@ class GoalDetailPage extends ConsumerWidget {
                     children: [
                       SavingsProgress(
                         ratio: progress.ratio,
-                        paceRatio: progress.paceRatio,
+                        // Meta pausada não tem marca de ritmo: o tick diz "o
+                        // prazo esperava você aqui", e essa é exatamente a
+                        // cobrança que pausar existe para calar. A barra fica —
+                        // quanto já foi guardado é informação, não pressão.
+                        paceRatio: isPaused ? null : progress.paceRatio,
                         semanticLabel: 'Progresso de ${goal.name}',
                       ),
                       const SizedBox(height: AppSpacing.xs),
                       Text(
-                        [
-                          GoalCopy.pace(progress),
-                          GoalCopy.status(progress),
-                        ].nonNulls.join(' · '),
+                        isPaused
+                            // Nem "faltam R$ X", nem "até 5 de março": pausada,
+                            // a meta só diz que está pausada e como voltar.
+                            ? 'Pausada · retome em Editar'
+                            : [
+                                GoalCopy.pace(progress),
+                                GoalCopy.status(progress),
+                              ].nonNulls.join(' · '),
+                        key: const Key('goal_status_line'),
                         style: context.texts.bodySmall?.copyWith(
                           color: context.tokens.textMuted,
                         ),
@@ -91,7 +107,9 @@ class GoalDetailPage extends ConsumerWidget {
                     ],
                   ),
                 ),
-                _Projection(progress: progress),
+                // A projeção ("neste ritmo você fecha em outubro") pressupõe um
+                // ritmo que a meta pausada não tem.
+                if (!isPaused) _Projection(progress: progress),
                 _Contributions(
                   contributions: contributions,
                   currency: goal.currency,
@@ -345,6 +363,15 @@ class _Contributions extends ConsumerWidget {
               ),
             ],
           ),
+          const SizedBox(height: AppSpacing.xxs),
+          // A dica existe porque o toque na linha só faz uma coisa, e ela é
+          // destrutiva: sem dizer, ninguém descobre — e quem descobrisse por
+          // acidente levaria um susto.
+          Text(
+            'Toque numa contribuição para removê-la.',
+            key: const Key('goal_contributions_hint'),
+            style: context.texts.labelSmall?.copyWith(color: tokens.textMuted),
+          ),
           const SizedBox(height: AppSpacing.md),
           Container(
             decoration: BoxDecoration(
@@ -371,6 +398,12 @@ class _Contributions extends ConsumerWidget {
       count == 1 ? '1 no total' : '$count no total';
 }
 
+/// Uma linha do histórico. Tocar nela oferece remover.
+///
+/// "Tocar e confirmar" em vez de arrastar: não existe `Dismissible` em nenhum
+/// lugar do app, e inventar um gesto só aqui faria esta lista se comportar
+/// diferente de todas as outras. O diálogo é a mesma forma de excluir
+/// lançamento, conta e meta.
 class _ContributionRow extends ConsumerWidget {
   const _ContributionRow({required this.contribution, required this.isLast});
 
@@ -382,59 +415,109 @@ class _ContributionRow extends ConsumerWidget {
     final tokens = context.tokens;
     final pending = contribution.isPending;
 
-    return Container(
-      padding: const EdgeInsets.symmetric(
-        horizontal: AppSpacing.lg,
-        vertical: AppSpacing.md,
-      ),
+    return DecoratedBox(
       decoration: BoxDecoration(
-        // Pendente ganha superfície de poço — **não âmbar**. Âmbar é atenção de
-        // orçamento; aqui não há nada errado, só algo a confirmar.
-        color: pending ? tokens.surfaceSunken : null,
         border: isLast
             ? null
             : Border(bottom: BorderSide(color: tokens.hairline)),
       ),
-      child: Row(
-        children: [
-          Expanded(
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
+      // `Material` + `InkWell` em vez de `GestureDetector`: sem ele o toque não
+      // dá retorno nenhum, e ação destrutiva sem feedback parece não ter
+      // registrado.
+      child: Material(
+        // Pendente ganha superfície de poço — **não âmbar**. Âmbar é atenção de
+        // orçamento; aqui não há nada errado, só algo a confirmar.
+        color: pending ? tokens.surfaceSunken : Colors.transparent,
+        child: InkWell(
+          key: Key('contribution_row_${contribution.id}'),
+          onTap: () => _confirmRemoval(context, ref),
+          child: Padding(
+            padding: const EdgeInsets.symmetric(
+              horizontal: AppSpacing.lg,
+              vertical: AppSpacing.md,
+            ),
+            child: Row(
               children: [
-                Text(
-                  pending
-                      ? '${contribution.amount.format()} detectada'
-                      : 'Guardei',
-                  style: context.texts.bodyMedium,
-                ),
-                const SizedBox(height: AppSpacing.xxs),
-                Text(
-                  _subtitle(),
-                  style: context.texts.labelSmall?.copyWith(
-                    color: tokens.textMuted,
+                Expanded(
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Text(
+                        pending
+                            ? '${contribution.amount.format()} detectada'
+                            : 'Guardei',
+                        style: context.texts.bodyMedium,
+                      ),
+                      const SizedBox(height: AppSpacing.xxs),
+                      Text(
+                        _subtitle(),
+                        style: context.texts.labelSmall?.copyWith(
+                          color: tokens.textMuted,
+                        ),
+                      ),
+                    ],
                   ),
                 ),
+                const SizedBox(width: AppSpacing.sm),
+                if (pending)
+                  AppButton(
+                    key: Key('confirm_contribution_${contribution.id}'),
+                    label: 'Confirmar',
+                    variant: AppButtonVariant.secondary,
+                    expand: false,
+                    onPressed: () => ref
+                        .read(savingsRepositoryProvider)
+                        .confirmContribution(contribution.id),
+                  )
+                else
+                  // Aporte confirmado é dinheiro entrando na meta: mesma cor e
+                  // mesmo `+` de uma receita.
+                  MoneyText.income(contribution.amount),
               ],
             ),
           ),
-          const SizedBox(width: AppSpacing.sm),
-          if (pending)
-            AppButton(
-              key: Key('confirm_contribution_${contribution.id}'),
-              label: 'Confirmar',
-              variant: AppButtonVariant.secondary,
-              expand: false,
-              onPressed: () => ref
-                  .read(savingsRepositoryProvider)
-                  .confirmContribution(contribution.id),
-            )
-          else
-            // Aporte confirmado é dinheiro entrando na meta: mesma cor e mesmo
-            // `+` de uma receita.
-            MoneyText.income(contribution.amount),
+        ),
+      ),
+    );
+  }
+
+  /// Pergunta antes, e diz o que sai junto.
+  ///
+  /// A frase muda com [SavingsContribution.hasTransaction]: prometer que "o
+  /// lançamento sai junto" quando não há lançamento seria mentira — e é o caso
+  /// de toda linha anterior à migration 20260728000822.
+  Future<void> _confirmRemoval(BuildContext context, WidgetRef ref) async {
+    final amount = contribution.amount.format();
+
+    final confirmed = await showDialog<bool>(
+      context: context,
+      builder: (dialogContext) => AlertDialog(
+        title: const Text('Remover esta contribuição?'),
+        content: Text(
+          contribution.hasTransaction
+              ? 'A meta volta a ficar $amount atrás, e o lançamento de $amount '
+                    'sai do extrato junto — é o mesmo dinheiro visto dos dois '
+                    'lados. O saldo da conta não é afetado.'
+              : 'A meta volta a ficar $amount atrás. Esta contribuição não tem '
+                    'lançamento ligado, então o extrato não muda.',
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.of(dialogContext).pop(false),
+            child: const Text('Cancelar'),
+          ),
+          TextButton(
+            key: const Key('confirm_delete_contribution'),
+            onPressed: () => Navigator.of(dialogContext).pop(true),
+            child: const Text('Remover'),
+          ),
         ],
       ),
     );
+
+    if (confirmed != true) return;
+
+    await ref.read(savingsRepositoryProvider).deleteContribution(contribution);
   }
 
   String _subtitle() {
