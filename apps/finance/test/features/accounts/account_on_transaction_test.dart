@@ -68,13 +68,6 @@ Widget editOpener(Transaction transaction) => Builder(
 );
 
 void main() {
-  Future<void> tapVisible(WidgetTester tester, Finder finder) async {
-    await tester.ensureVisible(finder);
-    await tester.pumpAndSettle();
-    await tester.tap(finder);
-    await tester.pump();
-  }
-
   group('AccountPicker', () {
     testWidgets('sem conta cadastrada, não mostra nem o rótulo', (
       tester,

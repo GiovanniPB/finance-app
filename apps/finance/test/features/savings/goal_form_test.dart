@@ -7,14 +7,6 @@ import 'package:flutter_test/flutter_test.dart';
 
 import '../../helpers/app_harness.dart';
 
-/// Toca num alvo que pode estar fora da viewport da folha.
-Future<void> tapVisible(WidgetTester tester, Finder finder) async {
-  await tester.ensureVisible(finder);
-  await tester.pumpAndSettle();
-  await tester.tap(finder);
-  await tester.pumpAndSettle();
-}
-
 void main() {
   /// Abre a folha já montada, sem depender de um botão da tela de trás.
   ///

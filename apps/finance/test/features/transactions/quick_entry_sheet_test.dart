@@ -1,7 +1,6 @@
 import 'package:core/core.dart';
 import 'package:design_system/design_system.dart';
 import 'package:finance/di/providers.dart';
-import 'package:finance/features/categories/domain/categories_repository.dart';
 import 'package:finance/features/categories/domain/category.dart';
 import 'package:finance/features/spaces/domain/space.dart';
 import 'package:finance/features/spaces/domain/spaces_repository.dart';
@@ -11,6 +10,11 @@ import 'package:finance/features/transactions/presentation/quick_entry_sheet.dar
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
+
+// Import seletivo: este arquivo tem o próprio `FakeSpacesRepository`, que
+// colidiria com o do harness. Só a categoria vem de lá — era a terceira cópia
+// do mesmo fake.
+import '../../helpers/app_harness.dart' show FakeCategoriesRepository;
 
 class FakeSpacesRepository implements SpacesRepository {
   @override
@@ -30,28 +34,6 @@ class FakeSpacesRepository implements SpacesRepository {
 
   @override
   Stream<Space?> watchById(String id) => Stream.value(null);
-}
-
-class FakeCategoriesRepository implements CategoriesRepository {
-  FakeCategoriesRepository(this.categories);
-  final List<Category> categories;
-
-  @override
-  Stream<List<Category>> watchForSpace(String spaceId) =>
-      Stream.value(categories);
-
-  @override
-  Future<Result<Category, Failure>> create({
-    required String spaceId,
-    required String name,
-    required String iconKey,
-    int? colorIndex,
-    String? parentCategoryId,
-  }) async => throw UnimplementedError();
-
-  @override
-  Future<Result<void, Failure>> delete(String id) async =>
-      throw UnimplementedError();
 }
 
 class RecordingTransactionsRepository implements TransactionsRepository {

@@ -14,6 +14,23 @@ Stream<List<Category>> categories(Ref ref) {
   return ref.watch(categoriesRepositoryProvider).watchForSpace(space.id);
 }
 
+/// Só as categorias **criadas pelo usuário** neste espaço.
+///
+/// É o que a aba Perfil lista para editar e remover. As dez de sistema ficam
+/// fora porque não são editáveis (a RLS bloqueia, e o nome delas é vocabulário
+/// compartilhado entre espaços): listá-las numa seção de gerenciamento seria
+/// oferecer dez linhas que não respondem ao toque.
+@riverpod
+List<Category> userCategories(Ref ref) {
+  final list =
+      ref.watch(categoriesProvider).asData?.value ?? const <Category>[];
+
+  return List.unmodifiable([
+    for (final category in list)
+      if (!category.isSystem) category,
+  ]);
+}
+
 /// Índice `id → categoria`, para a lista de transações resolver o nome e o
 /// ícone de cada linha sem varrer a lista inteira por transação.
 @riverpod

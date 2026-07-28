@@ -68,17 +68,6 @@ void main() {
     return repository;
   }
 
-  /// Toca num alvo que pode estar abaixo da dobra.
-  ///
-  /// A folha rola: sem `ensureVisible` o toque cai fora da tela, e o teste
-  /// passa a não testar nada (o Flutter só avisa, não falha).
-  Future<void> tapVisible(WidgetTester tester, Finder finder) async {
-    await tester.ensureVisible(finder);
-    await tester.pumpAndSettle();
-    await tester.tap(finder);
-    await tester.pump();
-  }
-
   /// Digita um valor no teclado próprio da folha.
   Future<void> typeAmount(WidgetTester tester, String digits) async {
     for (final digit in digits.split('')) {

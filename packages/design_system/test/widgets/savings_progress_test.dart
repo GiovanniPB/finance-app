@@ -189,5 +189,53 @@ void main() {
       expect(gradient.colors.first.r, background.r);
       expect(gradient.colors.last, background);
     });
+
+    testWidgets('por padrão é uma faixa deitada, de cima para baixo', (
+      tester,
+    ) async {
+      await pumpThemed(tester, const ScrollEdgeFade());
+
+      final box = tester.widget<SizedBox>(
+        find.descendant(
+          of: find.byType(ScrollEdgeFade),
+          matching: find.byType(SizedBox),
+        ),
+      );
+      expect(box.height, ScrollEdgeFade.defaultHeight);
+      expect(box.width, isNull);
+
+      expect(_gradientOf(tester).begin, Alignment.topCenter);
+      expect(_gradientOf(tester).end, Alignment.bottomCenter);
+    });
+
+    testWidgets('no eixo horizontal vira faixa em pé, da esquerda para a '
+        'direita', (tester) async {
+      // É o caso da fila de categorias: o gradiente corre na direção da
+      // rolagem, então lista que rola de lado pede faixa vertical.
+      await pumpThemed(tester, const ScrollEdgeFade(axis: Axis.horizontal));
+
+      final box = tester.widget<SizedBox>(
+        find.descendant(
+          of: find.byType(ScrollEdgeFade),
+          matching: find.byType(SizedBox),
+        ),
+      );
+      expect(box.width, ScrollEdgeFade.defaultHeight);
+      expect(box.height, isNull);
+
+      expect(_gradientOf(tester).begin, Alignment.centerLeft);
+      expect(_gradientOf(tester).end, Alignment.centerRight);
+    });
   });
+}
+
+/// O gradiente do [ScrollEdgeFade] montado na árvore.
+LinearGradient _gradientOf(WidgetTester tester) {
+  final decorated = tester.widget<DecoratedBox>(
+    find.descendant(
+      of: find.byType(ScrollEdgeFade),
+      matching: find.byType(DecoratedBox),
+    ),
+  );
+  return (decorated.decoration as BoxDecoration).gradient! as LinearGradient;
 }

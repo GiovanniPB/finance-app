@@ -6,11 +6,6 @@ import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 
 import '../../helpers/app_harness.dart';
-// Emprestado em vez de copiado: `tapVisible` já existe em quatro arquivos de
-// teste, e uma quinta cópia engordaria o débito de duplicação em vez de usá-la.
-// Mesmo padrão do `transaction_edit_sheet_test.dart`, que importa o
-// `RecordingTransactionsRepository` do teste do controller.
-import 'goal_form_test.dart' show tapVisible;
 
 void main() {
   Future<void> pumpDetail(

@@ -86,6 +86,18 @@ void main() {
       genId: () => 'cat-new',
     );
 
+    /// Faz o `countUsage` responder [total] lançamentos.
+    ///
+    /// `getAll` devolve `ResultSet`, e não lista de mapas: é a forma que o
+    /// SQLite entrega, com nomes de coluna à parte das linhas.
+    void usedBy(int total) {
+      when(() => db.getAll(any(), any())).thenAnswer(
+        (_) async => ResultSet(const ['total'], const [null], [
+          [total],
+        ]),
+      );
+    }
+
     setUp(() {
       db = MockSqliteConnection();
       when(
@@ -94,6 +106,9 @@ void main() {
       when(
         () => db.execute(any(), any()),
       ).thenAnswer((_) async => emptyResultSet());
+      // `delete` consulta o uso antes de apagar; sem o stub ele nem chega ao
+      // DELETE.
+      usedBy(0);
     });
 
     test('watchForSpace inclui as de sistema e as do espaço', () {
@@ -194,6 +209,86 @@ void main() {
         (await buildRepo().delete('cat-1')).failureOrNull,
         isA<DatabaseFailure>(),
       );
+    });
+
+    test('delete recusa categoria em uso, sem tocar no banco', () async {
+      usedBy(3);
+
+      final result = await buildRepo().delete('cat-1');
+
+      // Recusa explícita, e não um DELETE que não apaga nada: o no-op
+      // silencioso deixaria a tela fechar como se tivesse dado certo.
+      expect(result.failureOrNull, isA<ValidationFailure>());
+      expect(result.failureOrNull!.message, contains('3 lançamentos'));
+      verifyNever(() => db.execute(any(), any()));
+    });
+
+    test('a recusa concorda em número com o singular', () async {
+      usedBy(1);
+
+      final result = await buildRepo().delete('cat-1');
+
+      expect(result.failureOrNull!.message, startsWith('Um lançamento usa'));
+    });
+
+    test('countUsage conta lançamentos da categoria em qualquer mês', () async {
+      usedBy(12);
+
+      expect((await buildRepo().countUsage('cat-1')).valueOrNull, 12);
+
+      final sql =
+          verify(() => db.getAll(captureAny(), any())).captured.single
+              as String;
+      // Sem janela de data: a pergunta é "alguém usa", não "usou este mês".
+      expect(sql, contains('FROM transactions WHERE category_id = ?'));
+      expect(sql, isNot(contains('occurred_at')));
+    });
+
+    test('update grava nome, ícone e cor, e protege a de sistema', () async {
+      final category = Category.fromRow(row(spaceId: 'space-1', isSystem: 0));
+
+      final result = await buildRepo().update(
+        category.copyWith(
+          name: '  Mercado  ',
+          iconKey: 'health',
+          colorIndex: 3,
+        ),
+      );
+
+      expect(result.valueOrNull!.name, 'Mercado');
+
+      final captured = verify(
+        () => db.execute(captureAny(), captureAny()),
+      ).captured;
+      final sql = captured.first as String;
+      expect(sql, contains('UPDATE categories SET'));
+      // Mesma guarda do delete: a linha pode ter mudado por baixo do cliente.
+      expect(sql, contains('is_system = 0'));
+      // `space_id`, `is_system` e `created_at` são identidade, não dado
+      // editável.
+      expect(sql, isNot(contains('space_id =')));
+      expect(sql, isNot(contains('created_at =')));
+
+      final params = captured[1] as List<Object?>;
+      expect(params, contains('Mercado'));
+      expect(params, contains('health'));
+      expect(params, contains(3));
+    });
+
+    test('update recusa categoria de sistema antes do banco', () async {
+      final result = await buildRepo().update(Category.fromRow(row()));
+
+      expect(result.failureOrNull, isA<ValidationFailure>());
+      verifyNever(() => db.execute(any(), any()));
+    });
+
+    test('update recusa nome vazio', () async {
+      final category = Category.fromRow(row(spaceId: 'space-1', isSystem: 0));
+
+      final result = await buildRepo().update(category.copyWith(name: '   '));
+
+      expect(result.failureOrNull, isA<ValidationFailure>());
+      verifyNever(() => db.execute(any(), any()));
     });
   });
 }
