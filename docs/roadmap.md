@@ -4,8 +4,12 @@ Documento vivo. O **PRD** define *o quê* e *por quê*; este arquivo registra
 *onde estamos*. Atualize junto com o PR que muda o estado.
 
 - Última atualização: **2026-07-28**
-- Branch de trabalho atual: `chore/limpeza-de-debitos` (PR #21 aberto com a
-  armadilha do histórico de migrations)
+- Branch de trabalho atual: `chore/limpeza-de-debitos`, com **dois PRs abertos e
+  verdes**: [#22](https://github.com/GiovanniPB/finance-app/pull/22) (contém os
+  dois commits: a armadilha do histórico de migrations + a limpeza de quatro
+  débitos) e [#21](https://github.com/GiovanniPB/finance-app/pull/21) (só o
+  commit de docs). **Mergear o #22 e fechar o #21** — o #21 não tem mais conteúdo
+  próprio. O #20 (fatia de poupança) já está na `main`.
 
 ---
 
@@ -286,6 +290,29 @@ manual, no simulador, e cada fatia a registra no PR.
 
 ---
 
+## Onde retomar
+
+Estado em 2026-07-28, fim da sessão:
+
+1. **Mergear o PR #22** (verde) e **fechar o #21** — o #22 contém os dois commits.
+2. **Ver o app rodando ficou pela metade.** O build e o launch funcionaram no
+   iPhone 17 Pro, o app chegou à tela de login, e o login é passo manual. O
+   roteiro que ainda não foi percorrido: a folha "Guardei um valor" com o campo
+   "Saiu de"; o lançamento de poupança na lista (ícone próprio + "Poupança" na
+   segunda linha); o toque nele abrindo **em leitura** com o caminho para a meta;
+   a confirmação de remover contribuição avisando que o lançamento sai junto;
+   pausar/retomar meta; a seção "Suas categorias" no Perfil; e o desvanecimento
+   na fila de categorias.
+3. **Débitos novos desta sessão**, todos nas listas abaixo: os três helpers de
+   RLS expostos, as duas funções de trigger expostas, e a mensagem de auth em
+   inglês.
+4. **Fora do repo, pendente com o usuário:** `supabase db reset` (exige Docker),
+   o toggle de proteção de senha vazada no dashboard, e rotacionar as credenciais
+   de Postgres, Redis e partnr que um `claude mcp list` imprimiu em texto claro
+   durante a sessão.
+
+---
+
 ## Fase 1 — Poupança + Open Finance (em andamento)
 
 ### Concluído na fatia de metas de poupança (branch `feat/metas-poupanca`)
@@ -460,6 +487,15 @@ Ordenados por risco. Todos verificados no código.
 
 ### Resolvido
 
+- [x] **`get_advisors` rodou depois da mudança de schema** (2026-07-28): 10 WARN,
+      **zero ERROR**. E o que importava confirmar passou: a
+      `savings_contributions_inherit_space`, recriada pela `20260728000822` como
+      `SECURITY DEFINER`, **não aparece** entre as funções expostas — o
+      `revoke execute … from anon, authenticated, public` da migration segurou.
+      Os avisos que sobraram são todos anteriores a esta fatia e estão nos
+      débitos médios acima, mais um toggle de dashboard: **proteção de senha
+      vazada desligada** (checagem contra o HaveIBeenPwned, um clique, sem
+      migration).
 - [x] **Sem testes de integração.** `integration_test/` tinha só um README
       planejando um teste que dependia de rede e credenciais. Agora são 18
       testes sobre um PowerSync real, rodando no CI — e a glue que o gate de
@@ -541,10 +577,37 @@ Ordenados por risco. Todos verificados no código.
       `supabase db reset`, que aplica as nove em sequência num banco vazio. É a
       diferença entre "aplica sobre o schema atual" e "o repo descreve o banco" —
       e a segunda é a promessa que o `CLAUDE.md` faz. Exige Docker.
-- [ ] **`get_advisors` não foi rodado depois da mudança de schema.** O
-      `CLAUDE.md` pede, e a `20260728000822` recria uma função
-      `SECURITY DEFINER` (`savings_contributions_inherit_space`). O `revoke` está
-      reafirmado na migration, mas a verificação é que confirma.
+- [ ] **Três helpers de RLS estão expostos como endpoint REST.**
+      `is_space_member`, `has_space_role` e `is_space_owner` (migration
+      `20260717120000`) são `SECURITY DEFINER` e chamáveis por `anon` e
+      `authenticated` via `/rest/v1/rpc/…`. Achado pelo `get_advisors` em
+      2026-07-28 (10 WARN, zero ERROR).
+
+      **Cuidado com o conselho do linter.** Ele oferece três saídas — revogar
+      `EXECUTE`, virar `SECURITY INVOKER`, ou tirar do schema exposto. As duas
+      primeiras são arriscadas **nestas três**, porque elas são chamadas de
+      dentro das policies de RLS. A saída documentada é a terceira: mover para um
+      schema `private`, que o PostgREST não expõe. Os docs são explícitos — "As
+      such functions should never be in an API exposed schema" — e o PostgREST
+      não precisa vê-las desde que a policy qualifique o schema.
+
+      Severidade real: baixa mas não nula. Para `anon`, `auth.uid()` é nulo e
+      elas retornam falso; um autenticado consegue sondar se é membro de um
+      espaço arbitrário.
+- [ ] **Duas funções de trigger também estão expostas**, e essas são baratas de
+      fechar: `handle_new_user` e `set_updated_at` não são chamadas por policy,
+      então revogar `EXECUTE` de `anon`/`authenticated` é seguro (trigger roda
+      pelo mecanismo do Postgres, não pelo papel que consulta). A
+      `set_updated_at` ainda tem `search_path` mutável — falta o
+      `set search_path = ''` que as funções mais novas já têm.
+- [ ] **Mensagem de erro de autenticação sai em inglês.**
+      `auth_repository_impl.dart:44` e `:60` fazem `AuthFailure(e.message)`,
+      passando a frase do Supabase crua para a tela — "Invalid login
+      credentials" aparece assim na tela de login. Visto rodando no simulador em
+      2026-07-28. É inconsistência dentro do próprio arquivo: as outras
+      `AuthFailure` dele têm texto em português. Mesma família do débito de
+      localização já fechado, e do mesmo tipo: nenhuma revisão de código pega,
+      porque o texto não está no repo.
 - [ ] **O vínculo depende do cliente para não desincronizar no local.** No
       Postgres o `on delete cascade` garante que apagar o lançamento apaga a
       contribuição. As tabelas locais do PowerSync são views e não cascateiam:
@@ -659,7 +722,8 @@ Ordenados por risco. Todos verificados no código.
 | Item | Estado |
 |---|---|
 | macOS desktop | ✅ Roda. Entitlement `network.client` corrigida no PR #10. |
-| iOS Simulator | ✅ Xcode 26.1.1. Verificado rodando de fato: `fvm flutter build ios --simulator --debug` + instalar o `Runner.app`. |
+| iOS Simulator | ✅ Xcode 26.1.1. Verificado rodando de fato em 2026-07-28, no iPhone 17 Pro: `xcrun simctl boot <udid>` → `fvm flutter build ios --simulator --debug --target lib/main_dev.dart --dart-define-from-file=<abs>/env/dev.json` (133s) → instalar o `Runner.app`. O `--dart-define-from-file` **precisa de caminho absoluto** e vale no `build`, não só no `run`: `AppEnv` valida no boot. |
+| **MCP do Supabase** | ⚠️ Armadilha custosa. Duas coisas o quebram: (1) um **header `Authorization` fixo** na config desliga o OAuth por completo — o erro é `OAuth fallback is disabled when headers.Authorization is set`, e reautorizar não resolve enquanto o header existir; (2) o consentimento OAuth é **por organização**, e o `Finance App` vive na org `Giovanni's Org` (`rwilajfjocmzyqyyikko`), não na `OTM Tecnologia`. Sintoma: `list_projects` devolve os projetos errados e `get_project(ivfcypfljxvwkvnvmuum)` dá `You do not have permission`. Para diagnosticar sem o MCP, use o CLI — `supabase orgs list` e `supabase projects list` mostram as quatro orgs da conta. |
 | Supabase local | ✅ Configurado nas portas 553xx (offset +1000, coexiste com `finance-dashboard`). Exige Docker de pé. |
 | **PowerSync** | ✅ Instância Cloud (ambiente Development) ligada ao Supabase da nuvem, com as sync rules do repo publicadas. ⚠️ **Publicar é manual**: o arquivo do repo não sobe sozinho, e regras velhas se manifestam como tabela vazia no cliente sem erro nenhum. **Coluna nova não exige republicar** — os buckets usam `select *`, e a fatia de contas confirmou isso rodando: as quatro colunas novas chegaram ao SQLite local sem tocar no dashboard. Tabela ou bucket novo, sim. |
 | **Supabase (nuvem)** | ✅ Projeto `ivfcypfljxvwkvnvmuum`, as 9 migrations do repo aplicadas, 10 categorias de sistema semeadas, 7 tabelas com `REPLICA IDENTITY FULL` na publication `powersync`. É o que o `env/dev.json` usa. ⚠️ **Nunca aplique schema por outro caminho que não `supabase db push`** — ver a armadilha do histórico abaixo. |
