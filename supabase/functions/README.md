@@ -14,14 +14,31 @@ Pluggy → pluggy-webhook → webhook_events → pluggy-sync-worker → Postgres
 
 | Função | `verify_jwt` | Estado |
 |---|---|---|
-| `pluggy-connect-token` | `true` | ✅ Deployada. **Exercitada de verdade** — o widget carregou e o fluxo completou no simulador. |
-| `pluggy-webhook` | **`false`** | Escrita. Não deployada. |
-| `pluggy-sync-worker` | `true` | Escrita. Não deployada, nunca rodou. |
+| `pluggy-connect-token` | `true` | ✅ Deployada e **exercitada de verdade** — o widget carregou e o fluxo completou no simulador. |
+| `pluggy-webhook` | **`false`** | ✅ Deployada. 6 eventos reais recebidos e enfileirados; guardas verificadas (405 em GET, 400 em corpo inválido, 200 sem escrita em item de terceiro). |
+| `pluggy-sync-worker` | `true` | ✅ Deployada e rodou contra sandbox **e** conta real. Duas correções saíram dessa passagem: direção em cartão e perda silenciosa de página. |
 
 `_shared/pluggy.ts` concentra a troca de `CLIENT_ID`/`CLIENT_SECRET` pela apiKey
 (com cache por isolate) e o `GET` autenticado — duas funções com caches
 independentes acabariam estourando o rate limit de `/auth` por um caminho e não
 pelo outro.
+
+`_shared/ingest.ts` guarda as **decisões puras** da ingestão: direção do
+lançamento e dedup de lote. Ficam separadas porque é o código que erra em
+silêncio — não estoura, vira dinheiro errado no extrato de alguém — e porque
+assim dá para testá-las sem Deno, sem rede e sem device.
+
+## Testes
+
+```bash
+node --test 'supabase/functions/_shared/*.test.ts'
+```
+
+Não precisa de Deno nem de Docker: `_shared/ingest.ts` não importa nada, e o Node
+24 executa TypeScript direto. O que o arquivo de teste guarda é a **tabela-verdade
+medida** nos dois conectores, copiada da instrumentação gravada em
+`webhook_events.payload._convencao` — não a documentação, que já divergiu do que
+chegou.
 
 ## Por que o webhook não tem `verify_jwt` nem header secreto
 
@@ -71,11 +88,14 @@ supabase functions deploy pluggy-connect-token pluggy-webhook pluggy-sync-worker
 
 ## Limitações conhecidas
 
-- **Nada foi typecheckado localmente.** Deno não está instalado na máquina de
-  desenvolvimento e `supabase functions serve` exige Docker: o `deploy` é a
-  primeira compilação. Vale para as três.
-- **O worker nunca rodou.** O mapeamento de status, de subtipo de conta e de
-  sinal de valor segue a referência §7.1–7.4 e nada mais que isso o garante.
+- **O typecheck local não exige instalar Deno**, mas exige rede:
+  `cd supabase/functions && npx -y deno@2.1.4 check pluggy-*/index.ts` baixa o
+  Deno na hora e resolve os imports `jsr:`. `deno lint` no mesmo caminho. É mais
+  rápido que descobrir erro de tipo no `deploy`.
+- **A convenção de direção é conhecida em dois conectores, não em N.** Sandbox e
+  Nubank; o cartão do sandbox inverte os dois campos e nenhuma regra o acerta.
+  A discordância entre sinal e `type` é contada por página no `payload` do
+  evento, que é onde a terceira convenção vai aparecer.
 - **`transactions/deleted` não apaga nada.** Apagar lançamento que o usuário já
   categorizou (ou ligou a uma meta) é decisão de produto.
 - **`PENDING` é ignorada.** Não há coluna para marcá-la, e exibi-la como
@@ -97,4 +117,30 @@ Fila pendente:
 ```sql
 select event_type, attempts, last_error, received_at
 from webhook_events where processed_at is null order by received_at;
+```
+
+O que cada página de transação produziu — quantas chegaram, quantas foram
+filtradas, quantas colidiram na chave de dedup, quantas entraram, e a convenção
+de sinal observada:
+
+```sql
+select event_type, received_at, jsonb_pretty(payload -> '_convencao')
+from webhook_events order by received_at desc limit 3;
+```
+
+**Isto mora no banco, não em `console.log`, de propósito:** a saída de console
+das Edge Functions não é legível por SQL nem pelo CLI desta versão, só pelo
+dashboard. A primeira instrumentação de convenção rodou e não houve como ler o
+resultado.
+
+Reprocessar um item (o worker drena a fila; não recebe corpo):
+
+```sql
+insert into webhook_events (event_id, event_type, item_id, payload)
+values ('reprocessa-<motivo>', 'transactions/created', '<item-id>', '{}'::jsonb);
+```
+
+```bash
+curl -X POST "$SUPABASE_URL/functions/v1/pluggy-sync-worker" \
+  -H "Authorization: Bearer $SUPABASE_ANON_KEY"
 ```

@@ -1,6 +1,7 @@
 import 'package:core/core.dart';
 import 'package:design_system/design_system.dart';
 import 'package:finance/features/categories/domain/category.dart';
+import 'package:finance/features/categories/presentation/category_icons.dart';
 import 'package:finance/features/transactions/domain/transaction.dart';
 import 'package:finance/features/transactions/presentation/transaction_list.dart';
 import 'package:flutter/material.dart';
@@ -188,6 +189,48 @@ void main() {
 
       expect(find.text('+5.400,00'), findsWidgets);
     });
+
+    testWidgets('poupança diz "Poupança" no lugar da categoria', (
+      tester,
+    ) async {
+      await pumpList(tester, [
+        tx(
+          minor: 50000,
+          occurredAt: DateTime.now(),
+          type: TransactionType.savings,
+          categoryId: null,
+          description: 'Viagem',
+        ),
+      ]);
+
+      expect(find.text('Poupança'), findsOneWidget);
+      expect(find.byIcon(Icons.savings_outlined), findsOneWidget);
+    });
+
+    testWidgets(
+      'transferência diz "Transferência" e usa ícone próprio — sem isso, o '
+      'pagamento de fatura leria como despesa comum e o resumo do mês o '
+      'ignoraria',
+      (tester) async {
+        await pumpList(
+          tester,
+          [
+            tx(
+              minor: 1013902,
+              occurredAt: DateTime.now(),
+              type: TransactionType.transfer,
+              categoryId: null,
+              description: 'Pagamento recebido',
+            ),
+          ],
+          categories: const {},
+        );
+
+        expect(find.text('Transferência'), findsOneWidget);
+        expect(find.byIcon(Icons.swap_horiz), findsOneWidget);
+        expect(find.byIcon(CategoryIcons.uncategorized), findsNothing);
+      },
+    );
 
     testWidgets('separa os dias em seções distintas', (tester) async {
       final today = DateTime.now();

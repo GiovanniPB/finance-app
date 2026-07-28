@@ -160,20 +160,28 @@ class _Row extends StatelessWidget {
   final String? accountName;
   final void Function(Transaction)? onTap;
 
-  /// Segunda linha da tile: o que houver de categoria, natureza e conta. Nulo
-  /// quando não há nada a dizer — uma linha em branco é pior que nenhuma linha.
+  /// Rótulo que substitui a categoria em lançamento que não tem uma **por
+  /// definição**.
   ///
-  /// Lançamento de poupança diz "Poupança" no lugar da categoria, porque ele
-  /// **não tem** categoria (dar-lhe uma faria o valor debitar um orçamento).
-  /// Sem isso a linha teria o nome da meta em cima e nada embaixo, sem nunca
-  /// dizer que aquele dinheiro foi guardado em vez de gasto.
+  /// Poupança não tem categoria de propósito (atribuir uma faria o valor
+  /// debitar um orçamento). Transferência também não: ela nasce da ingestão do
+  /// Open Finance quando o dinheiro só troca de bolso — o caso que a produz é
+  /// pagar a fatura do cartão. Sem este rótulo a linha ficaria com o ícone de
+  /// "falta classificar" e leria como despesa comum, enquanto o resumo do mês a
+  /// ignora: R$ 10 mil visíveis na lista e ausentes do total.
+  static String? _typeLabel(TransactionType type) => switch (type) {
+    TransactionType.savings => 'Poupança',
+    TransactionType.transfer => 'Transferência',
+    TransactionType.expense || TransactionType.income => null,
+  };
+
   static String? _meta(
     String? categoryName,
     String? accountName, {
-    required bool isSavings,
+    required String? typeLabel,
   }) {
     final parts = [
-      if (isSavings) 'Poupança' else ?categoryName,
+      if (typeLabel != null) typeLabel else ?categoryName,
       ?accountName,
     ];
     return parts.isEmpty ? null : parts.join(' · ');
@@ -182,16 +190,19 @@ class _Row extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final categoryName = category?.name;
-    final isSavings = transaction.type == TransactionType.savings;
+    final typeLabel = _typeLabel(transaction.type);
     final icon = transaction.isIncome
         ? CategoryIcons.income
-        : isSavings
         // Ícone próprio: o de "sem categoria" leria como lançamento que falta
-        // classificar, e este não falta — ele não tem categoria por definição.
-        ? Icons.savings_outlined
-        : category == null
-        ? CategoryIcons.uncategorized
-        : CategoryIcons.resolve(category!.iconKey);
+        // classificar, e estes não faltam — não têm categoria por definição.
+        : switch (transaction.type) {
+            TransactionType.savings => Icons.savings_outlined,
+            TransactionType.transfer => Icons.swap_horiz,
+            _ =>
+              category == null
+                  ? CategoryIcons.uncategorized
+                  : CategoryIcons.resolve(category!.iconKey),
+          };
 
     final described = transaction.description?.trim();
     final hasDescription = described != null && described.isNotEmpty;
@@ -210,7 +221,7 @@ class _Row extends StatelessWidget {
       meta: _meta(
         hasDescription ? categoryName : null,
         accountName,
-        isSavings: isSavings,
+        typeLabel: typeLabel,
       ),
       isIncome: transaction.isIncome,
       onTap: onTap == null ? null : () => onTap!(transaction),
