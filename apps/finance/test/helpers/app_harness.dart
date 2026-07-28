@@ -555,6 +555,40 @@ Space personalSpace({String name = 'Pessoal'}) => Space(
   updatedAt: DateTime.utc(2026, 7),
 );
 
+/// Um espaço compartilhado de exemplo.
+Space testSharedSpace({
+  String id = 'space-2',
+  String name = 'Viagem ao Chile',
+  SpaceType type = SpaceType.group,
+}) => Space(
+  id: id,
+  type: type,
+  name: name,
+  ownerId: 'user-1',
+  privacy: type == SpaceType.household
+      ? SpacePrivacy.fullTransparency
+      : SpacePrivacy.sharedOnly,
+  status: SpaceStatus.active,
+  settlementCurrency: 'BRL',
+  createdAt: DateTime.utc(2026, 7),
+  updatedAt: DateTime.utc(2026, 7),
+);
+
+/// Um membro de exemplo.
+SpaceMember testMember({
+  String id = 'member-1',
+  String spaceId = 'space-2',
+  String userId = 'user-1',
+  SpaceRole role = SpaceRole.admin,
+}) => SpaceMember(
+  id: id,
+  spaceId: spaceId,
+  userId: userId,
+  role: role,
+  status: MembershipStatus.active,
+  joinedAt: testNow,
+);
+
 Account testAccount({
   String id = 'acc-1',
   String name = 'Conta corrente',
@@ -759,6 +793,7 @@ Future<void> pumpScreen(
   WidgetTester tester,
   Widget screen, {
   List<Space>? spaces,
+  SpacesRepository? spacesRepository,
   List<Category>? categories,
   List<Transaction> transactions = const [],
   List<Budget> budgets = const [],
@@ -782,7 +817,7 @@ Future<void> pumpScreen(
     ProviderScope(
       overrides: [
         spacesRepositoryProvider.overrideWithValue(
-          FakeSpacesRepository(spaces ?? [personalSpace()]),
+          spacesRepository ?? FakeSpacesRepository(spaces ?? [personalSpace()]),
         ),
         categoriesRepositoryProvider.overrideWithValue(
           categoriesRepository ??
