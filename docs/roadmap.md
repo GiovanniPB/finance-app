@@ -1206,6 +1206,10 @@ Ordenados por risco. Todos verificados no código.
       regra protege: teria de rodar uma vez só, sobre uma janela escolhida, e não
       a cada sincronização. Enquanto não existir, a detecção só se manifesta em
       extrato novo.
+
+      **Decidido em 2026-07-28: não fazer por enquanto.** A detecção será
+      exercitada com extrato novo mesmo. Fica registrado que "nada apareceu" é o
+      sintoma esperado sobre dado antigo, não defeito da regra.
 - [ ] **`pendingContributionsCount` continua sem tela.** O contador de pendentes
       do espaço inteiro é calculado e testado, e agora que a detecção existe o
       único lugar que anuncia pendência é o card da meta — dentro da aba
