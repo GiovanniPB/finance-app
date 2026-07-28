@@ -4,9 +4,9 @@ Documento vivo. O **PRD** define *o quê* e *por quê*; este arquivo registra
 *onde estamos*. Atualize junto com o PR que muda o estado.
 
 - Última atualização: **2026-07-28**
-- Branch de trabalho atual: `fix/direcao-e-perda-na-ingestao`, a partir da
-  `main`. **A pilha inteira do Open Finance está mergeada** (PRs #27, #28 e #29;
-  o #28 passou com CI verde). ⚠️ Fica registrada a armadilha que a pilha revelou:
+- Branch de trabalho atual: `chore/debitos-de-open-finance`, a partir da `main`.
+  **A pilha do Open Finance e a correção da ingestão estão mergeadas** (PRs #27,
+  #28, #29 e #30). ⚠️ Fica registrada a armadilha que a pilha revelou:
   **PR empilhado não tem CI**, porque o workflow dispara só em `pull_request` para
   `main` — o #26 nunca teve check, e a verificação dele foi local, o que não é a
   mesma coisa. Os únicos PRs abertos são quatro do dependabot (#1, #2, #8, #9),
@@ -308,25 +308,40 @@ manual, no simulador, e cada fatia a registra no PR.
 
 Estado em 2026-07-28, fim da sessão:
 
-0. **O reparo está feito e medido.** O worker corrigido está deployado (versão
-   8), a fila está vazia, zero erro pendente, e **zero duplicata**:
+0. **Deployar `pluggy-disconnect` e remover um banco de verdade.** É o único
+   passo pendente da fatia atual, e o deploy depende de você (o classificador de
+   permissões bloqueia `functions deploy` do meu lado):
 
-   | Conta | Antes | Depois |
-   |---|---|---|
-   | cartão real (`ultraviolet-black`) | 317 linhas: 305 receita, 12 despesa | **1.750** linhas: 1.658 despesa, 92 transferência, **zero receita** |
-   | corrente real (Nu Pagamentos) | 299: 218 despesa, 81 receita | 300: 219 / 81 |
-   | cartão sandbox | 9 despesa | 9 transferência (custo conhecido — ver os débitos) |
+   ```bash
+   supabase functions deploy pluggy-disconnect
+   ```
 
-   Total importado: **2.076** lançamentos. As três páginas que sumiam entraram
-   (429 + 500 + 500), e o diagnóstico por página fecha em todas as somas:
-   `perdidas` = 0, `duplicadas` = 0, `colididas` = 0, `direcaoEmDuvida` = 0.
+   Depois: Perfil → toque numa conexão → Remover banco. O que se prova nessa
+   passagem é o que teste nenhum prova — se a Pluggy aceita o `DELETE /items`, se
+   a RLS deixa a função ler a conexão pelo `Authorization` do chamador, e se as
+   contas sobrevivem com o histórico intacto (a FK é `on delete set null`).
+   O item do sandbox é o candidato: ele é dado falso e o cartão dele mostra compra
+   como transferência.
 
-   Os dois últimos merecem destaque, porque **corrigem suposições**: o
-   `providerId` do ADR 0005 é único por transação (parcela não colapsa), e sinal
-   e `type` concordam nas 2.050 linhas de conta real, nos dois tipos de conta.
+1. **Ver as 1.750 linhas no app** (herdado, e agora mais urgente). O dado real
+   está no Postgres e reparado, mas ninguém viu o app com esse volume — antes
+   eram 8 lançamentos manuais. O que só aparece rodando: a lista do mês com
+   centenas de linhas, o `MonthSummary` somando 2 mil em Dart, o rótulo
+   "Transferência" e o cartão com R$ 82 mil de fatura. As três últimas lições do
+   projeto (data em inglês, `AmountDisplay` estourando, chip exigindo seis
+   arrastes) apareceram exatamente assim. Login é passo manual.
 
-1. **A ingestão gravou dinheiro errado duas vezes, e a segunda medição é a que
-   vale.** O que a primeira ingestão real provou, e que teste nenhum pegaria:
+   **E há um roteiro herdado que continua sem ser percorrido**, confirmado pelo
+   banco: 2 metas e **zero** contribuições no Postgres. Falta ver a folha
+   "Guardei um valor" com o campo "Saiu de"; o lançamento de poupança na lista
+   (ícone próprio + "Poupança" na segunda linha); o toque nele abrindo **em
+   leitura** com o caminho para a meta; a confirmação de remover contribuição
+   avisando que o lançamento sai junto; pausar/retomar meta; a seção "Suas
+   categorias" no Perfil; o desvanecimento na fila de categorias; e a mensagem de
+   erro de login em português (digite a senha errada e leia a frase).
+
+2. **O reparo da ingestão está feito e medido**, e o que a primeira ingestão
+   real ensinou vale relido antes de mexer em `_shared/ingest.ts`:
 
    **A convenção de sinal depende do tipo de conta.** Em conta corrente,
    negativo saiu. **Em cartão é invertido**: compra é positiva, e negativo é
@@ -372,25 +387,13 @@ Estado em 2026-07-28, fim da sessão:
    instrumentação rodou e não houve como ler o resultado. Toda observação nova
    vai para o banco.
 
-2. **A exposição das funções está fechada, e o advisor caiu de 10 WARN para 1.**
+3. **A exposição das funções está fechada, e o advisor caiu de 10 WARN para 1.**
    O único que sobrou é o toggle de **proteção de senha vazada** no dashboard —
    um clique, sem código nem migration. Nada mais de segurança pende no repo.
    O advisor também passou a mostrar **1 INFO** (`rls_enabled_no_policy` em
    `webhook_events`), que é o desenho pretendido e não um defeito: RLS ligada com
    zero policies é justamente como se diz "server-only". Não "conserte"
    adicionando policy.
-3. **Ver o app rodando ficou pela metade** (item herdado, ainda válido). O build
-   e o launch funcionaram no iPhone 17 Pro, o app chegou à tela de login, e o
-   login é passo manual. O roteiro que ainda não foi percorrido: a folha
-   "Guardei um valor" com o campo "Saiu de"; o lançamento de poupança na lista
-   (ícone próprio + "Poupança" na segunda linha); o toque nele abrindo **em
-   leitura** com o caminho para a meta; a confirmação de remover contribuição
-   avisando que o lançamento sai junto; pausar/retomar meta; a seção "Suas
-   categorias" no Perfil; e o desvanecimento na fila de categorias. **O banco
-   confirma que esse roteiro não foi percorrido**: há 2 metas e **zero**
-   contribuições no Postgres.
-   Agora há um segundo motivo para percorrê-lo: a mensagem de erro de login
-   traduzida só se vê rodando (digite a senha errada e leia a frase).
 4. **A cadeia de migrations continua sem ter sido replicada do zero.** A nova
    `20260728030625` rodou num Postgres de verdade (`supabase db push`, e a
    verificação como papel `authenticated` passou), mas `supabase db reset` — as
@@ -778,6 +781,46 @@ Cinco coisas que não se leem no código:
   nasceu de ler descrições (`Vindi *Casalarshop 8/12`) — plausível, e não é o
   mesmo que medido.
 
+### Concluído na fatia de débitos do Open Finance (branch `chore/debitos-de-open-finance`)
+
+| Item | Onde |
+|---|---|
+| `pluggy-disconnect` — cancela o acesso no banco (`DELETE /items/{id}`) | `supabase/functions/pluggy-disconnect/index.ts` |
+| `verify_jwt` declarado para a função nova | `supabase/config.toml` |
+| `OpenFinanceRepository.revokeAccess`, com a ordem "revoga, depois apaga" no contrato | `.../open_finance/{domain,data}/` |
+| `ConnectionSheet` — folha de ações da conexão, com Reconectar e Remover banco | `.../open_finance/presentation/connection_sheet.dart` |
+| Toda conexão passa a responder ao toque | `.../profile/presentation/profile_page.dart` |
+| Conta importada: tipo e saldo viram fato, e excluir desaparece | `.../accounts/presentation/account_form_sheet.dart` |
+| `revokeFailure`/`revoked` no fake de Open Finance | `test/helpers/app_harness.dart` |
+| 16 testes novos (8 da folha, 4 do repository, 4 da conta importada) + 1 reescrito | `test/features/open_finance/`, `test/features/accounts/` |
+
+Quatro decisões que não se leem no código:
+
+- **"Remover banco" sem revogar seria mentira, e é por isso que existe função
+  nova.** `DELETE /items/{id}` exige a API Key, que não sai do servidor. Apagar
+  só a nossa linha deixaria o consentimento vivo no banco, a Pluggy
+  sincronizando, e a tela afirmando que o acesso foi cancelado. Promessa falsa
+  sobre acesso a dado bancário é pior que a ausência do botão.
+- **A ordem é revoga → apaga, e o teste que garante isso é o da falha.** Na ordem
+  inversa, a linha sai do app com o consentimento vivo e sem nada que aponte para
+  ele: não há mais como cancelá-lo. Com revogação falhando, a linha **fica** e a
+  folha mostra o erro.
+- **Quem autoriza a revogação é a RLS, não um `if` na função.** A conexão é lida
+  com o `Authorization` do chamador, então a policy decide. Uma checagem escrita
+  na função seria uma segunda cópia da mesma regra, e cópias divergem.
+  Consequência: item de outro usuário responde 404, não 403.
+- **Conta importada não tem "Excluir", e não é zelo excessivo.** O worker insere
+  quando não encontra o `external_id`, então excluir **recria** a conta com nome
+  padrão, sem alvo de poupança nem espaço vinculado — e como a dedup de lançamento
+  é por `account_id`, a conta nova reimportaria o extrato inteiro (1.750 linhas no
+  caso real) enquanto o antigo ficaria órfão. Um toque viraria histórico
+  duplicado.
+
+**Tipo e saldo aparecem como fato, não como campo desabilitado.** Campo cinza
+convida a tocar e não responde; um bloco com o valor, a data e a frase "editar
+aqui seria desfeito na próxima sincronização" diz o que está acontecendo. É o
+mesmo desenho que a folha de lançamento usa quando detecta vínculo com meta.
+
 ### O que falta na Fase 1
 
 | Item | Estado |
@@ -787,6 +830,7 @@ Cinco coisas que não se leem no código:
 | Open Finance — `pluggy-webhook` e `pluggy-sync-worker` | ✅ Deployados, rodaram contra sandbox **e** conta real, e o reparo foi medido: **2.076** lançamentos, zero duplicata, `perdidas` = 0, fila vazia. |
 | Open Finance — widget Connect | ✅ Internalizado, com 28 testes das partes puras, e **rodou num device**: o canal JS conversa, a allowlist não bloqueia o fluxo legítimo e o `SUCCESS` chega com `item_id`. |
 | Open Finance — caminho no app | ✅ Percorrido de ponta a ponta no iPhone 17 Pro, com sandbox e com conta real, e o dado reparado está no Postgres. Falta **ver as 1.750 linhas no app** — a lista do mês, o resumo e o rótulo "Transferência" com dado de banco de verdade. |
+| Open Finance — desconectar | ✅ `pluggy-disconnect` escrita, folha de ações no Perfil, e a ordem "revoga → apaga" com teste. **A função não foi deployada e nunca rodou.** |
 | Detecção/confirmação automática de contribuição | Metade pronta: schema e UI existem; falta quem crie a linha (ingestão Pluggy). O `transaction_id` já espera por ela: a detecção pode ligar a contribuição ao lançamento importado |
 | Streaks e badges básicos | Nada. Agora há histórico de contribuição para derivá-los |
 | Categorização por IA (premium) | Nada |
@@ -812,6 +856,17 @@ Ordenados por risco. Todos verificados no código.
 
 ### Resolvido
 
+- [x] **Remover conexão saiu do repository para a tela** — e ganhou o servidor
+      que faltava. O débito dizia "falta decidir onde a ação mora"; mora numa
+      folha, como todo gerenciamento deste app (conta, orçamento, categoria,
+      meta). O que ele não previa é que o botão exigia uma **Edge Function nova**:
+      sem revogar na Pluggy, "Remover banco" apagaria a linha e deixaria o
+      consentimento valendo no banco, com a tela dizendo o contrário.
+- [x] **Conta de Open Finance não é mais editável como qualquer outra.** Tipo e
+      saldo (que a sincronização reescreve) aparecem como fato, com a data; nome,
+      instituição, alvo de poupança e espaço vinculado seguem editáveis, porque a
+      ingestão nunca os toca depois do INSERT. E "Excluir" desapareceu: a
+      sincronização recriaria a conta e reimportaria o extrato inteiro.
 - [x] **A Edge Function nunca falou com a Pluggy de verdade** (2026-07-28). As
       três falam: `pluggy-connect-token` emite token que o widget aceita, o
       webhook recebeu 6 eventos reais, e o worker buscou item, conta e transação.
@@ -1006,19 +1061,6 @@ Ordenados por risco. Todos verificados no código.
       negativa, assinatura idêntica à de um pagamento de fatura. Se incomodar, o
       caminho é remover a conexão de sandbox — não mexer na regra, que está certa
       para conta real e tem teste dizendo isso.
-- [ ] **Remover conexão existe no repository e não na UI.** `delete` está
-      implementado e testado, mas nenhuma tela o chama — a linha só responde ao
-      toque quando precisa de re-consentimento. Falta decidir onde a ação mora e
-      o que ela diz: remover a conexão **não** apaga contas nem lançamentos (a FK
-      é `on delete set null`), e a confirmação precisa dizer isso. Também não
-      revoga nada na Pluggy: `DELETE /items/{id}` exige API Key e é trabalho do
-      worker.
-- [ ] **Conta de Open Finance ainda é editável como qualquer outra.**
-      `Account.isFromOpenFinance` já existe, mas a folha de conta não a usa: dá
-      para editar à mão o saldo de uma conta cuja dona é a Pluggy, e a próxima
-      sincronização desfaria. É o mesmo desenho que a folha de lançamento já
-      aplica para poupança (detecta o vínculo e vira leitura) — falta trazê-lo
-      para cá.
 - [ ] **O protocolo do widget Connect é contrato interno da Pluggy.** Os tipos de
       mensagem (`OAUTH_OPEN`, `LINK_OPEN`, `LOCATION`) e os nomes de evento na
       query (`SUCCESS`, `ERROR`, `CLOSE`, `LOGIN_SUCCESS`…) **não são

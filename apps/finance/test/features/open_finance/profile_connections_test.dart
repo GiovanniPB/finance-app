@@ -93,9 +93,8 @@ void main() {
       expect(find.text('Conectado · 1 conta'), findsOneWidget);
     });
 
-    testWidgets('só conexão que precisa de ação responde ao toque', (
-      tester,
-    ) async {
+    testWidgets('toda conexão responde ao toque, e o que abre é a folha de '
+        'ações', (tester) async {
       await pumpScreen(
         tester,
         const ProfilePage(),
@@ -119,10 +118,29 @@ void main() {
         find.byKey(const Key('connection_conn-erro')),
       );
 
-      // Um detalhe que só repetisse o que a linha já diz seria toque sem
-      // resposta; o que a linha com problema abre é o re-consentimento.
-      expect(ok.onTap, isNull);
+      // Antes só a linha com problema respondia, e a saudável ficava inerte —
+      // o que deixava "Remover banco" sem lugar nenhum na interface. Agora as
+      // duas abrem a folha, e o que muda é quantas ações ela oferece (só quem
+      // precisa de ação ganha "Reconectar").
+      expect(ok.onTap, isNotNull);
       expect(erro.onTap, isNotNull);
+    });
+
+    testWidgets('tocar uma conexão abre a folha com "Remover banco"', (
+      tester,
+    ) async {
+      await pumpScreen(
+        tester,
+        const ProfilePage(),
+        openFinanceRepository: FakeOpenFinanceRepository(
+          connections: [testConnection(id: 'conn-ok')],
+        ),
+      );
+
+      await tapVisible(tester, find.byKey(const Key('connection_conn-ok')));
+      await tester.pumpAndSettle();
+
+      expect(find.byKey(const Key('connection_remove')), findsOneWidget);
     });
 
     testWidgets('a senha trocada aparece como frase, não como código', (

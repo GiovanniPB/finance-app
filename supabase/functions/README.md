@@ -17,6 +17,7 @@ Pluggy → pluggy-webhook → webhook_events → pluggy-sync-worker → Postgres
 | `pluggy-connect-token` | `true` | ✅ Deployada e **exercitada de verdade** — o widget carregou e o fluxo completou no simulador. |
 | `pluggy-webhook` | **`false`** | ✅ Deployada. 6 eventos reais recebidos e enfileirados; guardas verificadas (405 em GET, 400 em corpo inválido, 200 sem escrita em item de terceiro). |
 | `pluggy-sync-worker` | `true` | ✅ Deployada e rodou contra sandbox **e** conta real. Duas correções saíram dessa passagem: direção em cartão e perda silenciosa de página. |
+| `pluggy-disconnect` | `true` | Escrita. Cancela o acesso no banco (`DELETE /items/{id}`). **Não deployada, nunca rodou.** |
 
 `_shared/pluggy.ts` concentra a troca de `CLIENT_ID`/`CLIENT_SECRET` pela apiKey
 (com cache por isolate) e o `GET` autenticado — duas funções com caches
@@ -39,6 +40,29 @@ Não precisa de Deno nem de Docker: `_shared/ingest.ts` não importa nada, e o N
 medida** nos dois conectores, copiada da instrumentação gravada em
 `webhook_events.payload._convencao` — não a documentação, que já divergiu do que
 chegou.
+
+## Por que "Remover banco" precisa de servidor
+
+`DELETE /items/{id}` exige a **API Key**, que dá acesso total à conta Pluggy e
+não pode sair do servidor. Sem `pluggy-disconnect`, o botão apagaria a linha do
+nosso banco e deixaria o item vivo lá: o consentimento no banco do usuário
+continuaria valendo, a Pluggy continuaria sincronizando, e a tela teria dito que
+o acesso foi cancelado. Promessa falsa sobre acesso a dado bancário é pior que a
+ausência do botão.
+
+Três decisões dela:
+
+1. **Quem autoriza é a RLS.** A conexão é lida com um cliente que carrega o
+   `Authorization` do chamador, então a policy `..._select_own` decide se aquele
+   item é dele. Uma checagem `owner_id === userId` escrita na função seria uma
+   segunda cópia da mesma regra. Consequência: item de outro usuário responde
+   **404**, não 403 — para quem chama, ele não existe.
+2. **A função não apaga a linha.** Quem apaga é o cliente, pelo caminho normal do
+   PowerSync. Um escritor só evita corrida com o upload, e o caso "revogou mas a
+   linha ficou" **se autocura**: a próxima passada do worker leva 404 no
+   `GET /items/{id}` e o `PluggyNotFound` marca a conexão como removida.
+3. **404 da Pluggy é sucesso.** Item que já não existe é o estado desejado;
+   tratá-lo como erro prenderia no app uma conexão que já morreu lá.
 
 ## Por que o webhook não tem `verify_jwt` nem header secreto
 
@@ -83,7 +107,8 @@ aplicação: os items criados pela anterior deixam de ser visíveis.
 ## Deploy
 
 ```bash
-supabase functions deploy pluggy-connect-token pluggy-webhook pluggy-sync-worker
+supabase functions deploy pluggy-connect-token pluggy-webhook \
+  pluggy-sync-worker pluggy-disconnect
 ```
 
 ## Limitações conhecidas

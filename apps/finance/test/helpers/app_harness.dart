@@ -76,6 +76,23 @@ class FakeOpenFinanceRepository implements OpenFinanceRepository {
     return Ok(connection);
   }
 
+  /// Falha que [revokeAccess] deve devolver. Nulo revoga com sucesso.
+  ///
+  /// Existe separada de uma falha de escrita porque a ordem importa: revogar
+  /// falhando **não pode** apagar a linha, e o único jeito de testar isso é
+  /// poder falhar só na revogação.
+  Failure? revokeFailure;
+
+  final List<String> revoked = [];
+
+  @override
+  Future<Result<void, Failure>> revokeAccess(String connectionId) async {
+    final failure = revokeFailure;
+    if (failure != null) return Err(failure);
+    revoked.add(connectionId);
+    return const Ok(null);
+  }
+
   @override
   Future<Result<void, Failure>> delete(String id) async {
     deleted.add(id);

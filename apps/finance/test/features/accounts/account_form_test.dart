@@ -224,6 +224,66 @@ void main() {
     });
   });
 
+  group('AccountFormSheet — conta de Open Finance', () {
+    Account imported({int balanceMinor = 419788}) => testAccount(
+      id: 'acc-of',
+      name: 'ultraviolet-black',
+      type: AccountType.creditCard,
+      balanceMinor: balanceMinor,
+      connectionId: 'conn-1',
+    );
+
+    testWidgets('o que é da Pluggy aparece como fato, não como campo', (
+      tester,
+    ) async {
+      await openSheet(tester, editing: imported());
+
+      expect(
+        find.byKey(const Key('account_provider_owned')),
+        findsOneWidget,
+      );
+      expect(find.text('Cartão de crédito'), findsOneWidget);
+      // Sem seletor de tipo e sem teclado: são as duas coisas que a
+      // sincronização reescreveria.
+      expect(
+        find.byKey(const Key('account_type_credit_card')),
+        findsNothing,
+      );
+      expect(find.byType(AmountKeypad), findsNothing);
+    });
+
+    testWidgets('o que é do usuário continua editável', (tester) async {
+      await openSheet(tester, editing: imported());
+
+      // Nome e instituição: a ingestão só escreve `name` no INSERT e nunca
+      // toca em `institution`.
+      expect(find.text('Nome'), findsOneWidget);
+      expect(find.text('Instituição'), findsOneWidget);
+      expect(find.byType(Switch), findsOneWidget);
+      expect(find.text('Salvar'), findsOneWidget);
+    });
+
+    testWidgets(
+      'excluir não existe: a sincronização recriaria a conta e reimportaria o '
+      'extrato inteiro',
+      (tester) async {
+        await openSheet(tester, editing: imported());
+
+        expect(find.byKey(const Key('account_delete')), findsNothing);
+      },
+    );
+
+    testWidgets('conta digitada segue com tipo, teclado e excluir', (
+      tester,
+    ) async {
+      await openSheet(tester, editing: testAccount());
+
+      expect(find.byKey(const Key('account_provider_owned')), findsNothing);
+      expect(find.byType(AmountKeypad), findsOneWidget);
+      expect(find.byKey(const Key('account_delete')), findsOneWidget);
+    });
+  });
+
   group('AccountFormSheet — nos dois temas', () {
     for (final dark in [false, true]) {
       testWidgets('sem overflow no tema ${dark ? 'escuro' : 'claro'}', (
