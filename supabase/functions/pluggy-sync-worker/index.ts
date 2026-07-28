@@ -46,18 +46,25 @@
 // desapareceram inteiras na primeira ingestão real (item 4).
 //
 // ─────────────────────────────────────────────────────────────────────────
-// 4. FALHA DE ESCRITA SOBE, E FICA GRAVADA
+// 4. NADA DE ERRO ENGOLIDO — FOI ASSIM QUE 1.433 LANÇAMENTOS SUMIRAM
 //
-// A primeira versão engolia erro de leitura (`return 0`) e tratava `23505` como
-// benigno sem conferir quantas linhas entraram — então "página perdida" e
-// "página gravada" eram indistinguíveis, e o evento era marcado como processado
-// com sucesso nos dois casos. 1.433 lançamentos sumiram assim.
+// A causa da perda foi a leitura de dedup, não a escrita: um `in.()` com 433 ou
+// 500 UUIDs monta URL de 17 a 20 mil caracteres, e o `fetch` de dentro da função
+// não consegue enviá-la. A primeira versão respondia a isso com `return 0` — que
+// significa "nada a fazer" — e a página inteira era descartada **contada como
+// escrita**. Ver [READ_CHUNK], que é a correção.
 //
-// Agora toda falha de escrita **lança**: o `attempts` sobe, a mensagem vai para
+// O que tornava isso invisível era a soma de três hábitos, todos corrigidos:
+// erro de leitura virando `return 0`; `23505` tratado como benigno sem conferir
+// quantas linhas entraram; e a contagem devolvida sendo `toInsert.length` em vez
+// do que o banco aceitou.
+//
+// Agora toda falha **lança**: o `attempts` sobe, a mensagem vai para
 // `last_error` (legível por SQL, diferente de `console.log`) e o evento volta na
 // próxima passada. E o resultado de cada página — quantas chegaram, quantas
-// foram filtradas, quantas colidiram, quantas entraram — é gravado no `payload`
-// do evento, ao lado da convenção observada.
+// foram filtradas, quantas colidiram, quantas entraram, quantas se perderam — é
+// gravado no `payload` do evento, ao lado da convenção observada. Foi lendo esse
+// `last_error` que a causa acima apareceu; até então ela era palpite.
 //
 // ─────────────────────────────────────────────────────────────────────────
 // 5. O QUE ESTA FATIA NÃO FAZ
@@ -637,23 +644,10 @@ async function writeTransactions(
   };
   if (keyed.length === 0) return empty;
 
-  const { data: existing, error: readError } = await supabase
-    .from('transactions')
-    .select('id, external_id')
-    .eq('account_id', account.id)
-    .in('external_id', keyed.map((entry) => entry.externalId));
-
-  // Lança: uma leitura que falhou não distingue "nada existe" de "não sei o que
-  // existe", e a primeira versão tratava as duas como a primeira.
-  if (readError) {
-    throw new Error(
-      `Falha ao ler transações existentes: ${readError.message}`,
-    );
-  }
-  const existingByExternal = new Map<string, string>(
-    (existing ?? [])
-      .filter((row) => typeof row.external_id === 'string')
-      .map((row) => [row.external_id as string, row.id as string]),
+  const existingByExternal = await readExisting(
+    supabase,
+    account.id,
+    keyed.map((entry) => entry.externalId),
   );
 
   const toInsert: Record<string, unknown>[] = [];
@@ -721,6 +715,54 @@ async function writeTransactions(
 /// Quantas linhas por INSERT. Pequeno o bastante para uma colisão custar pouco,
 /// grande o bastante para uma página de 500 caber em cinco idas.
 const INSERT_CHUNK = 100;
+
+/// Quantos `external_id` por `in.(…)` na leitura de dedup.
+///
+/// **Esta constante é a correção da perda de 1.433 lançamentos.** Um `in.()` com
+/// 433 ou 500 UUIDs monta uma URL de 17 a 20 mil caracteres, e o `fetch` de
+/// dentro da Edge Function **não consegue enviá-la**: `TypeError: error sending
+/// request`. Antes o erro virava `return 0` — "nada existe" — e a página inteira
+/// era descartada em silêncio, contada como escrita.
+///
+/// Medido: páginas de 433 e 500 falhavam; de 317 e 299 passavam. 100 UUIDs dão
+/// ~4,4 mil caracteres, com folga de quatro vezes. E não é o Kong que recusa —
+/// de fora, um `in.()` com 500 UUIDs responde 200. É o cliente HTTP do runtime
+/// da função, o que explica por que o teste feito do laptop não reproduzia.
+const READ_CHUNK = 100;
+
+/**
+ * Lê, em pedaços, quais desses `external_id` já existem na conta.
+ *
+ * Devolve `external_id → id`. **Lança** se qualquer pedaço falhar: uma leitura
+ * que falhou não distingue "nada existe" de "não sei o que existe", e tratar as
+ * duas como a primeira é o que fez a ingestão inserir zero e reportar sucesso.
+ */
+async function readExisting(
+  supabase: SupabaseClient,
+  accountId: string,
+  externalIds: string[],
+): Promise<Map<string, string>> {
+  const found = new Map<string, string>();
+
+  for (const batch of chunk(externalIds, READ_CHUNK)) {
+    const { data, error } = await supabase
+      .from('transactions')
+      .select('id, external_id')
+      .eq('account_id', accountId)
+      .in('external_id', batch);
+
+    if (error) {
+      throw new Error(`Falha ao ler transações existentes: ${error.message}`);
+    }
+    for (const row of data ?? []) {
+      if (typeof row.external_id === 'string') {
+        found.set(row.external_id, row.id as string);
+      }
+    }
+  }
+
+  return found;
+}
 
 /**
  * Insere em pedaços, e o pedaço que colidir é reinserido **linha por linha**.
