@@ -74,7 +74,13 @@ void main() {
           email: any(named: 'email'),
           password: any(named: 'password'),
         ),
-      ).thenThrow(const AuthException('credenciais inválidas'));
+      ).thenThrow(
+        const AuthException(
+          'Invalid login credentials',
+          statusCode: '400',
+          code: 'invalid_credentials',
+        ),
+      );
 
       final result = await repo.signInWithPassword(
         email: 'ana@example.com',
@@ -82,7 +88,9 @@ void main() {
       );
 
       expect(result.failureOrNull, isA<AuthFailure>());
-      expect(result.failureOrNull?.message, 'credenciais inválidas');
+      // A frase do SDK é em inglês e ia crua para a tela; o repository traduz
+      // na fronteira. Ver `auth_error_message.dart`.
+      expect(result.failureOrNull?.message, 'E-mail ou senha incorretos.');
     });
 
     test('retorna AuthFailure quando a resposta não tem usuário', () async {
