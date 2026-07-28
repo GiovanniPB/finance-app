@@ -109,7 +109,7 @@ class _MemberActionsSheetState extends ConsumerState<MemberActionsSheet> {
             ),
 
             if (permissions.canChangeRoleOf(member)) ...[
-              _SectionLabel('O que esta pessoa pode fazer'),
+              const _SectionLabel('O que esta pessoa pode fazer'),
               for (final role in SpaceRole.values)
                 _RoleOption(
                   role: role,

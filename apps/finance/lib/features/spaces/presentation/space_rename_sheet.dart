@@ -9,9 +9,10 @@ import '../domain/space.dart';
 /// Renomear o espaço.
 ///
 /// Só o nome. O **tipo** não aparece aqui de propósito: ele decide o que cada
-/// membro enxerga do histórico (PRD §4.2), e trocá-lo num espaço com lançamentos
-/// mudaria isso de trás para frente. Desde a migration `20260728210321` o banco
-/// recusa a troca — esta folha é o lado da UI da mesma decisão.
+/// membro enxerga do histórico (PRD §4.2), e trocá-lo num espaço que já tem
+/// lançamento mudaria isso de trás para frente. Desde a migration
+/// `20260728210321` o banco recusa a troca — esta folha é o lado da UI da
+/// mesma decisão.
 class SpaceRenameSheet extends ConsumerStatefulWidget {
   const SpaceRenameSheet({required this.space, super.key});
 

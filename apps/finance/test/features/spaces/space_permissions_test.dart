@@ -33,7 +33,10 @@ void main() {
       // Sem isto, um admin toma o espaço de quem o criou — e era exatamente o
       // que o banco permitia antes da migration 20260728210321.
       final permissions = permissionsFor();
-      final ownerRow = testMember(id: 'm-dono', userId: owner);
+      final ownerRow = testMember(
+        id: 'm-dono',
+        userId: permissions.space.ownerId,
+      );
 
       expect(permissions.canChangeRoleOf(ownerRow), isFalse);
       expect(permissions.canRemove(ownerRow), isFalse);
@@ -129,10 +132,9 @@ void main() {
     test('não se remove — para isso existe sair', () {
       // As duas ações têm consequências diferentes para quem fica, e frases
       // diferentes. Fundi-las esconderia uma das duas.
-      final permissions = permissionsFor(
-        userId: guest,
-        role: SpaceRole.admin,
-      );
+      // `permissionsFor` já nasce com `role: admin`; o que muda aqui é ser
+      // admin **sem** ser quem criou o espaço.
+      final permissions = permissionsFor(userId: guest);
       final myRow = testMember(id: 'm-eu', userId: guest);
 
       expect(permissions.canRemove(myRow), isFalse);
@@ -140,10 +142,9 @@ void main() {
     });
 
     test('pode se rebaixar: o espaço não fica sem admin, o dono é um', () {
-      final permissions = permissionsFor(
-        userId: guest,
-        role: SpaceRole.admin,
-      );
+      // `permissionsFor` já nasce com `role: admin`; o que muda aqui é ser
+      // admin **sem** ser quem criou o espaço.
+      final permissions = permissionsFor(userId: guest);
 
       expect(
         permissions.canChangeRoleOf(testMember(id: 'm-eu', userId: guest)),

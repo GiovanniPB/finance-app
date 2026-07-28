@@ -16,16 +16,26 @@ void main() {
     Space? space,
     List<SpaceMember>? members,
     Failure? failure,
-  }) => FakeSpacesRepository(
-    [personalSpace(), space ?? testSharedSpace()],
-    members:
-        members ??
-        [
-          testMember(id: 'm-dono', userId: owner),
-          testMember(id: 'm-convidado', userId: guest, role: SpaceRole.editor),
-        ],
-    failure: failure,
-  );
+  }) {
+    final shared = space ?? testSharedSpace();
+    return FakeSpacesRepository(
+      [personalSpace(), shared],
+      members:
+          members ??
+          [
+            // A linha do dono sai do `ownerId` do próprio espaço, e não de uma
+            // constante igual por coincidência: é o que garante que ela
+            // continue sendo a linha do dono se a fábrica mudar.
+            testMember(id: 'm-dono', userId: shared.ownerId),
+            testMember(
+              id: 'm-convidado',
+              userId: guest,
+              role: SpaceRole.editor,
+            ),
+          ],
+      failure: failure,
+    );
+  }
 
   Future<void> pumpDetail(
     WidgetTester tester, {

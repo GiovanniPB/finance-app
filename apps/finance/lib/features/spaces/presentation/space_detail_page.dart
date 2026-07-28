@@ -4,7 +4,6 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../../../di/providers.dart';
-import '../domain/space.dart';
 import '../domain/space_member.dart';
 import '../domain/space_permissions.dart';
 import 'invite_block.dart';
