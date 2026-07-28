@@ -88,12 +88,34 @@ void main() {
       expect(summary.income.isZero, isTrue);
     });
 
-    test('transferência entra como entrada (convenção da Fase 0)', () {
+    test('transferência não conta em nenhum dos dois lados', () {
+      // Esta asserção era o inverso, e chamava-se "convenção da Fase 0" —
+      // inofensiva enquanto nada no produto produzia `transfer`. Quando a
+      // ingestão do Open Finance passou a gravar pagamento de fatura como
+      // `transfer`, a home exibiu R$ 10.641,79 de "Entradas" que eram dinheiro
+      // trocando de bolso. O teste antigo protegia o bug.
       final summary = MonthSummary.from([
         tx(minor: 20000, type: TransactionType.transfer),
       ]);
 
-      expect(summary.income.amountMinor, 20000);
+      expect(summary.income.isZero, isTrue);
+      expect(summary.outflow.isZero, isTrue);
+      expect(summary.balance.isZero, isTrue);
+    });
+
+    test('transferência não afeta o saldo do mês', () {
+      final semTransferencia = MonthSummary.from([
+        tx(minor: 30000, type: TransactionType.income),
+        tx(minor: 10000, id: 'tx-2'),
+      ]);
+      final comTransferencia = MonthSummary.from([
+        tx(minor: 30000, type: TransactionType.income),
+        tx(minor: 10000, id: 'tx-2'),
+        tx(minor: 1013902, type: TransactionType.transfer, id: 'tx-3'),
+      ]);
+
+      expect(comTransferencia.balance, semTransferencia.balance);
+      expect(comTransferencia.income, semTransferencia.income);
     });
   });
 

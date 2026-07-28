@@ -330,13 +330,13 @@ Estado em 2026-07-28, fim da sessão:
    que o dado de sandbox pôde ser limpo. Numa conta ainda importada o botão não
    existe.
 
-1. **Ver as 1.750 linhas no app** (herdado, e agora mais urgente). O dado real
-   está no Postgres e reparado, mas ninguém viu o app com esse volume — antes
-   eram 8 lançamentos manuais. O que só aparece rodando: a lista do mês com
-   centenas de linhas, o `MonthSummary` somando 2 mil em Dart, o rótulo
-   "Transferência" e o cartão com R$ 82 mil de fatura. As três últimas lições do
-   projeto (data em inglês, `AmountDisplay` estourando, chip exigindo seis
-   arrastes) apareceram exatamente assim. Login é passo manual.
+1. **A home foi vista com 2.083 lançamentos, e achou dois bugs** (fatia acima):
+   o dia 1º invisível e `transfer` somado como receita. O que **ainda não** foi
+   visto é a **lista do mês** — 145 linhas em julho, com o rótulo
+   "Transferência", o total do dia e o cabeçalho de saldo. `MoneyText` não tem
+   `FittedBox` (só o `AmountDisplay` ganhou, depois de estourar com cinco
+   dígitos), e agora há total de dia passando de R$ 10.000. Toque em "Ver tudo"
+   na home.
 
    **E há um roteiro herdado que continua sem ser percorrido**, confirmado pelo
    banco: 2 metas e **zero** contribuições no Postgres. Falta ver a folha
@@ -832,6 +832,51 @@ convida a tocar e não responde; um bloco com o valor, a data e a frase "editar
 aqui seria desfeito na próxima sincronização" diz o que está acontecendo. É o
 mesmo desenho que a folha de lançamento usa quando detecta vínculo com meta.
 
+### Concluído na fatia do mês que perdia o dia 1º (branch `fix/mes-perdia-o-primeiro-dia`)
+
+Dois bugs achados **rodando com extrato de banco real**, um deles vivo desde a
+fatia de transações.
+
+| Item | Onde |
+|---|---|
+| `datetime()` nos dois lados do recorte de mês | `.../transactions/data/transactions_repository_impl.dart` |
+| `MonthSummary` casa por tipo em vez de "o que sobrou" | `.../transactions/domain/month_summary.dart` |
+| Teste de integração com a linha no formato da **sincronização** | `test_integration/local_persistence_test.dart` |
+| Dois testes de `MonthSummary` e um do SQL atualizados | `test/features/transactions/` |
+
+**O primeiro dia de todo mês estava invisível.** O PowerSync guarda o timestamp
+como `2026-07-01 05:00:00.000Z` — com **espaço** — e o app comparava contra
+`2026-07-01T00:00:00.000Z`, com **T**. Em texto, `' '` (0x20) < `'T'` (0x54):
+toda linha do dia 1º reprovava no `>=` e sumia; a do dia 1º do mês seguinte
+passava no `<` e entrava. Em julho/2026 isso escondeu 8 linhas e
+**R$ 15.111,01 de despesa** do resumo.
+
+**Duas escolhas de teste, juntas, deixaram isso sem cobertura por meses.** O
+teste que existia (`o recorte por período não traz o mês vizinho`) escolhia 30 de
+junho e 2 de julho — **evitava a fronteira** — e criava as linhas pelo
+repositório, que escreve com `T`, então elas comparavam entre si sem conflito. O
+teste novo insere SQL direto no formato da sincronização, e falha sem a correção
+devolvendo **`tx-mes-seguinte` no lugar de `tx-primeiro-dia`**: as duas metades do
+bug numa asserção.
+
+**`transfer` era somado como receita.** `MonthSummary` fazia
+`if (isOutflow) … else income += …`, o que era inofensivo enquanto nada no produto
+produzia `transfer`. Com a ingestão gravando pagamento de fatura, a home exibiu
+**R$ 10.641,79 de "Entradas"** que eram dinheiro trocando de bolso. Agora casa por
+tipo: um tipo novo passa a não contar em nada, em vez de virar receita em
+silêncio. E havia um teste **afirmando o comportamento errado** — chamava-se
+"convenção da Fase 0" e protegia o bug.
+
+Duas coisas que valem para além destes dois bugs:
+
+- **Volume é um caso de teste.** Os dois só apareceram com 2.083 linhas e um ano
+  de extrato; com 8 lançamentos digitados à mão, nenhum caía num dia 1º e nada
+  produzia `transfer`. O roadmap já dizia "as telas foram vistas renderizadas" —
+  falta dizer **com quanto dado**.
+- **Um teste pode documentar um bug.** Os dois casos tinham teste verde: um
+  evitando a fronteira, o outro afirmando o resultado errado. Teste verde prova
+  que o código faz o que o teste diz, não que o teste diz a coisa certa.
+
 ### O que falta na Fase 1
 
 | Item | Estado |
@@ -867,6 +912,19 @@ Ordenados por risco. Todos verificados no código.
 
 ### Resolvido
 
+- [x] **O primeiro dia de todo mês estava invisível na visão mensal.**
+      Comparação de texto entre formatos de data diferentes (`espaço` do
+      PowerSync vs `T` do `toIso8601String`). Escondeu R$ 15.111,01 de despesa em
+      julho/2026, e vivia desde a fatia de transações. **Lição transferível:** o
+      teste que existia evitava a fronteira *e* criava a linha pelo próprio
+      repositório — duas escolhas que, juntas, garantiam nunca reproduzir o caso
+      real. Teste de recorte precisa do valor **de fronteira** e do dado no
+      formato de quem realmente escreve.
+- [x] **`transfer` contava como receita no resumo do mês.** `MonthSummary`
+      somava em `income` tudo que não era saída. Inofensivo até a ingestão
+      produzir `transfer`; aí a home mostrou R$ 10.641,79 de "Entradas" que eram
+      pagamento de fatura. Havia um teste afirmando exatamente o comportamento
+      errado.
 - [x] **Remover conexão saiu do repository para a tela** — e ganhou o servidor
       que faltava. O débito dizia "falta decidir onde a ação mora"; mora numa
       folha, como todo gerenciamento deste app (conta, orçamento, categoria,

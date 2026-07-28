@@ -206,6 +206,70 @@ void main() {
       expect(julho, hasLength(1));
       expect(julho.single.occurredAt.month, 7);
     });
+
+    test(
+      'o dia 1º do mês não desaparece quando a linha veio da sincronização',
+      () async {
+        // A REGRESSÃO, e por que o teste vizinho não a pegava.
+        //
+        // O PowerSync guarda o timestamp como `2026-07-01 05:00:00.000Z` — com
+        // **espaço** —, enquanto `toIso8601String()` produz `...T...`. Em
+        // comparação de texto `' '` < `'T'`, então toda linha do dia 1º
+        // reprovava no `>=` e sumia do mês; a do dia 1º do mês seguinte passava
+        // no `<` e entrava. Medido no app com extrato real: 8 linhas sumidas e
+        // R$ 15.111,01 de despesa invisível em julho.
+        //
+        // O teste acima escolhe 30/junho e 2/julho — **evita a fronteira** — e
+        // cria as linhas pelo repositório, que escreve com `T`. Duas escolhas
+        // que, juntas, deixaram o caso sem cobertura por meses.
+        //
+        // Por isso este insere **SQL direto no formato da sincronização**: é o
+        // único jeito de reproduzir a linha como ela chega do servidor.
+        final stack = await localStack();
+        await seedSpace(stack.db);
+        final repository = stack.container.read(transactionsRepositoryProvider);
+
+        for (final entry in [
+          ('tx-primeiro-dia', '2026-07-01 05:00:00.000Z'),
+          ('tx-mes-seguinte', '2026-08-01 05:00:00.000Z'),
+        ]) {
+          await stack.db.execute(
+            'INSERT INTO transactions (id, space_id, created_by, type, '
+            'amount_minor, currency, occurred_at, source, is_shared, '
+            'ai_categorized, created_at, updated_at) '
+            'VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)',
+            [
+              entry.$1,
+              'space-1',
+              'user-1',
+              'expense',
+              1000,
+              'BRL',
+              entry.$2,
+              'open_finance',
+              0,
+              0,
+              entry.$2,
+              entry.$2,
+            ],
+          );
+        }
+
+        final julho = await repository
+            .watchBySpace(
+              'space-1',
+              from: DateTime.utc(2026, 7),
+              to: DateTime.utc(2026, 8),
+            )
+            .first;
+
+        expect(
+          julho.map((t) => t.id),
+          ['tx-primeiro-dia'],
+          reason: 'o dia 1º entra e o dia 1º do mês seguinte fica fora',
+        );
+      },
+    );
   });
 
   group('Orçamento', () {
