@@ -121,6 +121,30 @@ export interface DedupeResult<T> {
  * a chave está colapsando lançamentos distintos — parcela de compra é o
  * suspeito — e aí o remédio é a chave, não o insert.
  */
+/**
+ * Fatia uma lista em pedaços de no máximo [size].
+ *
+ * Existe porque o INSERT de uma página não pode ser um lote só: ele é atômico,
+ * e uma colisão de `external_id` derrubaria as outras 499. Em pedaços, o estrago
+ * de uma colisão fica no pedaço — e o pedaço que falhar é reinserido linha por
+ * linha, que é o que permite **contar** as colisões em vez de perder a página.
+ *
+ * `ON CONFLICT DO NOTHING` resolveria isso em uma ida, e não serve aqui: a
+ * `unique (account_id, external_id)` é **parcial** (`where external_id is not
+ * null`), e o Postgres não infere índice parcial sem repetir o predicado no
+ * `ON CONFLICT` — coisa que o PostgREST não expressa. Medido na nuvem:
+ * *"there is no unique or exclusion constraint matching the ON CONFLICT
+ * specification"*.
+ */
+export function chunk<T>(items: T[], size: number): T[][] {
+  if (size < 1) throw new RangeError('size precisa ser >= 1');
+  const chunks: T[][] = [];
+  for (let i = 0; i < items.length; i += size) {
+    chunks.push(items.slice(i, i + size));
+  }
+  return chunks;
+}
+
 export function dedupeByExternalId<T>(entries: Keyed<T>[]): DedupeResult<T> {
   const seen = new Set<string>();
   const unique: Keyed<T>[] = [];

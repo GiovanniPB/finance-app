@@ -37,11 +37,13 @@
 // UPDATE carrega **só** colunas da Pluggy. `description` é escrita **apenas no
 // INSERT**; depois disso ela é do usuário.
 //
-// O INSERT usa `ignoreDuplicates: true`, que gera `ON CONFLICT DO NOTHING` —
-// não é o `upsert` que a regra proíbe, porque ele **nunca atualiza coluna
-// nenhuma**. Ele existe para uma colisão não derrubar a página inteira: um
-// `INSERT` de várias linhas é atômico, e foi assim que três páginas de um cartão
-// desapareceram em silêncio na primeira ingestão real (item 4).
+// O INSERT vai em pedaços de 100, e o pedaço que colide é reinserido linha por
+// linha. `ON CONFLICT DO NOTHING` resolveria em uma ida e **não serve**: a
+// `unique (account_id, external_id)` é parcial, e o Postgres não infere índice
+// parcial pelo PostgREST (medido: "there is no unique or exclusion constraint
+// matching the ON CONFLICT specification"). O que a divisão evita é o que já
+// aconteceu: um `INSERT` de várias linhas é atômico, e três páginas de um cartão
+// desapareceram inteiras na primeira ingestão real (item 4).
 //
 // ─────────────────────────────────────────────────────────────────────────
 // 4. FALHA DE ESCRITA SOBE, E FICA GRAVADA
@@ -82,6 +84,7 @@ import {
 } from '../_shared/pluggy.ts';
 
 import {
+  chunk,
   dedupeByExternalId,
   type Direction,
   directionByType,
@@ -576,8 +579,13 @@ interface WriteOutcome {
   readonly existentes: number;
   readonly atualizadas: number;
   readonly inseridas: number;
-  /// Linhas que o INSERT não gravou por já existirem (corrida entre execuções).
-  readonly ignoradas: number;
+  /// Recusadas pela `unique` na segunda passada: já existiam apesar de o SELECT
+  /// não as ter visto. Contagem alta aqui significa que `external_id` **não** é
+  /// único por transação — parcela da mesma compra é o suspeito.
+  readonly duplicadas: number;
+  /// Nem inseridas, nem duplicadas. Deve ser sempre zero; se não for, há um
+  /// caminho de perda que ninguém mapeou.
+  readonly perdidas: number;
   /// Linhas cujo sinal discordou do `type` declarado.
   readonly direcaoEmDuvida: number;
 }
@@ -623,7 +631,8 @@ async function writeTransactions(
     existentes: 0,
     atualizadas: 0,
     inseridas: 0,
-    ignoradas: 0,
+    duplicadas: 0,
+    perdidas: 0,
     direcaoEmDuvida: 0,
   };
   if (keyed.length === 0) return empty;
@@ -696,37 +705,78 @@ async function writeTransactions(
     });
   }
 
-  let inserted = 0;
-  if (toInsert.length > 0) {
-    // `ignoreDuplicates: true` gera `ON CONFLICT DO NOTHING`: não atualiza
-    // coluna nenhuma (a regra do item 3 continua valendo) e uma linha que
-    // apareceu entre o SELECT e o INSERT deixa de derrubar a página inteira.
-    // O `select` devolve **só o que entrou**, que é como a contagem passa a ser
-    // verdade em vez de `toInsert.length`.
-    const { data, error } = await supabase
-      .from('transactions')
-      .upsert(toInsert, {
-        onConflict: 'account_id,external_id',
-        ignoreDuplicates: true,
-      })
-      .select('id');
-
-    if (error) {
-      throw new Error(
-        `Falha ao inserir transações importadas: ${error.message}`,
-      );
-    }
-    inserted = data?.length ?? 0;
-  }
+  const { inserted, duplicated } = await insertResilient(supabase, toInsert);
 
   return {
     ...empty,
     existentes: existingByExternal.size,
     atualizadas: updated,
     inseridas: inserted,
-    ignoradas: toInsert.length - inserted,
+    duplicadas: duplicated,
+    perdidas: toInsert.length - inserted - duplicated,
     direcaoEmDuvida: disagreements.count,
   };
+}
+
+/// Quantas linhas por INSERT. Pequeno o bastante para uma colisão custar pouco,
+/// grande o bastante para uma página de 500 caber em cinco idas.
+const INSERT_CHUNK = 100;
+
+/**
+ * Insere em pedaços, e o pedaço que colidir é reinserido **linha por linha**.
+ *
+ * Ver `chunk` em `_shared/ingest.ts` para o porquê de não ser
+ * `ON CONFLICT DO NOTHING` (a `unique` é parcial, e o Postgres não infere índice
+ * parcial pelo PostgREST).
+ *
+ * A degradação para linha a linha só acontece no pedaço que colidiu, e é o que
+ * transforma "página perdida" em "N linhas duplicadas, contadas". Essa contagem
+ * é o dado que diz se `providerId` é único por transação de verdade.
+ */
+async function insertResilient(
+  supabase: SupabaseClient,
+  rows: Record<string, unknown>[],
+): Promise<{ inserted: number; duplicated: number }> {
+  let inserted = 0;
+  let duplicated = 0;
+
+  for (const batch of chunk(rows, INSERT_CHUNK)) {
+    // O `select` devolve **só o que entrou**: é como a contagem passa a ser
+    // verdade em vez de `batch.length`.
+    const { data, error } = await supabase
+      .from('transactions')
+      .insert(batch)
+      .select('id');
+
+    if (error == null) {
+      inserted += data?.length ?? 0;
+      continue;
+    }
+    // `23505` = alguma linha do lote já existe. Só ela deveria ficar de fora, e
+    // o INSERT atômico deixa as outras 99 também — daí a segunda passada.
+    if (error.code !== '23505') {
+      throw new Error(
+        `Falha ao inserir transações importadas: ${error.message}`,
+      );
+    }
+
+    for (const row of batch) {
+      const { error: rowError } = await supabase
+        .from('transactions')
+        .insert(row);
+      if (rowError == null) {
+        inserted += 1;
+      } else if (rowError.code === '23505') {
+        duplicated += 1;
+      } else {
+        throw new Error(
+          `Falha ao inserir transação importada: ${rowError.message}`,
+        );
+      }
+    }
+  }
+
+  return { inserted, duplicated };
 }
 
 /** Processa um evento. Lança para o chamador registrar a tentativa. */

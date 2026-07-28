@@ -15,6 +15,7 @@ import assert from 'node:assert/strict';
 import { describe, it } from 'node:test';
 
 import {
+  chunk,
   dedupeByExternalId,
   directionByType,
   resolveDirection,
@@ -134,5 +135,27 @@ describe('dedupeByExternalId', () => {
 
     assert.equal(result.collided, 0);
     assert.equal(result.unique.length, 0);
+  });
+});
+
+describe('chunk', () => {
+  it('divide em pedaços do tamanho pedido, com resto no último', () => {
+    assert.deepEqual(chunk([1, 2, 3, 4, 5], 2), [[1, 2], [3, 4], [5]]);
+  });
+
+  it('lista menor que o pedaço vira um pedaço só', () => {
+    assert.deepEqual(chunk([1, 2], 100), [[1, 2]]);
+  });
+
+  it('lista vazia vira nenhum pedaço', () => {
+    assert.deepEqual(chunk([], 10), []);
+  });
+
+  it('tamanho exato não deixa pedaço vazio no fim', () => {
+    assert.deepEqual(chunk([1, 2, 3, 4], 2), [[1, 2], [3, 4]]);
+  });
+
+  it('recusa tamanho inválido em vez de laçar para sempre', () => {
+    assert.throws(() => chunk([1], 0), RangeError);
   });
 });
