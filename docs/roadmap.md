@@ -524,7 +524,8 @@ papel `authenticated` com JWT de verdade devolveu os dados do dono e zero para u
 | `verify_jwt` declarado por função | `supabase/config.toml` |
 | README das functions: segredos, deploy e o que **não** foi feito | `supabase/functions/README.md` |
 | Revisão do ADR 0005: allowlist não-bloqueante e `external_id` único | `docs/adr/0005-*.md` |
-| 9 testes de integração da fundação | `apps/finance/test_integration/open_finance_persistence_test.dart` |
+| Widget do Pluggy Connect **internalizado**, com as guardas que o pacote oficial não tem | `.../open_finance/presentation/pluggy_connect/` |
+| 9 testes de integração da fundação + 28 testes das guardas e do parser | `test_integration/open_finance_persistence_test.dart`, `test/features/open_finance/` |
 
 Quatro decisões que não se leem no código:
 
@@ -553,6 +554,32 @@ estranho), e `webhook_events` com uma linha real devolvendo **0** para
 autenticado — a negação por ausência de policy funciona de fato, e não é a tabela
 estar vazia.
 
+#### O widget: internalizado em vez de adotado
+
+O `flutter_pluggy_connect` é da própria Pluggy (publisher `pluggy.ai`), mas foi
+lido inteiro (436 linhas) e **reescrito como código nosso**, por três lacunas
+verificadas na 3.0.1: nenhum `onNavigationRequest` em lugar nenhum do pacote;
+`launchUrl` recebendo URL do canal JS sem validar esquema; e mensagem de tipo
+desconhecido caindo em `dynamic` sem tratamento. Some o argumento de seguir o
+upstream — ele está parado desde nov/2024, tem 3 likes e não suporta web.
+
+Três coisas que não se leem no código:
+
+- **Uma dependência nova, não três.** `webview_flutter` foi a única a entrar no
+  lockfile. `url_launcher` já estava na árvore transitivamente (via
+  `supabase_flutter`, que a usa para OAuth) e só virou direta; `app_links` ficou
+  de fora, porque no pacote oficial ela serve a um contorno que eles mesmos
+  marcam com "TODO: find a better way to solve this".
+- **Export condicional porque `webview_flutter` não suporta web**, e o CI compila
+  `main_dev.dart` para web. Sem a divisão, uma tela de conexão bancária derrubaria
+  um gate de CI que não tem relação com Open Finance. Verificado com um entrypoint
+  descartável que forçou o compilador web a resolver o export.
+- **A lógica de segurança vive em funções puras**, exercitáveis sem WebView, sem
+  device e sem rede — e foi um desses testes que pegou um bug real: query
+  malformada chega por **duas** famílias de exceção, e a primeira versão só
+  tratava `FormatException`, deixando o `ArgumentError` de percent-encoding
+  inválido subir até a tela.
+
 ### O que falta na Fase 1
 
 | Item | Estado |
@@ -560,7 +587,8 @@ estar vazia.
 | Open Finance — schema | ✅ Fundação pronta e na nuvem (fatia acima). |
 | Open Finance — `pluggy-connect-token` | Escrita, **não deployada e nunca exercitada contra a Pluggy**. Deno não está instalado, então o TS também não foi typecheckado: o primeiro `deploy` será a primeira compilação. |
 | Open Finance — `pluggy-webhook` e `pluggy-sync-worker` | Não existem. O webhook precisa de `verify_jwt = false` e do header secreto; o worker é quem faz `GET /items` → `/accounts` → `/v2/transactions` e o UPSERT com as regras de propriedade de coluna. |
-| Open Finance — caminho no app | Nada. Falta domínio/dados/UI de conexão, o botão "Conectar banco" e o widget Connect. O pacote oficial `flutter_pluggy_connect` existe (publisher `pluggy.ai`) mas está **parado desde nov/2024** e não suporta web — decisão a tomar entre ele e um WebView próprio. |
+| Open Finance — widget Connect | ✅ Internalizado, com 28 testes das partes puras. **Nunca rodou num device**: nenhuma tela o instancia ainda. |
+| Open Finance — caminho no app | Falta o que liga as pontas: domínio, dados e providers de conexão; a chamada à Edge Function; o botão "Conectar banco" no Perfil; e gravar `open_finance_connections` no `onEvent` de sucesso. |
 | Detecção/confirmação automática de contribuição | Metade pronta: schema e UI existem; falta quem crie a linha (ingestão Pluggy). O `transaction_id` já espera por ela: a detecção pode ligar a contribuição ao lançamento importado |
 | Streaks e badges básicos | Nada. Agora há histórico de contribuição para derivá-los |
 | Categorização por IA (premium) | Nada |
@@ -732,6 +760,19 @@ Ordenados por risco. Todos verificados no código.
       `index.ts`. Os contratos seguem `docs/pluggy-api-reference.md` §3.3 e §3.4,
       mas nenhuma chamada real à Pluggy aconteceu. Mesma família da lição do
       `UPSERT` de orçamento: código que nunca rodou não é código que funciona.
+- [ ] **O protocolo do widget Connect é contrato interno da Pluggy.** Os tipos de
+      mensagem (`OAUTH_OPEN`, `LINK_OPEN`, `LOCATION`) e os nomes de evento na
+      query (`SUCCESS`, `ERROR`, `CLOSE`, `LOGIN_SUCCESS`…) **não são
+      documentados publicamente** — só se conhecem por leitura do fonte do
+      pacote oficial. É a dívida que se aceitou ao internalizar o widget, e ela
+      existiria igual usando o pacote deles (que também está parado). Se o fluxo
+      parar sem nada nosso mudar, `pluggy_connect_event.dart` é o primeiro lugar
+      a olhar.
+- [ ] **O widget Connect nunca rodou num device.** As partes puras têm 28 testes,
+      mas o WebView em si não foi instanciado: nenhuma tela o usa ainda, então
+      não há prova de que o canal JS conversa, de que a allowlist não bloqueia
+      algo legítimo do fluxo real, nem de que o salto para o OAuth do banco
+      volta. Fecha junto com o caminho no app.
 - [ ] **`Account` não conhece as colunas novas.** `connection_id` e `external_id`
       existem no Postgres e no schema PowerSync, mas não na entidade — então a UI
       não tem como distinguir conta importada de conta digitada, e a regra do ADR
