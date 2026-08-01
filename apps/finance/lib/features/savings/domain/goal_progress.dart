@@ -62,7 +62,12 @@ class GoalProgress {
       // Aporte em outra moeda não é somável e não é convertível aqui. Não
       // acontece hoje (o formulário só cria na moeda da meta), mas somar
       // mesmo assim lançaria e derrubaria a lista inteira por causa de uma
-      // linha — ver o débito de moeda no roadmap.
+      // linha.
+      //
+      // Débito conhecido: quando a Pluggy trouxer conta em outra moeda, o
+      // valor vai **sumir do progresso sem aviso**. Mesma família do débito de
+      // moeda em `accountsNetBalance`, e a saída provavelmente é a mesma —
+      // dizer na tela que há valor fora da moeda, em vez de omiti-lo.
       if (contribution.amount.currency != goal.currency) continue;
 
       final amount = contribution.amount.abs;

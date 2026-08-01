@@ -40,7 +40,7 @@ enum BadgeMetric {
 /// desbloqueou uma conquista": evento publicado é fato, não derivação, e não dá
 /// para despublicar. É aí que `achievements` com `earned_at` passa a ser
 /// necessária — não como cache do que se calcula, mas como registro de que a
-/// conquista **foi anunciada**. Está anotado no roadmap.
+/// conquista **foi anunciada**. Ver ADR 0009.
 enum SavingsBadge {
   primeiroAporte(
     key: 'primeiro_aporte',

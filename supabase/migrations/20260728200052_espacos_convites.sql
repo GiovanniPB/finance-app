@@ -263,7 +263,7 @@ $$;
 -- O risco residual é **força bruta de código** em `join_space_by_code`, que
 -- qualquer usuário autenticado pode chamar em laço. Hoje o que protege são os
 -- ~6,6·10¹¹ códigos possíveis e a expiração de 7 dias; **não há rate limit**.
--- Está anotado como débito no roadmap.
+-- Está anotado como débito em `docs/state.md`.
 -- -------------------------------------------------------------------------
 revoke execute on function private.generate_invite_code()
   from anon, authenticated, public;

@@ -52,7 +52,7 @@
 -- importar — nos dois mundos a RLS continua funcionando.
 --
 -- REGRA PARA AS PRÓXIMAS FATIAS: policy nova chama `private.is_space_member` e
--- `private.has_space_role`, não `public.…`. Está registrado no `CLAUDE.md`.
+-- `private.has_space_role`, não `public.…`. Está registrado no `AGENTS.md`.
 -- =========================================================================
 
 -- -------------------------------------------------------------------------

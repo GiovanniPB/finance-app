@@ -1,61 +1,37 @@
 # Contribuindo
 
-## Fluxo
+O trabalho vem em **fatias verticais com contrato**. O fluxo, a arquitetura, a
+escada de verificação e a Definição de Pronto estão em [`AGENTS.md`](AGENTS.md)
+— este arquivo cobre só o que é específico de release.
 
-1. Branch a partir de `main`.
-2. Desenvolva seguindo a arquitetura em camadas (ver [ADRs](docs/adr)).
-3. Rode localmente antes de abrir PR:
-   ```bash
-   fvm dart run melos run gen --no-select
-   fvm dart format .
-   fvm dart run melos run analyze --no-select
-   fvm dart run melos run coverage --no-select && bash tool/check_coverage.sh 80
-   ```
-4. Abra o PR — o CI precisa passar (format, analyze, testes, cobertura, build).
+## Fluxo, em uma linha
 
-## Convenções
+```bash
+tool/new-slice.sh <nome>   # contrato + branch a partir de origin/main
+#   preencher o contrato → executar → aprovar → gate → PR (draft até fechar)
+tool/close-slice.sh        # fecha, e aí sim `gh pr ready`
+```
 
-- **Commits**: [Conventional Commits](https://www.conventionalcommits.org)
-  (`feat:`, `fix:`, `refactor:`, `test:`, `chore:`, `docs:`, `perf:`, `ci:`).
-  O versionamento é automatizado via `melos version`.
-- **Camadas**: `presentation → domain ← data`. `domain` não importa Flutter,
-  PowerSync ou Supabase.
-- **Imutabilidade**: entidades com freezed; nunca mutar objetos.
-- **Erros**: retorne `Result<T, Failure>`; não deixe exceptions vazarem para a UI.
-- **Estado**: Riverpod 3 com code generation (`@riverpod`).
-- **Testes**: TDD quando possível; cobertura mínima de 80% (lógica de negócio).
-- **Lints**: `very_good_analysis` com `--fatal-infos` — zero warnings/infos.
+## Commits
 
-## Onde colocar código
+[Conventional Commits](https://www.conventionalcommits.org) no imperativo:
+`feat:`, `fix:`, `refactor:`, `test:`, `chore:`, `docs:`, `perf:`, `ci:`. O
+corpo explica o *porquê* quando útil.
 
-| Tipo | Local |
-|---|---|
-| Utilitário transversal (Dart puro) | `packages/core` |
-| Persistência / sync | `packages/database` |
-| Tema / widgets base | `packages/design_system` |
-| Feature (data/domain/presentation) | `apps/finance/lib/features/<feature>` |
+O versionamento é automatizado pelo Melos a partir deles: `fix:` → patch,
+`feat:` → minor, `!`/`BREAKING CHANGE` → major. `docs:`/`chore:`/`ci:`/`test:`
+não geram release.
 
-Features estabilizadas podem ser promovidas a pacotes em `packages/`.
-
-## Releases e versionamento
-
-O versionamento é automatizado pelo Melos a partir dos **Conventional Commits**
-(por isso a disciplina de commits importa). Cada pacote é versionado de forma
-independente e recebe a sua própria tag (ex.: `core-v0.2.0`).
-
-Regras de bump (semver): `fix:` → patch · `feat:` → minor · `!`/`BREAKING
-CHANGE` → major. `docs:`/`chore:`/`ci:`/`test:` não geram release.
-
-### Como criar um release
+## Releases
 
 Preferencialmente pelo workflow **Release (version)** no GitHub Actions
 (`workflow_dispatch`), que roda na `main`, versiona, gera CHANGELOGs, cria as
-tags e faz push. Use o input `dry_run` para pré-visualizar sem commitar.
+tags e faz push. O input `dry_run` pré-visualiza sem commitar.
 
-Localmente (a partir da `main` atualizada):
+Localmente, a partir da `main` atualizada:
 
 ```bash
-fvm dart run melos version --all        # --all inclui os pacotes privados
+fvm dart run melos version --all
 git push --follow-tags origin main
 ```
 
@@ -63,4 +39,4 @@ git push --follow-tags origin main
 > (privados) — o Melos os pularia por padrão. Nada é publicado no pub.dev.
 
 Build e distribuição de artefatos (Android/iOS/web, lojas, OTA) são um passo
-futuro (Nível 2), a ser adicionado quando houver app publicável.
+futuro, a ser adicionado quando houver app publicável.

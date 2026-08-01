@@ -26,7 +26,7 @@ CI em runner macOS.
 
 ## Por que existem
 
-O [CLAUDE.md §7](../../../CLAUDE.md) exclui da métrica de cobertura a glue de
+O [AGENTS.md](../../../AGENTS.md) exclui da métrica de cobertura a glue de
 composição e de sync — `bootstrap.dart`, os entrypoints de flavor,
 `di/providers.dart` e `powersync_service.dart` — dizendo que ela é coberta por
 integração. Estes testes são essa contrapartida.
