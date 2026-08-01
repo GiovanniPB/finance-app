@@ -12,7 +12,7 @@ import 'helpers/local_stack.dart';
 ///
 /// Rodam contra um `PowerSyncDatabase` **de verdade**, aberto num diretório
 /// temporário a partir do `appSchema`. É a única forma de exercitar a glue que
-/// o CLAUDE.md §7 exclui da métrica de cobertura — `powersync_service.dart` e
+/// o AGENTS.md exclui da métrica de cobertura — `powersync_service.dart` e
 /// `di/providers.dart` — e a única em que o SQL encontra as views com triggers
 /// `INSTEAD OF` que o PowerSync cria de fato.
 ///
@@ -447,8 +447,12 @@ void main() {
   });
 
   group('Logout', () {
-    // O comportamento que o roadmap registra como débito: a flag de
-    // apresentação é local e vai embora junto com o resto.
+    // Débito conhecido, exercitado aqui de propósito: a flag de apresentação
+    // vive em tabela `localOnly`, então ela vai embora junto com o resto.
+    // Consequência: trocar de conta no mesmo aparelho reapresenta o app
+    // (defensável), e reinstalar também (menos defensável). Levar a flag para
+    // `profiles` exigiria migration + coluna no schema do PowerSync +
+    // republicar as sync rules.
     test('disconnectAndClear apaga dado sincronizável e preferência', () async {
       final stack = await localStack();
       await seedSpace(stack.db);

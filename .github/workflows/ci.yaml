@@ -5,6 +5,7 @@ on:
     branches: [main]
   pull_request:
     branches: [main]
+    types: [opened, synchronize, reopened, ready_for_review]
 
 concurrency:
   group: ci-${{ github.ref }}
@@ -19,6 +20,19 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
+
+      # Guardas de documento (state.md não vira diário). Instantâneos, sempre.
+      - name: Guardas de documento
+        run: bash tool/guards.sh
+
+      # Guarda de fatia fechada: só quando o PR sai de draft. Sem esta
+      # condição, todo push durante o trabalho ficaria vermelho — e vermelho
+      # previsível ensina a ignorar vermelho.
+      - name: Fatia fechada
+        if: github.event_name == 'pull_request' && github.event.pull_request.draft == false
+        env:
+          FATIA_GATE: "1"
+        run: bash tool/guards.sh
 
       - uses: subosito/flutter-action@v2
         with:

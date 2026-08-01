@@ -16,7 +16,7 @@ import 'package:flutter_test/flutter_test.dart';
 // Import seletivo: os outros fakes deste arquivo colidiriam com os do harness.
 // Só a categoria vem de lá — era a segunda cópia do mesmo fake.
 import '../../helpers/app_harness.dart'
-    show FakeCategoriesRepository, FakeSpacesRepository;
+    show FakeCategoriesRepository, FakeSpacesRepository, testNow;
 
 // ---------------------------------------------------------------------------
 // Fakes: preferidos a mocks para dependências com comportamento (ver regras).
@@ -167,6 +167,10 @@ Future<ProviderContainer> ready({
       budgetsRepositoryProvider.overrideWithValue(
         FakeBudgetsRepository(budgets),
       ),
+      // Sem isto o mês em foco nasce do relógio real, e todo helper deste
+      // arquivo ancora em julho de 2026 — a suíte passava por coincidência de
+      // calendário e virou vermelha sozinha em 1º de agosto.
+      clockProvider.overrideWithValue(() => testNow),
     ],
   );
   addTearDown(container.dispose);
@@ -191,10 +195,12 @@ void main() {
     test('começa no mês corrente, normalizado no dia 1', () async {
       final container = await ready();
       final month = container.read(focusedMonthProvider);
-      final now = DateTime.now();
 
-      expect(month.year, now.year);
-      expect(month.month, now.month);
+      // Contra o relógio injetado, não contra `DateTime.now()`: comparar com o
+      // relógio real faria este teste passar mesmo se o provider ignorasse o
+      // `clockProvider` — que foi exatamente o defeito.
+      expect(month.year, testNow.year);
+      expect(month.month, testNow.month);
       expect(month.day, 1);
     });
 

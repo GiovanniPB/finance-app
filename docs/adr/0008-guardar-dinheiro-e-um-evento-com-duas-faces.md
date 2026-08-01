@@ -15,7 +15,7 @@ entrava em `MonthSummary.outflow` e não aparecia na lista de lançamentos.
 despesa". **Nada o produzia**: os dois segmentos da UI (registro rápido e
 edição) têm duas posições e só emitem `expense`/`income`.
 
-O roadmap descrevia o problema ao contrário — dizia que registrar um lançamento
+O registro de estado descrevia o problema ao contrário — dizia que um lançamento
 `savings` não criava contribuição. Como lançamento `savings` não existia, o
 buraco era o inverso.
 

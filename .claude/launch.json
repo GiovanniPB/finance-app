@@ -1,0 +1,19 @@
+{
+  "version": "0.0.1",
+  "configurations": [
+    {
+      "name": "app",
+      "runtimeExecutable": "fvm",
+      "runtimeArgs": [
+        "flutter",
+        "run",
+        "-d",
+        "macos",
+        "--target",
+        "apps/finance/lib/main_dev.dart",
+        "--dart-define-from-file=env/dev.json"
+      ],
+      "port": 0
+    }
+  ]
+}

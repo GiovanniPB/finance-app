@@ -1,0 +1,15 @@
+{
+  "hooks": {
+    "PostToolUse": [
+      {
+        "matcher": "Write|Edit",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "case \"$CLAUDE_FILE_PATH\" in *.dart) timeout 60 fvm dart analyze --fatal-infos \"$CLAUDE_FILE_PATH\" 2>&1 | tail -20 ;; esac"
+          }
+        ]
+      }
+    ]
+  }
+}
