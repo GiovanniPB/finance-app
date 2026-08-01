@@ -14,7 +14,10 @@ part 'transactions_providers.g.dart';
 class FocusedMonth extends _$FocusedMonth {
   @override
   DateTime build() {
-    final now = DateTime.now();
+    // Pelo `clockProvider`, não por `DateTime.now()`: era a única leitura de
+    // "hoje" na camada de apresentação que escapava do relógio substituível, e
+    // por isso cinco testes de julho de 2026 passaram a falhar em 1º de agosto.
+    final now = ref.watch(clockProvider)();
     return DateTime(now.year, now.month);
   }
 

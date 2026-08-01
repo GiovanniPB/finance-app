@@ -116,3 +116,8 @@ Já morderam, vão morder de novo.
   errado.
 - **`--dart-define-from-file` precisa de caminho absoluto**, e vale no `build`,
   não só no `run`.
+- **Teste que lê `DateTime.now()` passa por coincidência de calendário.** Em 1º
+  de agosto de 2026 a `main` ficou vermelha sozinha: `FocusedMonth` era a única
+  leitura de "hoje" na apresentação que escapava do `clockProvider`, e casava
+  com helpers ancorados no relógio real. Dado de teste ancora em `testNow`;
+  provider lê o `clockProvider`. As duas pontas, ou nenhuma.

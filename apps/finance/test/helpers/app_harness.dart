@@ -694,7 +694,10 @@ Transaction testTransaction({
   String? description = 'Mercado',
   String id = 'tx-1',
 }) {
-  final when = occurredAt ?? DateTime.now();
+  // `testNow`, e não `DateTime.now()`: o harness já sobrescreve o
+  // `clockProvider` com ele, e um dado ancorado no relógio real cai fora do mês
+  // que a tela está mostrando assim que o calendário vira.
+  final when = occurredAt ?? testNow;
   return Transaction(
     id: id,
     spaceId: 'space-1',
@@ -724,7 +727,7 @@ Budget testBudget({
   categoryId: categoryId,
   limit: Money.fromMinor(limitMinor),
   period: BudgetPeriod.monthly,
-  startsAt: startsAt ?? DateTime(DateTime.now().year, DateTime.now().month),
+  startsAt: startsAt ?? DateTime(testNow.year, testNow.month),
   createdAt: DateTime.utc(2026, 7),
   updatedAt: DateTime.utc(2026, 7),
 );
