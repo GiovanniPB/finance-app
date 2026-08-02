@@ -50,3 +50,8 @@ bucket_definitions:
       # aqui: sync rule não faz join, então a contribuição precisa carregar o
       # próprio espaço. No Postgres um trigger o mantém igual ao da meta.
       - select * from savings_contributions where space_id = bucket.space_id
+      # `expense_splits.space_id`, idem — e agora com a regra escrita no ADR
+      # 0011: dado alcançável só por join viaja na linha. A parte aponta para o
+      # lançamento, que sabe o espaço; a sync rule não tem como seguir esse
+      # caminho, então a coluna carrega o espaço e um trigger a mantém.
+      - select * from expense_splits where space_id = bucket.space_id

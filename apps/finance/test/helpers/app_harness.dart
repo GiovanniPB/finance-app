@@ -21,6 +21,7 @@ import 'package:finance/features/savings/domain/savings_repository.dart';
 import 'package:finance/features/spaces/domain/space.dart';
 import 'package:finance/features/spaces/domain/space_member.dart';
 import 'package:finance/features/spaces/domain/spaces_repository.dart';
+import 'package:finance/features/transactions/domain/expense_split.dart';
 import 'package:finance/features/transactions/domain/transaction.dart';
 import 'package:finance/features/transactions/domain/transactions_repository.dart';
 import 'package:flutter/material.dart';
@@ -450,8 +451,25 @@ class FakeCategoriesRepository implements CategoriesRepository {
 }
 
 class FakeTransactionsRepository implements TransactionsRepository {
-  FakeTransactionsRepository(this.transactions);
+  FakeTransactionsRepository(this.transactions, {List<ExpenseSplit>? splits})
+    : splits = [...?splits];
+
   final List<Transaction> transactions;
+
+  /// As partes que a tela lê. Mutáveis para o teste exercitar dividir e
+  /// desfazer sem trocar de fake no meio.
+  final List<ExpenseSplit> splits;
+
+  /// Ids de lançamento passados a `splitEqually`, na ordem.
+  final List<String> splitCalls = [];
+
+  /// Ids de lançamento passados a `removeSplit`, na ordem.
+  final List<String> unsplitCalls = [];
+
+  /// Erro a devolver em vez de dividir.
+  Failure? splitFailure;
+
+  final _splits = StreamController<List<ExpenseSplit>>.broadcast();
 
   @override
   Stream<List<Transaction>> watchBySpace(
@@ -459,6 +477,56 @@ class FakeTransactionsRepository implements TransactionsRepository {
     DateTime? from,
     DateTime? to,
   }) => Stream.value(transactions);
+
+  @override
+  Stream<List<ExpenseSplit>> watchSplits(String transactionId) async* {
+    yield [...splits.where((s) => s.transactionId == transactionId)];
+    yield* _splits.stream.map(
+      (all) => [...all.where((s) => s.transactionId == transactionId)],
+    );
+  }
+
+  @override
+  Future<Result<List<ExpenseSplit>, Failure>> splitEqually(
+    String transactionId,
+  ) async {
+    splitCalls.add(transactionId);
+
+    final failure = splitFailure;
+    if (failure != null) return Err(failure);
+
+    // Rateio igual entre `members`, com a mesma matemática da produção: um
+    // fake que divide diferente esconderia o caso do centavo que sobra.
+    final transaction = transactions.firstWhere((t) => t.id == transactionId);
+    final shares = transaction.amount.abs.split(splitMembers.length);
+    splits
+      ..removeWhere((s) => s.transactionId == transactionId)
+      ..addAll([
+        for (var i = 0; i < splitMembers.length; i++)
+          ExpenseSplit(
+            id: 'split-$transactionId-$i',
+            transactionId: transactionId,
+            spaceId: transaction.spaceId,
+            userId: splitMembers[i],
+            amount: shares[i],
+            createdAt: testNow,
+            updatedAt: testNow,
+          ),
+      ]);
+    _splits.add([...splits]);
+    return Ok([...splits.where((s) => s.transactionId == transactionId)]);
+  }
+
+  @override
+  Future<Result<void, Failure>> removeSplit(String transactionId) async {
+    unsplitCalls.add(transactionId);
+    splits.removeWhere((s) => s.transactionId == transactionId);
+    _splits.add([...splits]);
+    return const Ok(null);
+  }
+
+  /// Entre quem o fake rateia. Casa com os membros de `testSharedSpace()`.
+  List<String> splitMembers = const ['user-1', 'user-2'];
 
   @override
   Future<Result<Transaction, Failure>> create({
