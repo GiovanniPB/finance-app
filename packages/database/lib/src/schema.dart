@@ -135,6 +135,10 @@ const appSchema = Schema([
       Column.text('space_id'),
       Column.text('account_id'),
       Column.text('created_by'),
+      // Quem pagou. **Nulo significa `created_by`** — a linha local não tem o
+      // trigger que resolve isso no Postgres, então o `coalesce` acontece de
+      // novo em `Transaction.fromRow`. Ver a migration 20260801224605.
+      Column.text('paid_by'),
       Column.text('type'),
       Column.integer('amount_minor'),
       Column.text('currency'),

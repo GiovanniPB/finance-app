@@ -155,10 +155,15 @@ Duas naturezas, e a distinção decide mutabilidade e histórico:
    proposta `confirmed=false` → o sim do usuário move o progresso.
 6. **Compartilhar espaço** — criar `household`/`group` → convidar por código →
    entrar → gerir papéis, remover, sair, arquivar.
-7. **Dividir despesa** *(Fase 2, metade feita)* — abrir a despesa de um espaço
-   `group` → "Dividir igualmente" → uma parte por membro ativo em
-   `expense_splits`. Falta o saldo "quem deve a quem" e liquidar via Pix, que
-   dependem da questão #2.
+7. **Dividir despesa** *(Fase 2)* — abrir a despesa de um espaço `group` → dizer
+   quem pagou → "Dividir igualmente" → uma parte por membro ativo em
+   `expense_splits`.
+8. **Acertar contas** *(Fase 2)* — o detalhe do grupo mostra o saldo líquido de
+   cada um como a menor lista de transferências ([ADR
+   0012](adr/0012-saldo-liquido-com-guloso.md)); registrar o acerto grava um
+   `transfer` dividido que zera o par ([ADR
+   0013](adr/0013-o-acerto-e-um-transfer-dividido.md)). O Pix continua sendo
+   copia-e-cola fora do app — aqui só se registra que ele aconteceu.
 
 ## Decisões
 
@@ -170,13 +175,14 @@ Do PRD §15, o que segue sem decisão e **bloqueia** trabalho:
 
 | # | Questão | Bloqueia |
 |---|---|---|
-| 2 | Algoritmo de minimização de transferências (RN-2.2) | saldo "quem deve a quem" |
 | 4 | IA de categorização: modelo próprio vs. API, e dado sensível na inferência | categorização por IA |
 | 6 | Limite de contas Open Finance no plano grátis (1 ou 2) | paywall |
 | 7 | Household com 3+ pessoas — o schema suporta, a UX de "casal" pressupõe 2 | nada hoje |
 | 8–10 | Moderação de feed, cadência de notificação, gamificação vs. saúde financeira | Fase 3 |
 
-Respondidas e já refletidas acima: regime de renda (#1), provedor de Open
-Finance (#3, [ADR 0005](adr/0005-open-finance-pluggy-server-side.md)) e falso
-positivo de detecção (#5, resolvido por desenho — a proposta custa um toque em
-"não", não progresso errado).
+Respondidas e já refletidas acima: regime de renda (#1), minimização de
+transferências (#2, [ADR 0012](adr/0012-saldo-liquido-com-guloso.md) — saldo
+líquido com casamento guloso, no máximo `n−1`), provedor de Open Finance (#3,
+[ADR 0005](adr/0005-open-finance-pluggy-server-side.md)) e falso positivo de
+detecção (#5, resolvido por desenho — a proposta custa um toque em "não", não
+progresso errado).

@@ -8,11 +8,13 @@ void main() {
     String? categoryId = 'cat-1',
     int isShared = 0,
     String source = 'manual',
+    String? paidBy,
   }) => {
     'id': 'tx-1',
     'space_id': 'space-1',
     'account_id': 'acc-1',
     'created_by': 'user-1',
+    'paid_by': paidBy,
     'type': type,
     'amount_minor': amountMinor,
     'currency': 'BRL',
@@ -135,6 +137,35 @@ void main() {
         Transaction.fromRow(row(source: 'open_finance')).isAutomatic,
         isTrue,
       );
+    });
+  });
+
+  // A regra de `paid_by` mora em três lugares — trigger do Postgres, o SQL do
+  // saldo e aqui — porque a linha local não tem trigger e existe antes do
+  // round-trip. É a fronteira que garante que quem consome nunca veja nulo.
+  group('Transaction.fromRow — quem pagou', () {
+    test('paid_by nulo significa quem lançou', () {
+      final transaction = Transaction.fromRow(row());
+
+      expect(transaction.paidBy, 'user-1');
+      expect(transaction.paidBySomeoneElse, isFalse);
+    });
+
+    test('paid_by preenchido vence created_by', () {
+      final transaction = Transaction.fromRow(row(paidBy: 'user-2'));
+
+      expect(transaction.paidBy, 'user-2');
+      expect(transaction.createdBy, 'user-1');
+      expect(transaction.paidBySomeoneElse, isTrue);
+    });
+
+    // A coluna vai preenchida no INSERT local para a linha ser utilizável antes
+    // da sincronização; no Postgres o trigger reescreve a partir de
+    // `created_by` quando ela chega nula.
+    test('toColumns escreve o pagador resolvido, nunca nulo', () {
+      final columns = Transaction.fromRow(row()).toColumns();
+
+      expect(columns['paid_by'], 'user-1');
     });
   });
 

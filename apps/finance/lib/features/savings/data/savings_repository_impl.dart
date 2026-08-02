@@ -325,6 +325,9 @@ class SavingsRepositoryImpl implements SavingsRepository {
       id: _genId(),
       spaceId: goal.spaceId,
       createdBy: userId,
+      // Guardar dinheiro é ato individual: quem lança é sempre quem paga, e não
+      // há tela que ofereça outra pessoa. Ver a migration 20260801224605.
+      paidBy: userId,
       type: TransactionType.savings,
       // No domínio saída é negativa; `toColumns()` volta ao módulo, porque a
       // coluna é positiva e a direção vem de `type`.

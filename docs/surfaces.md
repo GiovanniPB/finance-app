@@ -38,10 +38,13 @@ categoria com alerta em 80% e 100%, atividade recente com "Ver tudo".
   nunca a parte de quem olha — mudar isso faria o saldo do mês não fechar.
 - **Editar lançamento** — `transaction_edit_sheet.dart`: recusa editar o que
   pertence a uma meta, e abre em leitura com caminho para ela.
-- **Dividir despesa** — `split_section.dart`, no fim da folha de edição. Um
-  botão de rateio igual, uma linha por membro, e a soma das partes. Aparece
-  **só** em despesa de espaço `group`; nas outras situações a seção não existe,
-  em vez de existir desabilitada.
+- **Dividir despesa** — `split_section.dart`, no fim da folha de edição.
+  **"Quem pagou"** (pílula por membro ativo) vem antes de **"Dividido entre"**:
+  o rateio só significa algo depois de se saber quem adiantou. Depois, um botão
+  de rateio igual, uma linha por membro, e a soma das partes. A seção inteira
+  aparece **só** em despesa de espaço `group`; nas outras situações ela não
+  existe, em vez de existir desabilitada. O pagador não grava ao toque — é campo
+  do formulário e sobe no "Salvar".
 - **Orçamentos** — `budgets_page.dart` + `budget_form_sheet.dart`.
 
 ### Espaços — `spaces_page.dart`
@@ -54,6 +57,13 @@ ativo num toque.
   explica por quê. A linha de membro lidera com o **nome** (definido no Perfil)
   e cai no texto antigo — "Você" / "No espaço desde …" — enquanto não houver
   nome. Com nome, a data de entrada some: ela era muleta de desempate.
+- **Acertar contas** — `settlement_section.dart`, abaixo dos membros e **só** em
+  espaço `group`. O cabeçalho responde "e eu?" antes da lista; cada linha é uma
+  transferência que zera parte do grupo. **Quem olha se acha pelo peso da
+  palavra "Você"**, não por fundo colorido — em grupo de três quase toda
+  transferência envolve você. Só a linha que envolve você tem chevron, e tocá-la
+  abre o diálogo que registra o acerto. Três vazios, três frases: nada dividido
+  ensina onde dividir, tudo quite é resultado, moeda divergente recusa somar.
 - **Ações de membro** — `member_actions_sheet.dart`: trocar papel, remover.
 - **Criar / entrar** — `space_form_sheet.dart`, `join_space_sheet.dart`,
   `space_rename_sheet.dart`.

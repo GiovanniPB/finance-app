@@ -294,8 +294,16 @@ void main() {
 /// situações, e aparecer em qualquer uma delas é pior que não existir — um
 /// controle que promete algo que o produto decidiu não ter.
 void _splitSectionTests() {
-  Transaction groupExpense({int minor = 24000, bool isShared = false}) =>
-      testTransaction(minor: minor, spaceId: 'space-2', isShared: isShared);
+  Transaction groupExpense({
+    int minor = 24000,
+    bool isShared = false,
+    String? paidBy,
+  }) => testTransaction(
+    minor: minor,
+    spaceId: 'space-2',
+    isShared: isShared,
+    paidBy: paidBy,
+  );
 
   Future<FakeTransactionsRepository> pumpSplit(
     WidgetTester tester, {
@@ -359,6 +367,109 @@ void _splitSectionTests() {
 
       expect(find.text('Dividido entre'), findsNothing);
     });
+
+    // "Quem pagou" segue a mesma regra: fora de despesa de grupo o campo não
+    // existe, em vez de existir com uma opção só.
+    testWidgets('"Quem pagou" acompanha a seção', (tester) async {
+      await pumpSplit(tester, transaction: testTransaction(minor: 24000));
+
+      expect(find.text('Quem pagou'), findsNothing);
+    });
+  });
+
+  group('quem pagou', () {
+    testWidgets('sem escolha, quem lançou vem marcado', (tester) async {
+      await pumpSplit(tester);
+
+      expect(find.text('Quem pagou'), findsOneWidget);
+      // Uma pílula por membro ativo, e a de quem lançou já selecionada —
+      // `paid_by` nulo significa `created_by`, não "nenhum".
+      expect(find.byKey(const Key('payer_user-1')), findsOneWidget);
+      expect(find.byKey(const Key('payer_user-2')), findsOneWidget);
+      expect(
+        tester
+            .widget<CategoryChip>(find.byKey(const Key('payer_user-1')))
+            .isSelected,
+        isTrue,
+      );
+      expect(
+        tester
+            .widget<CategoryChip>(find.byKey(const Key('payer_user-2')))
+            .isSelected,
+        isFalse,
+      );
+    });
+
+    testWidgets('a minha pílula diz "Você", não o meu nome', (tester) async {
+      await pumpSplit(tester);
+
+      expect(
+        tester
+            .widget<CategoryChip>(find.byKey(const Key('payer_user-1')))
+            .label,
+        'Você',
+      );
+      expect(
+        tester
+            .widget<CategoryChip>(find.byKey(const Key('payer_user-2')))
+            .label,
+        'Ana Prado',
+      );
+    });
+
+    testWidgets('o pagador gravado vem marcado ao abrir', (tester) async {
+      await pumpSplit(tester, transaction: groupExpense(paidBy: 'user-2'));
+
+      expect(
+        tester
+            .widget<CategoryChip>(find.byKey(const Key('payer_user-2')))
+            .isSelected,
+        isTrue,
+      );
+    });
+
+    // Diferente do botão de dividir, a pílula não grava ao toque: o pagador é
+    // campo do formulário e sobe no "Salvar", junto do resto.
+    testWidgets('tocar não grava; salvar grava', (tester) async {
+      final repository = await pumpSplit(tester);
+
+      await tapVisible(tester, find.byKey(const Key('payer_user-2')));
+      expect(repository.updates, isEmpty);
+
+      await tapVisible(tester, find.text('Salvar'));
+
+      expect(repository.updates, hasLength(1));
+      expect(repository.updates.single.paidBy, 'user-2');
+    });
+
+    // O defeito gêmeo do que a fatia anterior encontrou: `is_shared` vinha da
+    // entidade carregada ao abrir, e salvar apagava a marca. Aqui a folha manda
+    // as duas coisas juntas, e as partes seguem de pé.
+    testWidgets('trocar o pagador e salvar preserva a divisão', (tester) async {
+      final repository = await pumpSplit(
+        tester,
+        transaction: groupExpense(isShared: true),
+        splits: [
+          for (final userId in ['user-1', 'user-2'])
+            ExpenseSplit(
+              id: 'split-$userId',
+              transactionId: 'tx-1',
+              spaceId: 'space-2',
+              userId: userId,
+              amount: const Money.fromMinor(12000),
+              createdAt: testNow,
+              updatedAt: testNow,
+            ),
+        ],
+      );
+
+      await tapVisible(tester, find.byKey(const Key('payer_user-2')));
+      await tapVisible(tester, find.text('Salvar'));
+
+      expect(repository.updates.single.paidBy, 'user-2');
+      expect(repository.updates.single.isShared, isTrue);
+      expect(repository.splits, hasLength(2));
+    });
   });
 
   group('despesa de grupo ainda não dividida', () {
@@ -404,12 +515,23 @@ void _splitSectionTests() {
       );
 
       expect(find.text('2 pessoas'), findsOneWidget);
-      // A minha linha ganha o qualificador; a do outro é só o nome.
+      // A minha linha ganha o qualificador; a do outro é só o nome. A busca é
+      // **dentro da linha**: "Quem pagou" mostra as mesmas pessoas logo acima,
+      // e procurar na folha inteira acharia o nome duas vezes.
       expect(
-        find.textContaining('Giovanni', findRichText: true),
+        find.descendant(
+          of: find.byKey(const Key('split_user-1')),
+          matching: find.textContaining('Giovanni', findRichText: true),
+        ),
         findsOneWidget,
       );
-      expect(find.text('Ana Prado'), findsOneWidget);
+      expect(
+        find.descendant(
+          of: find.byKey(const Key('split_user-2')),
+          matching: find.text('Ana Prado'),
+        ),
+        findsOneWidget,
+      );
     });
 
     // A linha existe para o rateio ser verificável sem confiar no código.

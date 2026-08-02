@@ -5,6 +5,7 @@ import '../../spaces/domain/space.dart';
 import '../../spaces/presentation/spaces_providers.dart';
 import '../domain/expense_split.dart';
 import '../domain/month_summary.dart';
+import '../domain/settlement.dart';
 import '../domain/transaction.dart';
 
 part 'transactions_providers.g.dart';
@@ -69,6 +70,15 @@ MonthSummary monthSummary(Ref ref) {
 @riverpod
 Stream<List<ExpenseSplit>> transactionSplits(Ref ref, String transactionId) =>
     ref.watch(transactionsRepositoryProvider).watchSplits(transactionId);
+
+/// O "quem deve a quem" de um espaço (RN-2.2).
+///
+/// Recebe o espaço por argumento em vez de ler o ativo: a seção mora no
+/// **detalhe** de um espaço, que não é necessariamente o que está ativo na
+/// bottom nav.
+@riverpod
+Stream<Settlement> settlement(Ref ref, String spaceId) =>
+    ref.watch(settlementRepositoryProvider).watch(spaceId);
 
 /// Este lançamento pode ser dividido?
 ///

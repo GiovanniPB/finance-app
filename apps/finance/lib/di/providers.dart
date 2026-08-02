@@ -21,7 +21,9 @@ import '../features/savings/data/savings_repository_impl.dart';
 import '../features/savings/domain/savings_repository.dart';
 import '../features/spaces/data/spaces_repository_impl.dart';
 import '../features/spaces/domain/spaces_repository.dart';
+import '../features/transactions/data/settlement_repository_impl.dart';
 import '../features/transactions/data/transactions_repository_impl.dart';
+import '../features/transactions/domain/settlement_repository.dart';
 import '../features/transactions/domain/transactions_repository.dart';
 
 part 'providers.g.dart';
@@ -115,6 +117,17 @@ TransactionsRepository transactionsRepository(Ref ref) =>
       db: ref.watch(powerSyncServiceProvider).db,
       supabase: ref.watch(supabaseClientProvider),
     );
+
+/// O acerto de contas do grupo (RN-2.2).
+///
+/// Interface própria, e não método a mais em [transactionsRepository]: seis
+/// fakes de teste implementam aquela, e o custo de somar método lá seria seis
+/// arquivos por nada. Ver o cabeçalho de `SettlementRepository`.
+@Riverpod(keepAlive: true)
+SettlementRepository settlementRepository(Ref ref) => SettlementRepositoryImpl(
+  db: ref.watch(powerSyncServiceProvider).db,
+  supabase: ref.watch(supabaseClientProvider),
+);
 
 @Riverpod(keepAlive: true)
 BudgetsRepository budgetsRepository(Ref ref) =>

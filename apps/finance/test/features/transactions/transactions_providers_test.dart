@@ -125,6 +125,7 @@ Transaction tx({
   id: id,
   spaceId: 'space-1',
   createdBy: 'user-1',
+  paidBy: 'user-1',
   type: type,
   amount: Money.fromMinor(type.isOutflow ? -minor.abs() : minor.abs()),
   occurredAt: DateTime.utc(2026, 7, 15),
