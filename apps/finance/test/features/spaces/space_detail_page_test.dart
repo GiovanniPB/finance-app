@@ -1,4 +1,5 @@
 import 'package:core/core.dart';
+import 'package:finance/features/profile/domain/profile.dart';
 import 'package:finance/features/spaces/domain/space.dart';
 import 'package:finance/features/spaces/domain/space_member.dart';
 import 'package:finance/features/spaces/presentation/space_detail_page.dart';
@@ -40,11 +41,13 @@ void main() {
   Future<void> pumpDetail(
     WidgetTester tester, {
     FakeSpacesRepository? repository,
+    FakeProfileRepository? profileRepository,
     String? currentUserId = owner,
   }) => pumpScreen(
     tester,
     const SpaceDetailPage(spaceId: 'space-2'),
     spacesRepository: repository ?? repositoryWith(),
+    profileRepository: profileRepository,
     currentUserId: currentUserId,
     wrapInScaffold: false,
   );
@@ -133,11 +136,101 @@ void main() {
     testWidgets('sem nome de pessoa, a data de entrada distingue as linhas', (
       tester,
     ) async {
-      // `profiles.display_name` não sincroniza para outros membros ainda. Um
-      // uuid não identifica ninguém; a data, sim.
+      // O fallback: enquanto ninguém definir nome no Perfil, a lista tem de
+      // ficar idêntica à que existia antes da coluna `display_name`. Um uuid
+      // não identifica ninguém; a data, sim.
       await pumpDetail(tester);
 
       expect(find.textContaining('No espaço desde'), findsOneWidget);
+    });
+
+    testWidgets('com nome, o nome lidera e a data some', (tester) async {
+      await pumpDetail(
+        tester,
+        repository: repositoryWith(
+          members: [
+            testMember(
+              id: 'm-dono',
+              userId: testSharedSpace().ownerId,
+              displayName: 'Giovanni',
+            ),
+            testMember(
+              id: 'm-convidado',
+              userId: guest,
+              role: SpaceRole.editor,
+              displayName: 'Ana Prado',
+            ),
+          ],
+        ),
+      );
+
+      expect(find.textContaining('Ana Prado'), findsOneWidget);
+      expect(find.textContaining('No espaço desde'), findsNothing);
+      // A linha do dono junta nome e qualificador num `Text.rich`, então o
+      // finder precisa enxergar o texto do span.
+      expect(
+        find.textContaining(
+          'você, que criou o espaço',
+          findRichText: true,
+        ),
+        findsOneWidget,
+      );
+    });
+
+    testWidgets('só eu com nome: a linha do outro fica como antes', (
+      tester,
+    ) async {
+      await pumpDetail(
+        tester,
+        repository: repositoryWith(
+          members: [
+            testMember(
+              id: 'm-dono',
+              userId: testSharedSpace().ownerId,
+              displayName: 'Giovanni',
+            ),
+            testMember(
+              id: 'm-convidado',
+              userId: guest,
+              role: SpaceRole.editor,
+            ),
+          ],
+        ),
+      );
+
+      expect(find.textContaining('Giovanni', findRichText: true), findsWidgets);
+      expect(find.textContaining('No espaço desde'), findsOneWidget);
+    });
+
+    // A razão de a linha ler `profiles` em vez da coluna copiada: entre salvar
+    // o nome e o trigger do Postgres propagar, a cópia ainda é a antiga.
+    testWidgets('o meu nome vem do Perfil, não da cópia em space_members', (
+      tester,
+    ) async {
+      await pumpDetail(
+        tester,
+        repository: repositoryWith(
+          members: [
+            testMember(
+              id: 'm-dono',
+              userId: testSharedSpace().ownerId,
+              displayName: 'Nome velho',
+            ),
+          ],
+        ),
+        profileRepository: FakeProfileRepository(
+          profile: const Profile(id: owner, displayName: 'Nome novo'),
+        ),
+      );
+
+      expect(
+        find.textContaining('Nome novo', findRichText: true),
+        findsOneWidget,
+      );
+      expect(
+        find.textContaining('Nome velho', findRichText: true),
+        findsNothing,
+      );
     });
 
     testWidgets('admin abre as ações do membro; convidado não', (tester) async {

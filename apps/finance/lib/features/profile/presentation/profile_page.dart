@@ -16,6 +16,8 @@ import '../../open_finance/presentation/connect_bank_page.dart';
 import '../../open_finance/presentation/connection_sheet.dart';
 import '../../open_finance/presentation/connection_tile.dart';
 import '../../open_finance/presentation/open_finance_providers.dart';
+import 'profile_name_sheet.dart';
+import 'profile_providers.dart';
 
 /// Aba Perfil (PRD §11.1).
 ///
@@ -51,6 +53,17 @@ class ProfilePage extends ConsumerWidget {
             AppSpacing.lg,
           ),
           child: Text('Perfil', style: context.texts.displaySmall),
+        ),
+        const _SectionHeader(title: 'Você'),
+        const _YouTile(),
+        const Padding(
+          padding: EdgeInsets.fromLTRB(
+            AppSpacing.screenGutter,
+            AppSpacing.md,
+            AppSpacing.screenGutter,
+            AppSpacing.lg,
+          ),
+          child: Divider(height: 1),
         ),
         _SectionHeader(
           title: 'Contas',
@@ -244,6 +257,125 @@ class _CategoryTile extends StatelessWidget {
             ],
           ),
         ),
+      ),
+    );
+  }
+}
+
+/// A linha "Você": o nome, e o convite para defini-lo.
+///
+/// Três estados, e os três importam:
+///
+///  * **Sem a linha de `profiles`** — ela chega pelo bucket `user_owned`, e
+///    antes disso não há o que editar. A linha não é tocável de propósito: um
+///    `UPDATE` sem linha afeta zero e **não dá erro**, então abrir a folha aqui
+///    terminaria em "salvo" sem nada salvo.
+///  * **Sem nome** — convite, não vazio mudo. `AppEmptyState` não serve: isto é
+///    uma linha, não uma seção vazia.
+///  * **Com nome** — o nome, e a frase que diz para que ele serve. Sem ela o
+///    campo parece vaidade, e ninguém preenche.
+class _YouTile extends ConsumerWidget {
+  const _YouTile();
+
+  @override
+  Widget build(BuildContext context, WidgetRef ref) {
+    final tokens = context.tokens;
+    final profile = ref.watch(myProfileProvider).asData?.value;
+
+    if (profile == null) {
+      return const _YouTileSkeleton();
+    }
+
+    final name = profile.displayName;
+
+    return Material(
+      color: Colors.transparent,
+      child: InkWell(
+        key: const Key('profile_you_tile'),
+        onTap: () => ProfileNameSheet.show(context, profile: profile),
+        child: Padding(
+          padding: const EdgeInsets.symmetric(
+            horizontal: AppSpacing.screenGutter,
+            vertical: AppSpacing.md,
+          ),
+          child: Row(
+            children: [
+              const CategorySwatch.brand(icon: Icons.person_outline),
+              const SizedBox(width: AppSpacing.md),
+              Expanded(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Text(
+                      name ?? 'Defina seu nome',
+                      maxLines: 1,
+                      overflow: TextOverflow.ellipsis,
+                      style: context.texts.titleSmall?.copyWith(
+                        color: name == null ? tokens.textMuted : null,
+                      ),
+                    ),
+                    const SizedBox(height: AppSpacing.xxs),
+                    Text(
+                      name == null
+                          ? 'Enquanto não tiver, quem divide um espaço com '
+                                'você vê só o seu papel'
+                          : 'É assim que você aparece para quem divide um '
+                                'espaço com você',
+                      style: context.texts.bodySmall?.copyWith(
+                        color: tokens.textMuted,
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+              const SizedBox(width: AppSpacing.sm),
+              Icon(Icons.chevron_right, size: 20, color: tokens.textMuted),
+            ],
+          ),
+        ),
+      ),
+    );
+  }
+}
+
+/// O estado de espera, com a forma da linha que vai chegar.
+///
+/// Duas barras em vez de um spinner: a seção tem tamanho conhecido, e um
+/// spinner faria a lista pular quando o perfil chegasse.
+class _YouTileSkeleton extends StatelessWidget {
+  const _YouTileSkeleton();
+
+  @override
+  Widget build(BuildContext context) {
+    final tokens = context.tokens;
+
+    Widget bar(double width, double height) => DecoratedBox(
+      decoration: BoxDecoration(
+        color: tokens.surfaceSunken,
+        borderRadius: AppRadii.brSm,
+      ),
+      child: SizedBox(height: height, width: width),
+    );
+
+    return Padding(
+      key: const Key('profile_you_skeleton'),
+      padding: const EdgeInsets.symmetric(
+        horizontal: AppSpacing.screenGutter,
+        vertical: AppSpacing.md,
+      ),
+      child: Row(
+        children: [
+          const CategorySwatch.brand(icon: Icons.person_outline),
+          const SizedBox(width: AppSpacing.md),
+          Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              bar(140, 13),
+              const SizedBox(height: AppSpacing.xs),
+              bar(96, 10),
+            ],
+          ),
+        ],
       ),
     );
   }

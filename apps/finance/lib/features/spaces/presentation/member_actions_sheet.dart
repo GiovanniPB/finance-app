@@ -4,6 +4,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../../../di/providers.dart';
+import '../../profile/presentation/profile_providers.dart';
 import '../domain/space_member.dart';
 import '../domain/space_permissions.dart';
 import 'member_copy.dart';
@@ -99,11 +100,15 @@ class _MemberActionsSheetState extends ConsumerState<MemberActionsSheet> {
                 AppSpacing.lg,
               ),
               child: Text(
+                // `.text` e não `.label`: num título não há duas cores para
+                // separar o nome do qualificador, então eles voltam a ser uma
+                // frase só.
                 MemberCopy.identity(
                   member: member,
                   permissions: permissions,
                   today: today,
-                ),
+                  myDisplayName: ref.watch(myDisplayNameProvider),
+                ).text,
                 style: context.texts.titleLarge,
               ),
             ),
