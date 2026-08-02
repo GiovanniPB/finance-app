@@ -824,6 +824,11 @@ Transaction testTransaction({
   /// a divisão de despesa, por exemplo.
   String spaceId = 'space-1',
   bool isShared = false,
+
+  /// Quem pagou, quando não é quem lançou (`'user-1'`). Nulo é o caso normal:
+  /// `paid_by` só difere de `created_by` depois de alguém escolher outra pessoa
+  /// na folha de edição.
+  String? paidBy,
 }) {
   // `testNow`, e não `DateTime.now()`: o harness já sobrescreve o
   // `clockProvider` com ele, e um dado ancorado no relógio real cai fora do mês
@@ -833,6 +838,7 @@ Transaction testTransaction({
     id: id,
     spaceId: spaceId,
     createdBy: 'user-1',
+    paidBy: paidBy ?? 'user-1',
     type: type,
     amount: Money.fromMinor(type.isOutflow ? -minor.abs() : minor.abs()),
     occurredAt: when,

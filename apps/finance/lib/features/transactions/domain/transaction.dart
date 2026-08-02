@@ -56,12 +56,23 @@ enum TransactionSource {
 /// útil: [amount] é um [Money] **com sinal** (negativo para saída), o que deixa
 /// somas e saldos serem aritmética direta. A conversão acontece na fronteira,
 /// em [Transaction.fromRow] e [toColumns].
+///
+/// ## Quem pagou nunca é nulo aqui
+///
+/// A coluna `paid_by` é nulável e nulo significa "quem lançou" — no Postgres um
+/// trigger resolve, e na linha local (que não tem trigger) o `coalesce`
+/// acontece em [Transaction.fromRow]. No domínio [paidBy] é sempre um id: quem
+/// consome não deveria repetir a regra, e "não se sabe quem pagou" não é um
+/// estado que exista para quem lê.
 @freezed
 abstract class Transaction with _$Transaction {
   const factory Transaction({
     required String id,
     required String spaceId,
     required String createdBy,
+
+    /// Quem pagou. Igual a [createdBy] quando ninguém escolheu outra pessoa.
+    required String paidBy,
     required TransactionType type,
     required Money amount,
     required DateTime occurredAt,
@@ -85,11 +96,15 @@ abstract class Transaction with _$Transaction {
     final type = TransactionType.fromDb(row['type']! as String);
     final minor = row['amount_minor']! as int;
     final currency = row['currency']! as String;
+    final createdBy = row['created_by']! as String;
 
     return Transaction(
       id: row['id']! as String,
       spaceId: row['space_id']! as String,
-      createdBy: row['created_by']! as String,
+      createdBy: createdBy,
+      // Nulo é o caso normal de toda linha anterior à migration 20260801224605,
+      // e o de qualquer linha criada offline antes do round-trip.
+      paidBy: row['paid_by'] as String? ?? createdBy,
       type: type,
       amount: Money.fromMinor(
         type.isOutflow ? -minor.abs() : minor.abs(),
@@ -117,6 +132,7 @@ abstract class Transaction with _$Transaction {
     'space_id': spaceId,
     'account_id': accountId,
     'created_by': createdBy,
+    'paid_by': paidBy,
     'type': type.db,
     'amount_minor': amount.amountMinor.abs(),
     'currency': amount.currency,
@@ -133,6 +149,9 @@ abstract class Transaction with _$Transaction {
 
   /// Receita — usado pela UI para escolher cor e sinal do valor.
   bool get isIncome => type == TransactionType.income;
+
+  /// Alguém pagou por quem lançou — o caso que torna `paid_by` necessária.
+  bool get paidBySomeoneElse => paidBy != createdBy;
 
   /// Veio do Open Finance em vez de digitada.
   bool get isAutomatic => source == TransactionSource.openFinance;

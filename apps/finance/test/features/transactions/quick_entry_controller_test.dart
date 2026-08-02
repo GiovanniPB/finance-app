@@ -55,6 +55,7 @@ class RecordingTransactionsRepository implements TransactionsRepository {
         id: 'tx-1',
         spaceId: spaceId,
         createdBy: 'user-1',
+        paidBy: 'user-1',
         type: type,
         amount: amount,
         occurredAt: occurredAt,

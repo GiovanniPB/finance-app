@@ -288,6 +288,7 @@ void main() {
       id: 'tx-1',
       spaceId: 'space-1',
       createdBy: 'user-1',
+      paidBy: 'user-1',
       type: TransactionType.expense,
       amount: const Money.fromMinor(-14280),
       occurredAt: DateTime.utc(2026, 7, 27),

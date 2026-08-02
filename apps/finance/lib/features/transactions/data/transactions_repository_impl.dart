@@ -79,8 +79,8 @@ class TransactionsRepositoryImpl implements TransactionsRepository {
   final AppLogger _log;
 
   static const _columns =
-      'id, space_id, account_id, created_by, type, amount_minor, currency, '
-      'category_id, description, occurred_at, source, is_shared, '
+      'id, space_id, account_id, created_by, paid_by, type, amount_minor, '
+      'currency, category_id, description, occurred_at, source, is_shared, '
       'ai_categorized, recurrence_id, created_at, updated_at';
 
   @override
@@ -160,6 +160,10 @@ class TransactionsRepositoryImpl implements TransactionsRepository {
       id: _genId(),
       spaceId: spaceId,
       createdBy: userId,
+      // Quem lança paga, até alguém dizer o contrário na folha de edição — o
+      // único lugar que escreve `paid_by`. O `+` não ganha passo (ver
+      // `docs/surfaces.md`).
+      paidBy: userId,
       type: type,
       amount: signed,
       occurredAt: occurredAt,
@@ -177,12 +181,13 @@ class TransactionsRepositoryImpl implements TransactionsRepository {
       final cols = transaction.toColumns();
       await db.execute(
         'INSERT INTO transactions ($_columns) '
-        'VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)',
+        'VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)',
         [
           cols['id'],
           cols['space_id'],
           cols['account_id'],
           cols['created_by'],
+          cols['paid_by'],
           cols['type'],
           cols['amount_minor'],
           cols['currency'],
@@ -237,7 +242,7 @@ class TransactionsRepositoryImpl implements TransactionsRepository {
         await tx.execute(
           'UPDATE transactions SET type = ?, amount_minor = ?, currency = ?, '
           'category_id = ?, description = ?, occurred_at = ?, account_id = ?, '
-          'is_shared = ?, updated_at = ? WHERE id = ?',
+          'paid_by = ?, is_shared = ?, updated_at = ? WHERE id = ?',
           [
             cols['type'],
             cols['amount_minor'],
@@ -246,6 +251,11 @@ class TransactionsRepositoryImpl implements TransactionsRepository {
             cols['description'],
             cols['occurred_at'],
             cols['account_id'],
+            // A folha de edição é o único lugar que escreve o pagador, e ela o
+            // manda junto do resto — trocar o pagador e salvar é **uma**
+            // escrita, não duas. Ver o cabeçalho de `is_shared` acima: foi por
+            // separar leitura e escrita que a marca de divisão se apagava.
+            cols['paid_by'],
             cols['is_shared'],
             cols['updated_at'],
             updated.id,
