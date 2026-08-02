@@ -1,0 +1,494 @@
+<!doctype html>
+<html lang="pt-BR">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Mockup — quem-deve-a-quem</title>
+<style>
+  /* Tokens do tema claro, de app_palette.dart / app_tokens.dart.
+     Se divergirem do código, o código é a verdade. */
+  :root {
+    --white: #FFFFFF;
+    --ink100: #EEF2F0;  /* surfaceSunken */
+    --ink200: #E1E6E4;  /* hairline */
+    --ink600: #5C6764;  /* textMuted */
+    --ink700: #3E4745;  /* textSecondary */
+    --ink900: #1A201F;  /* textPrimary */
+    --teal50:  #E9F6F2; /* brandSubtle */
+    --teal200: #9FD8C9; /* brandBorder */
+    --teal600: #2E8B72; /* moneyPositive */
+    --teal700: #175845; /* brandText */
+    --amber500: #D98A0B;
+
+    --gutter: 20px;
+    --xxs: 4px;
+    --xs: 6px;
+    --sm: 8px;
+    --md: 12px;
+    --lg: 16px;
+  }
+
+  * { box-sizing: border-box; }
+
+  body {
+    margin: 0;
+    padding: 32px 24px 64px;
+    background: var(--ink100);
+    color: var(--ink900);
+    font-family: Inter, -apple-system, BlinkMacSystemFont, "Segoe UI", system-ui, sans-serif;
+    -webkit-font-smoothing: antialiased;
+  }
+
+  /* Dinheiro em mono com dígitos tabulares — regra do design system. */
+  .money {
+    font-family: "IBM Plex Mono", ui-monospace, SFMono-Regular, Menlo, monospace;
+    font-variant-numeric: tabular-nums;
+  }
+
+  h1 { font-size: 20px; font-weight: 600; letter-spacing: -0.3px; margin: 0 0 4px; }
+
+  .lede {
+    color: var(--ink600); font-size: 14px; line-height: 1.5;
+    max-width: 64ch; margin: 0 0 30px;
+  }
+
+  h2 { font-size: 15px; font-weight: 600; margin: 44px 0 6px; }
+  h2 + p {
+    color: var(--ink600); font-size: 13.5px; line-height: 1.55;
+    max-width: 68ch; margin: 0 0 18px;
+  }
+
+  .row-of-frames { display: flex; flex-wrap: wrap; gap: 26px; align-items: flex-start; }
+  .frame { width: 330px; }
+
+  .frame > figcaption {
+    font-size: 12px; font-weight: 600; text-transform: uppercase;
+    letter-spacing: 0.6px; color: var(--ink600); margin-bottom: 10px;
+  }
+  .frame > figcaption em {
+    display: block; text-transform: none; letter-spacing: 0;
+    font-weight: 400; font-style: normal; margin-top: 3px;
+  }
+
+  /* A página de detalhe do espaço. */
+  .page {
+    background: var(--white);
+    border: 1px solid var(--ink200);
+    border-radius: 20px;
+    overflow: hidden;
+  }
+  .appbar {
+    display: flex; align-items: center; gap: var(--sm);
+    padding: 13px var(--gutter);
+    border-bottom: 1px solid var(--ink200);
+    font-size: 16px; font-weight: 600;
+  }
+  .appbar .back { color: var(--ink600); font-weight: 400; }
+  .page-body { padding: var(--lg) var(--gutter) var(--lg); }
+
+  .section-title {
+    font-size: 14px; font-weight: 600;
+    margin: var(--lg) 0 var(--sm);
+  }
+  .page-body > .section-title:first-child { margin-top: 0; }
+
+  /* A lista de membros, encurtada — só o contexto de onde a seção nasce. */
+  .member {
+    display: flex; align-items: center; gap: var(--md);
+    padding: var(--sm) 0; border-bottom: 1px solid var(--ink200);
+  }
+  .member:last-of-type { border-bottom: 0; }
+  .member .body { flex: 1; min-width: 0; }
+  .member .who { font-size: 14px; }
+  .member .who .qualifier { color: var(--ink600); }
+  .member .role { font-size: 11.5px; color: var(--ink600); margin-top: 2px; }
+  .avatar {
+    flex: 0 0 auto; width: 32px; height: 32px; border-radius: 999px;
+    background: var(--teal50); border: 1px solid var(--teal200);
+    color: var(--teal700); display: grid; place-items: center;
+    font-size: 12.5px; font-weight: 600;
+  }
+
+  /* ── A seção nova: "Acertar contas" ───────────────────────────────── */
+  .settle { margin-top: var(--lg); padding-top: var(--lg); border-top: 1px solid var(--ink200); }
+
+  /* O cabeçalho responde primeiro a pergunta de quem abriu: e eu? */
+  .settle-head {
+    display: flex; align-items: baseline; justify-content: space-between;
+    gap: var(--sm);
+    background: var(--ink100); border-radius: 12px;
+    padding: 11px var(--md); margin-bottom: var(--md);
+  }
+  .settle-head .lead { font-size: 13px; color: var(--ink700); }
+  .settle-head .amount { font-size: 17px; font-weight: 600; }
+  .settle-head .amount.positive { color: var(--teal600); }
+
+  .xfer {
+    display: flex; align-items: center; gap: var(--sm);
+    padding: 10px 0; border-bottom: 1px solid var(--ink200);
+    font-size: 14px;
+  }
+  .xfer:last-of-type { border-bottom: 0; }
+  .xfer .arrow { color: var(--ink600); font-size: 13px; }
+  .xfer .val { margin-left: auto; font-size: 14px; }
+  /* Quem olha se acha pelo peso, não pelo fundo: em grupo de três quase toda
+     transferência envolve você, e destacar todas seria destacar nenhuma. */
+  .xfer .me { font-weight: 600; color: var(--teal700); }
+  .xfer .nameless { color: var(--ink600); }
+  .xfer .gone { color: var(--ink600); font-size: 12px; }
+
+  .settle-foot {
+    display: flex; justify-content: space-between; gap: var(--sm);
+    margin: var(--sm) 0 0; padding-top: var(--sm);
+    border-top: 1px dashed var(--ink200);
+    font-size: 11.5px; color: var(--ink600);
+  }
+
+  .settle-empty { padding: var(--xs) 0 var(--xxs); }
+  .settle-empty .headline { font-size: 14px; }
+  .settle-empty .hint { font-size: 12.5px; color: var(--ink600); margin-top: var(--xxs); line-height: 1.45; }
+
+  .note {
+    margin: var(--sm) 0 0; padding: var(--sm) 10px;
+    border-left: 2px solid var(--teal200); background: var(--teal50);
+    font-size: 11.5px; line-height: 1.45; color: var(--teal700);
+    border-radius: 0 6px 6px 0;
+  }
+  .note.is-warn {
+    border-left-color: var(--amber500); background: #FDF0D5; color: #8A5504;
+  }
+  .note code { font-size: 11px; }
+
+  .ledger {
+    background: var(--white); border: 1px dashed var(--ink200);
+    border-radius: 20px; padding: var(--lg) var(--gutter);
+    font-size: 13px; width: 330px;
+  }
+  .ledger table { border-collapse: collapse; width: 100%; margin-top: var(--sm); }
+  .ledger th, .ledger td { text-align: right; padding: 4px 0; font-weight: 400; }
+  .ledger th:first-child, .ledger td:first-child { text-align: left; }
+  .ledger thead th { font-size: 11px; color: var(--ink600); border-bottom: 1px solid var(--ink200); }
+  .ledger tfoot td { border-top: 1px solid var(--ink200); font-weight: 600; }
+
+  .absent {
+    background: var(--white); border: 1px dashed var(--ink200);
+    border-radius: 20px; padding: var(--lg) var(--gutter);
+  }
+  .absent ul { margin: var(--sm) 0 0; padding-left: 18px; font-size: 13px; color: var(--ink600); line-height: 1.7; }
+  .absent li strong { color: var(--ink900); font-weight: 600; }
+</style>
+</head>
+<body>
+
+<h1>quem-deve-a-quem — alvo visual</h1>
+<p class="lede">
+  Uma seção <strong>“Acertar contas”</strong> no detalhe do espaço, abaixo dos
+  membros, só em espaço <strong>group</strong>. O saldo é <strong>líquido por
+  pessoa</strong> e vira a menor lista de transferências que zera o grupo — no
+  máximo <code>n−1</code>. Nada aqui move dinheiro: liquidar por Pix é a fatia
+  seguinte, e até ela existir <strong>o saldo é cumulativo e nada o zera</strong>.
+</p>
+
+<h2>0 · A conta que os quadros abaixo mostram</h2>
+<p>
+  Três pessoas numa república. O saldo só olha despesa <strong>dividida</strong>:
+  o que ninguém rateou é gasto de quem lançou, não dívida de ninguém. Quem pagou é
+  <code>transactions.created_by</code> — não existe coluna de pagador.
+</p>
+
+<div class="row-of-frames">
+  <div class="ledger">
+    <strong>Despesas divididas do grupo</strong>
+    <table>
+      <thead>
+        <tr><th>Despesa</th><th>Pagou</th><th>Total</th></tr>
+      </thead>
+      <tbody>
+        <tr><td>Mercado</td><td>Você</td><td class="money">240,00</td></tr>
+        <tr><td>Internet</td><td>Bruno</td><td class="money">120,00</td></tr>
+        <tr><td>Faxina</td><td>Você</td><td class="money">90,00</td></tr>
+      </tbody>
+    </table>
+    <table>
+      <thead>
+        <tr><th>Pessoa</th><th>Pagou</th><th>Deve</th><th>Saldo</th></tr>
+      </thead>
+      <tbody>
+        <tr><td>Você</td><td class="money">330,00</td><td class="money">150,00</td><td class="money">+180,00</td></tr>
+        <tr><td>Bruno</td><td class="money">120,00</td><td class="money">150,00</td><td class="money">−30,00</td></tr>
+        <tr><td>Carla</td><td class="money">0,00</td><td class="money">150,00</td><td class="money">−150,00</td></tr>
+      </tbody>
+      <tfoot>
+        <tr><td>Soma</td><td class="money">450,00</td><td class="money">450,00</td><td class="money">0,00</td></tr>
+      </tfoot>
+    </table>
+    <p class="note">
+      A soma dos saldos é <strong>sempre zero</strong> — é o invariante que o teste
+      do algoritmo verifica antes de olhar as transferências. Se não fecha, o erro
+      está na leitura, não no rateio.
+    </p>
+  </div>
+
+  <div class="ledger">
+    <strong>O guloso, passo a passo</strong>
+    <table>
+      <thead>
+        <tr><th>Passo</th><th>Transferência</th><th>Valor</th></tr>
+      </thead>
+      <tbody>
+        <tr><td>1</td><td>maior devedor → maior credor</td><td class="money">150,00</td></tr>
+        <tr><td></td><td>Carla → Você</td><td class="money"></td></tr>
+        <tr><td>2</td><td>resta Você com +30,00</td><td class="money">30,00</td></tr>
+        <tr><td></td><td>Bruno → Você</td><td class="money"></td></tr>
+      </tbody>
+      <tfoot>
+        <tr><td>Total</td><td>2 transferências (<code>n−1</code>)</td><td class="money">180,00</td></tr>
+      </tfoot>
+    </table>
+    <p class="note">
+      O empate é desempatado por <code>userId</code>. Sem isso o teste passaria por
+      sorte da ordem do <code>Map</code>, que é a armadilha que já mordeu o recorte
+      de mês neste repo.
+    </p>
+  </div>
+</div>
+
+<h2>1 · O caso principal — você tem a receber</h2>
+<p>
+  O cabeçalho responde primeiro a pergunta de quem abriu a tela: <em>e eu?</em>
+  Receita usa a cor da marca com <code>+</code> explícito
+  (<code>moneyPositive</code>); dívida fica <strong>neutra</strong>, sem vermelho —
+  vermelho é orçamento estourado e erro real, e dever ao colega de casa não é erro.
+</p>
+
+<div class="row-of-frames">
+
+  <figure class="frame">
+    <figcaption>Grupo com saldo
+      <em>o caso que a fatia existe para resolver</em>
+    </figcaption>
+    <div class="page">
+      <div class="appbar"><span class="back">‹</span> República</div>
+      <div class="page-body">
+        <div class="section-title">Quem está aqui</div>
+        <div class="member">
+          <div class="avatar">V</div>
+          <div class="body">
+            <div class="who">Você <span class="qualifier">· você, que criou o espaço</span></div>
+            <div class="role">Admin · Convida, remove e edita tudo</div>
+          </div>
+        </div>
+        <div class="member">
+          <div class="avatar">B</div>
+          <div class="body">
+            <div class="who">Bruno</div>
+            <div class="role">Editor · Lança e edita</div>
+          </div>
+        </div>
+        <div class="member">
+          <div class="avatar">C</div>
+          <div class="body">
+            <div class="who">Carla</div>
+            <div class="role">Editor · Lança e edita</div>
+          </div>
+        </div>
+
+        <div class="settle">
+          <div class="section-title" style="margin-top:0">Acertar contas</div>
+          <div class="settle-head">
+            <span class="lead">Você tem a receber</span>
+            <span class="amount money positive">+R$ 180,00</span>
+          </div>
+          <div class="xfer">
+            <span>Carla</span><span class="arrow">→</span><span class="me">Você</span>
+            <span class="val money">R$ 150,00</span>
+          </div>
+          <div class="xfer">
+            <span>Bruno</span><span class="arrow">→</span><span class="me">Você</span>
+            <span class="val money">R$ 30,00</span>
+          </div>
+          <div class="settle-foot">
+            <span>2 transferências zeram o grupo</span>
+            <span>3 despesas divididas</span>
+          </div>
+        </div>
+      </div>
+    </div>
+    <p class="note">
+      A seta é decorativa: o leitor de tela recebe a frase inteira
+      (“Carla paga R$ 150,00 a você”), senão “Carla seta Você” é o que se ouve.
+    </p>
+  </figure>
+
+  <figure class="frame">
+    <figcaption>Você devendo
+      <em>outra conta, mesma seção</em>
+    </figcaption>
+    <div class="page">
+      <div class="appbar"><span class="back">‹</span> Viagem Chapada</div>
+      <div class="page-body">
+        <div class="section-title">Acertar contas</div>
+        <div class="settle-head">
+          <span class="lead">Você deve</span>
+          <span class="amount money">R$ 680,00</span>
+        </div>
+        <div class="xfer">
+          <span class="me">Você</span><span class="arrow">→</span><span>Carla</span>
+          <span class="val money">R$ 680,00</span>
+        </div>
+        <div class="xfer">
+          <span>Bruno</span><span class="arrow">→</span><span>Carla</span>
+          <span class="val money">R$ 440,00</span>
+        </div>
+        <div class="settle-foot">
+          <span>2 transferências zeram o grupo</span>
+          <span>2 despesas divididas</span>
+        </div>
+      </div>
+    </div>
+    <p class="note">
+      A linha que não envolve você (<em>Bruno → Carla</em>) aparece igual, sem
+      apagar: esconder a metade que não é sua faria as transferências não somarem
+      com o total, e alguém contaria de novo.
+    </p>
+  </figure>
+
+  <figure class="frame">
+    <figcaption>Tudo quite
+      <em>ninguém deve nada</em>
+    </figcaption>
+    <div class="page">
+      <div class="appbar"><span class="back">‹</span> República</div>
+      <div class="page-body">
+        <div class="section-title">Acertar contas</div>
+        <div class="settle-empty">
+          <div class="headline">Está tudo quite.</div>
+          <div class="hint">
+            As 4 despesas divididas do grupo já se cancelam — ninguém deve nada a
+            ninguém.
+          </div>
+        </div>
+      </div>
+    </div>
+    <p class="note">
+      Nem uma lista de três “R$ 0,00”, nem a seção desaparecendo. Zerado é
+      <strong>resultado</strong>, e sumir com ele faria a pessoa achar que a
+      divisão não funcionou.
+    </p>
+  </figure>
+
+</div>
+
+<h2>2 · Os casos chatos</h2>
+<p>
+  Grupo sem nada dividido, membro que nunca abriu o Perfil, e membro que saiu
+  devendo. Nenhum deles é raro: o primeiro é o estado de todo grupo novo, e o
+  último é o único em que esconder a linha esconderia dinheiro.
+</p>
+
+<div class="row-of-frames">
+
+  <figure class="frame">
+    <figcaption>Nada dividido ainda
+      <em>todo grupo começa aqui</em>
+    </figcaption>
+    <div class="page">
+      <div class="appbar"><span class="back">‹</span> República</div>
+      <div class="page-body">
+        <div class="section-title">Acertar contas</div>
+        <div class="settle-empty">
+          <div class="headline">Nenhuma despesa dividida.</div>
+          <div class="hint">
+            Abra uma despesa do grupo e toque em “Dividir igualmente” — o saldo
+            aparece aqui.
+          </div>
+        </div>
+      </div>
+    </div>
+    <p class="note">
+      Diz <strong>onde</strong> dividir, porque a marcação mora na folha de edição
+      e não no <code>+</code>. Sem esta frase o caminho é invisível — é o custo que
+      o <code>surfaces.md</code> registrou ao proteger o fluxo dos 30 segundos.
+    </p>
+  </figure>
+
+  <figure class="frame">
+    <figcaption>Sem nome, e quem saiu
+      <em>os dois fallbacks</em>
+    </figcaption>
+    <div class="page">
+      <div class="appbar"><span class="back">‹</span> República</div>
+      <div class="page-body">
+        <div class="section-title">Acertar contas</div>
+        <div class="settle-head">
+          <span class="lead">Você tem a receber</span>
+          <span class="amount money positive">+R$ 95,00</span>
+        </div>
+        <div class="xfer">
+          <span class="nameless">Membro sem nome</span><span class="arrow">→</span><span class="me">Você</span>
+          <span class="val money">R$ 60,00</span>
+        </div>
+        <div class="xfer">
+          <span>Bruno <span class="gone">· saiu do espaço</span></span><span class="arrow">→</span><span class="me">Você</span>
+          <span class="val money">R$ 35,00</span>
+        </div>
+        <div class="settle-foot">
+          <span>2 transferências zeram o grupo</span>
+          <span>5 despesas divididas</span>
+        </div>
+      </div>
+    </div>
+    <p class="note is-warn">
+      <strong>“Membro sem nome” é rótulo novo.</strong> O fallback de
+      <code>member_copy.dart</code> hoje é “No espaço desde 28 de julho”, e numa
+      linha de transferência isso sai como <em>“No espaço desde 28 de julho →
+      Você”</em>. A seção precisa de um rótulo curto próprio.
+    </p>
+  </figure>
+
+  <div class="absent" style="width:330px">
+    <strong>O que de propósito não aparece</strong>
+    <ul>
+      <li><strong>Em espaço <code>personal</code> ou <code>household</code></strong> a
+        seção não existe — não fica vazia nem desabilitada. Household liquida de
+        outro jeito por desenho (PRD §4.2).</li>
+      <li><strong>Botão “Já paguei”.</strong> Registrar o acerto é a fatia seguinte;
+        prometer aqui um botão que não zera nada seria pior que não ter.</li>
+      <li><strong>Chave Pix / copia-e-cola.</strong> Depende de liquidar existir.</li>
+      <li><strong>Histórico de acertos.</strong> Nada foi acertado ainda.</li>
+      <li><strong>Detalhe por despesa.</strong> Quem quer saber de onde saiu o número
+        abre a lista do mês; repetir aqui seria uma segunda lista de lançamentos
+        para manter.</li>
+    </ul>
+  </div>
+
+</div>
+
+<h2>3 · Onde isto pode estar errado</h2>
+<p>
+  As duas coisas que valem sua atenção antes de eu abrir código, porque mudar
+  depois custa retrabalho:
+</p>
+
+<div class="row-of-frames">
+  <div class="ledger">
+    <strong>1. O saldo nunca zera</strong>
+    <p class="hint" style="color:var(--ink600); font-size:12.5px; line-height:1.5; margin:8px 0 0">
+      Sem liquidar, no segundo mês a seção mostra dívida acumulada de sempre — quem
+      pagou por Pix continua devendo na tela. Vale entregar assim (o saldo já
+      responde a pergunta) ou <code>quem-deve-a-quem</code> só faz sentido junto com
+      liquidar?
+    </p>
+  </div>
+  <div class="ledger">
+    <strong>2. Quem lança é quem pagou</strong>
+    <p class="hint" style="color:var(--ink600); font-size:12.5px; line-height:1.5; margin:8px 0 0">
+      Na república real, quem lança o mercado é sempre quem passou o cartão? Se
+      alguém lança pelo outro, o saldo fica errado — e o conserto é coluna
+      <code>paid_by</code>, migration e seletor de pagador: fatia própria.
+    </p>
+  </div>
+</div>
+
+</body>
+</html>
