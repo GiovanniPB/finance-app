@@ -49,10 +49,21 @@ Verifique sempre no degrau mais barato que responda à pergunta.
 Só suba de degrau quando o de baixo não responder. **O degrau 4 roda antes do
 PR, nunca durante.**
 
-⚠️ **Falta o degrau de UI que o agente avalia sozinho** — golden test. As fontes
-Inter e IBM Plex Mono não estão empacotadas, então golden renderiza caixinha.
-Enquanto isso não existir, toda iteração de layout depende do usuário olhar a
-tela. É a fatia `andaime-de-golden` em [`docs/state.md`](docs/state.md).
+⚠️ **Não há degrau de UI que o agente avalie sozinho, e não vai haver.** Golden
+test foi **descartado para este projeto** por decisão de 2026-08-01: as fontes
+Inter e IBM Plex Mono não estão empacotadas (golden renderia caixinha), e o custo
+de empacotá-las mais manter baseline de imagem não se paga aqui.
+
+A consequência é permanente e precisa ser tratada como regra de trabalho, não
+como falta: **toda iteração de layout termina no usuário olhando a tela.** O que
+o agente faz em vez disso:
+
+- mockup HTML no degrau 0, aprovado **antes** do código — é lá que a discussão
+  visual acontece, não depois de implementar;
+- teste de widget para o que é verificável sem olhar: qual texto aparece, qual
+  chave existe, o que é tocável, a ordem dos elementos na tela;
+- dizer explicitamente **o que olhar** ao entregar, em vez de afirmar que a tela
+  está certa.
 
 Para trabalho de layout prefira `-d macos`: hot reload igual, ciclo mais curto
 que o simulador. Simulador só quando o comportamento é específico de iOS.

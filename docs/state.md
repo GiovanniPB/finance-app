@@ -35,15 +35,11 @@ não exige republicar as sync rules.
 
 ## Próximas fatias
 
-1. **andaime-de-golden** *(débito)* — o degrau 1 da escada existe: um golden do
-   `TransactionTile` é gerado e o agente lê o PNG sozinho. Exige empacotar Inter
-   e IBM Plex Mono. **Sem isso, toda iteração de UI depende de alguém olhar a
-   tela** — é a fatia que paga por si.
-2. **dividir-despesa** *(feature)* — uma despesa marcada como dividida num
+1. **dividir-despesa** *(feature)* — uma despesa marcada como dividida num
    espaço `group` gera `expense_splits`. `Money.allocate()` já resolve a
    matemática (RN-2.1). O saldo "quem deve a quem" é outra fatia, e depende da
    questão #2 do PRD.
-3. **nome-no-cadastro** *(feature, pequena)* — hoje quem se cadastra passa por
+2. **nome-no-cadastro** *(feature, pequena)* — hoje quem se cadastra passa por
    toda a primeira sessão sem nome, e só descobre a seção "Você" se abrir o
    Perfil. Um campo no `signUp` (metadata → `handle_new_user`) fecha isso.
 
@@ -82,6 +78,14 @@ não se repete aqui.
   `supabase db push` sobre schema existente; `supabase db reset` num banco vazio
   exige Docker. É a diferença entre "aplica sobre o schema atual" e "o repo
   descreve o banco".
+- **Golden test: descartado, não postergado.** Decidido em 2026-08-01. Era a
+  fatia `andaime-de-golden`, e não vai acontecer: exigiria empacotar Inter e IBM
+  Plex Mono (sem elas o golden renderiza caixinha) e manter baseline de imagem,
+  e isso não se paga aqui. A consequência é permanente e virou regra de trabalho
+  na `AGENTS.md`: **toda iteração de layout termina no usuário olhando a tela**,
+  e o que substitui o degrau é o mockup aprovado antes do código mais teste de
+  widget para o que se verifica sem olhar. Reabrir isto só faria sentido se a UI
+  passasse a ser mexida por várias pessoas ao mesmo tempo.
 - **Categorização por IA** — adiada até a questão #4 do PRD (modelo próprio vs.
   API, e dado sensível na inferência) ter resposta.
 - **Pagamento de fatura conta duas vezes.** No cartão virou `transfer`

@@ -72,3 +72,10 @@ faltando. O método pede um degrau 1 que o agente avalie sozinho, e para UI isso
 é golden test — que não roda porque as fontes não estão empacotadas. Enquanto a
 fatia `andaime-de-golden` não fechar, iteração de layout continua dependendo do
 usuário olhar a tela.
+
+> **Adendo de 2026-08-01.** A fatia `andaime-de-golden` foi **descartada**, não
+> adiada: empacotar as fontes mais manter baseline de imagem não se paga neste
+> projeto. O custo acima deixa de ser temporário e passa a ser permanente — está
+> na `AGENTS.md` como regra de trabalho, com o que substitui o degrau (mockup
+> aprovado antes do código, teste de widget para o verificável sem olhar). O
+> resto desta ADR não muda.
