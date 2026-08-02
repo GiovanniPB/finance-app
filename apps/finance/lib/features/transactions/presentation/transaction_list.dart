@@ -179,10 +179,15 @@ class _Row extends StatelessWidget {
     String? categoryName,
     String? accountName, {
     required String? typeLabel,
+    required bool isShared,
   }) {
     final parts = [
       if (typeLabel != null) typeLabel else ?categoryName,
       ?accountName,
+      // Último, porque é o menos frequente e o menos procurado — mas presente,
+      // porque sem ele a divisão só existiria dentro da folha de edição, e
+      // ninguém abre lançamento por lançamento para saber quais dividiu.
+      if (isShared) 'Dividida',
     ];
     return parts.isEmpty ? null : parts.join(' · ');
   }
@@ -222,6 +227,7 @@ class _Row extends StatelessWidget {
         hasDescription ? categoryName : null,
         accountName,
         typeLabel: typeLabel,
+        isShared: transaction.isShared,
       ),
       isIncome: transaction.isIncome,
       onTap: onTap == null ? null : () => onTap!(transaction),

@@ -1,5 +1,8 @@
+import 'package:core/core.dart';
 import 'package:design_system/design_system.dart';
 import 'package:finance/features/home/presentation/space_home_page.dart';
+import 'package:finance/features/spaces/domain/space_member.dart';
+import 'package:finance/features/transactions/domain/expense_split.dart';
 import 'package:finance/features/transactions/domain/transaction.dart';
 import 'package:finance/features/transactions/presentation/transaction_edit_sheet.dart';
 import 'package:finance/features/transactions/presentation/transactions_page.dart';
@@ -11,6 +14,8 @@ import 'transaction_edit_controller_test.dart'
     show RecordingTransactionsRepository;
 
 void main() {
+  _splitSectionTests();
+
   group('TransactionEditSheet', () {
     testWidgets('abre preenchida com o que está gravado', (tester) async {
       await pumpScreen(
@@ -279,6 +284,223 @@ void main() {
 
       expect(find.byKey(const Key('transaction_owned_by_goal')), findsNothing);
       expect(find.byKey(const Key('transaction_delete')), findsOneWidget);
+    });
+  });
+}
+
+/// A seção "Dividido entre" (RN-2.1).
+///
+/// Metade destes testes verifica **ausência**: a seção não aparece em quatro
+/// situações, e aparecer em qualquer uma delas é pior que não existir — um
+/// controle que promete algo que o produto decidiu não ter.
+void _splitSectionTests() {
+  Transaction groupExpense({int minor = 24000, bool isShared = false}) =>
+      testTransaction(minor: minor, spaceId: 'space-2', isShared: isShared);
+
+  Future<FakeTransactionsRepository> pumpSplit(
+    WidgetTester tester, {
+    Transaction? transaction,
+    List<SpaceMember>? members,
+    List<ExpenseSplit> splits = const [],
+  }) async {
+    final tx = transaction ?? groupExpense();
+    final repository = FakeTransactionsRepository([tx], splits: splits);
+    await pumpScreen(
+      tester,
+      TransactionEditSheet(transaction: tx),
+      spacesRepository: FakeSpacesRepository(
+        [personalSpace(), testSharedSpace()],
+        members:
+            members ??
+            [
+              testMember(id: 'm-1', displayName: 'Giovanni'),
+              testMember(
+                id: 'm-2',
+                userId: 'user-2',
+                displayName: 'Ana Prado',
+              ),
+            ],
+      ),
+      transactionsRepository: repository,
+      categories: [testCategory()],
+    );
+    return repository;
+  }
+
+  group('onde a seção não aparece', () {
+    testWidgets('espaço pessoal', (tester) async {
+      await pumpSplit(tester, transaction: testTransaction(minor: 24000));
+
+      expect(find.text('Dividido entre'), findsNothing);
+    });
+
+    testWidgets('receita, mesmo em grupo', (tester) async {
+      await pumpSplit(
+        tester,
+        transaction: testTransaction(
+          minor: 24000,
+          spaceId: 'space-2',
+          type: TransactionType.income,
+        ),
+      );
+
+      expect(find.text('Dividido entre'), findsNothing);
+    });
+
+    testWidgets('transferência, mesmo em grupo', (tester) async {
+      await pumpSplit(
+        tester,
+        transaction: testTransaction(
+          minor: 24000,
+          spaceId: 'space-2',
+          type: TransactionType.transfer,
+        ),
+      );
+
+      expect(find.text('Dividido entre'), findsNothing);
+    });
+  });
+
+  group('despesa de grupo ainda não dividida', () {
+    testWidgets('oferece dividir igualmente, e nada mais', (tester) async {
+      await pumpSplit(tester);
+
+      expect(find.text('Dividido entre'), findsOneWidget);
+      expect(find.byKey(const Key('transaction_split')), findsOneWidget);
+      expect(find.byKey(const Key('transaction_unsplit')), findsNothing);
+      expect(find.byKey(const Key('split_total')), findsNothing);
+    });
+
+    testWidgets('tocar divide entre os membros ativos', (tester) async {
+      final repository = await pumpSplit(tester);
+
+      await tapVisible(tester, find.byKey(const Key('transaction_split')));
+
+      expect(repository.splitCalls, ['tx-1']);
+      expect(find.byKey(const Key('split_user-1')), findsOneWidget);
+      expect(find.byKey(const Key('split_user-2')), findsOneWidget);
+    });
+  });
+
+  group('despesa já dividida', () {
+    List<ExpenseSplit> equalSplits({int each = 12000}) => [
+      for (final userId in ['user-1', 'user-2'])
+        ExpenseSplit(
+          id: 'split-$userId',
+          transactionId: 'tx-1',
+          spaceId: 'space-2',
+          userId: userId,
+          amount: Money.fromMinor(each),
+          createdAt: testNow,
+          updatedAt: testNow,
+        ),
+    ];
+
+    testWidgets('mostra uma linha por pessoa, com o nome', (tester) async {
+      await pumpSplit(
+        tester,
+        transaction: groupExpense(isShared: true),
+        splits: equalSplits(),
+      );
+
+      expect(find.text('2 pessoas'), findsOneWidget);
+      // A minha linha ganha o qualificador; a do outro é só o nome.
+      expect(
+        find.textContaining('Giovanni', findRichText: true),
+        findsOneWidget,
+      );
+      expect(find.text('Ana Prado'), findsOneWidget);
+    });
+
+    // A linha existe para o rateio ser verificável sem confiar no código.
+    testWidgets('a soma das partes aparece e fecha o total', (tester) async {
+      await pumpSplit(
+        tester,
+        transaction: groupExpense(isShared: true),
+        splits: equalSplits(),
+      );
+
+      expect(
+        tester.widget<Text>(find.byKey(const Key('split_total'))).data,
+        r'R$ 240,00',
+      );
+    });
+
+    testWidgets('o centavo que sobra aparece na primeira parte', (
+      tester,
+    ) async {
+      await pumpSplit(
+        tester,
+        transaction: groupExpense(minor: 1000, isShared: true),
+        splits: [
+          ...equalSplits(each: 334).take(1),
+          ...equalSplits(each: 333).skip(1),
+        ],
+      );
+
+      expect(
+        tester.widget<Text>(find.byKey(const Key('split_total'))).data,
+        r'R$ 6,67',
+      );
+    });
+
+    testWidgets('desfazer chama o repositório', (tester) async {
+      final repository = await pumpSplit(
+        tester,
+        transaction: groupExpense(isShared: true),
+        splits: equalSplits(),
+      );
+
+      await tapVisible(tester, find.byKey(const Key('transaction_unsplit')));
+
+      expect(repository.unsplitCalls, ['tx-1']);
+    });
+
+    // A parte permanece quando a pessoa sai: apagá-la reescreveria o passado.
+    testWidgets('parte de quem saiu não vira linha em branco', (tester) async {
+      await pumpSplit(
+        tester,
+        transaction: groupExpense(isShared: true),
+        splits: equalSplits(),
+        members: [
+          testMember(id: 'm-1', displayName: 'Giovanni'),
+        ],
+      );
+
+      expect(find.text('Quem saiu do espaço'), findsOneWidget);
+    });
+
+    testWidgets('membro sem nome cai no texto de antes', (tester) async {
+      await pumpSplit(
+        tester,
+        transaction: groupExpense(isShared: true),
+        splits: equalSplits(),
+        members: [
+          testMember(id: 'm-1'),
+          testMember(id: 'm-2', userId: 'user-2'),
+        ],
+      );
+
+      expect(find.textContaining('No espaço desde'), findsOneWidget);
+    });
+  });
+
+  group('erro', () {
+    testWidgets('falha ao dividir aparece na folha, sem fechar', (
+      tester,
+    ) async {
+      final repository = await pumpSplit(tester);
+      repository.splitFailure = const ValidationFailure(
+        'Só despesa de um grupo pode ser dividida.',
+      );
+
+      await tapVisible(tester, find.byKey(const Key('transaction_split')));
+
+      expect(
+        find.byKey(const Key('transaction_split_error')),
+        findsOneWidget,
+      );
+      expect(find.byType(TransactionEditSheet), findsOneWidget);
     });
   });
 }

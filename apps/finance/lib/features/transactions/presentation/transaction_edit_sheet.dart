@@ -17,7 +17,9 @@ import '../../savings/domain/savings_goal.dart';
 import '../../savings/presentation/goal_detail_page.dart';
 import '../../savings/presentation/savings_providers.dart';
 import '../domain/transaction.dart';
+import 'split_section.dart';
 import 'transaction_edit_controller.dart';
+import 'transactions_providers.dart';
 
 /// Detalhe e edição de um lançamento (PRD §11.2).
 ///
@@ -167,6 +169,10 @@ class _TransactionEditSheetState extends ConsumerState<TransactionEditSheet> {
                       onDigit: _controller.pressDigit,
                       onBackspace: _controller.pressBackspace,
                     ),
+                    // Último assunto da folha porque é o menos frequente:
+                    // corrigir valor e categoria é o caso comum, dividir não.
+                    if (ref.watch(canSplitProvider(widget.transaction)))
+                      SplitSection(transaction: widget.transaction),
                   ],
                 ),
               ),

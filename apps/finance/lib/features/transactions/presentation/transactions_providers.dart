@@ -1,7 +1,9 @@
 import 'package:riverpod_annotation/riverpod_annotation.dart';
 
 import '../../../di/providers.dart';
+import '../../spaces/domain/space.dart';
 import '../../spaces/presentation/spaces_providers.dart';
+import '../domain/expense_split.dart';
 import '../domain/month_summary.dart';
 import '../domain/transaction.dart';
 
@@ -58,4 +60,30 @@ MonthSummary monthSummary(Ref ref) {
   final transactions = ref.watch(monthTransactionsProvider).asData?.value;
   if (transactions == null) return MonthSummary.empty;
   return MonthSummary.from(transactions);
+}
+
+/// As partes de um lançamento dividido (RN-2.1).
+///
+/// Lista vazia = não dividido. É o que a seção "Dividido entre" lê para decidir
+/// entre oferecer "Dividir igualmente" e mostrar o rateio.
+@riverpod
+Stream<List<ExpenseSplit>> transactionSplits(Ref ref, String transactionId) =>
+    ref.watch(transactionsRepositoryProvider).watchSplits(transactionId);
+
+/// Este lançamento pode ser dividido?
+///
+/// As três recusas juntas, porque a tela precisa da resposta única — e porque
+/// espalhá-las pela árvore de widgets é como um controle desabilitado aparece
+/// num caso que ninguém previu. Espelha o que `splitEqually` recusa na camada
+/// `data`: lá é a rede, aqui é a tela.
+@riverpod
+bool canSplit(Ref ref, Transaction transaction) {
+  // Só despesa: receita, transferência e poupança não se rateiam.
+  if (transaction.type != TransactionType.expense) return false;
+
+  // Só `group`. `household` é transparência total (PRD §4.2), onde o dinheiro é
+  // comum e "quem deve a quem" não é a pergunta; `personal` não tem outro
+  // membro.
+  final space = ref.watch(spaceByIdProvider(transaction.spaceId)).asData?.value;
+  return space?.type == SpaceType.group;
 }

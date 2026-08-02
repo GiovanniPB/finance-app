@@ -818,6 +818,12 @@ Transaction testTransaction({
   String? accountId,
   String? description = 'Mercado',
   String id = 'tx-1',
+
+  /// O padrão é o Espaço Pessoal. Passe `'space-2'` (o de `testSharedSpace()`,
+  /// que é `group`) para exercitar o que só existe em espaço compartilhado —
+  /// a divisão de despesa, por exemplo.
+  String spaceId = 'space-1',
+  bool isShared = false,
 }) {
   // `testNow`, e não `DateTime.now()`: o harness já sobrescreve o
   // `clockProvider` com ele, e um dado ancorado no relógio real cai fora do mês
@@ -825,13 +831,13 @@ Transaction testTransaction({
   final when = occurredAt ?? testNow;
   return Transaction(
     id: id,
-    spaceId: 'space-1',
+    spaceId: spaceId,
     createdBy: 'user-1',
     type: type,
     amount: Money.fromMinor(type.isOutflow ? -minor.abs() : minor.abs()),
     occurredAt: when,
     source: TransactionSource.manual,
-    isShared: false,
+    isShared: isShared,
     aiCategorized: false,
     createdAt: when,
     updatedAt: when,
