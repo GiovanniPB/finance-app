@@ -14,32 +14,41 @@ compartilhados com convite por código, gestão de papéis e pessoas identificad
 pelo nome.
 
 Falta da Fase 1 apenas a **categorização por IA**, adiada por decisão. A Fase 2
-está pela metade: espaços existem, `expense_splits` não.
+está pela metade: a despesa de grupo já se divide em partes iguais, mas o saldo
+"quem deve a quem" depende da questão #2 do PRD.
 
 ## Última fatia
 
-`nome-de-membro` — o Perfil ganha a seção "Você", e a linha de membro lidera com
-o nome em vez de "Você" / "No espaço desde 12 de julho".
+`dividir-despesa` — abrir uma despesa de espaço `group` oferece "Dividir
+igualmente", e o rateio vira uma linha por membro em `expense_splits`.
 
-Duas coisas valem registro. **A fatia foi grande de propósito** (2.501 linhas, 22
-arquivos, ~700 delas o mockup): ela fura a regra do "e" por decisão explícita,
-juntando "eu defino meu nome" com "eu vejo o nome do outro". Separadas, nenhuma
-demonstrava — `display_name` era nulo para todo usuário que existe, porque o
-`signUp` não envia metadata e não havia onde definir o nome.
+Duas decisões de produto que o repo não respondia, e que agora moram no lugar
+que elas mordem. **A marcação é no sheet de edição, não no `+`**: o
+`surfaces.md` protege o fluxo dos 30 segundos de ganhar passo, e o custo — em
+república, dividir passou a ser dois gestos — está registrado lá com o caminho
+de reverter. **Só rateio igual**: percentual e exato pedem tela de configuração.
 
-**E o caminho mapeado aqui estava errado.** O bucket `space_peers` com self-join
-não existe: Sync Rules não fazem JOIN. O nome viaja denormalizado em
-`space_members.display_name`, mantido por trigger — [ADR
-0011](adr/0011-dado-de-outro-membro-viaja-na-linha.md). De quebra, coluna nova
-não exige republicar as sync rules.
+**A fatia foi grande de novo** (2.455 linhas, 27 arquivos), e desta vez sem
+decisão que a justifique: tabela nova arrasta migration, sync rules, schema
+local, entidade, três métodos de repositório, seção de UI e seis fakes de teste
+que implementam a interface. É o piso de uma tabela nova neste projeto, e vale
+saber disso ao dimensionar a próxima.
+
+Dois defeitos apareceram no teste de integração e nenhum mock os pegaria: apagar
+o lançamento deixava partes órfãs (view não tem chave estrangeira, então o
+`on delete cascade` do Postgres não existe no aparelho), e `is_shared` vinha da
+entidade que a folha carregou ao abrir — dividir e salvar apagava a marca.
 
 ## Próximas fatias
 
-1. **dividir-despesa** *(feature)* — uma despesa marcada como dividida num
-   espaço `group` gera `expense_splits`. `Money.allocate()` já resolve a
-   matemática (RN-2.1). O saldo "quem deve a quem" é outra fatia, e depende da
-   questão #2 do PRD.
-2. **nome-no-cadastro** *(feature, pequena)* — hoje quem se cadastra passa por
+1. **quem-deve-a-quem** *(feature)* — **bloqueada** pela questão #2 do PRD
+   (algoritmo de minimização de transferências, RN-2.2). As partes já existem;
+   falta decidir como o saldo vira o menor número de transferências.
+2. **rateio-percentual** *(feature)* — usa o `share_percentage` que
+   `space_members` já tem, caindo no igualitário quando é nulo.
+   `Money.allocate(ratios)` já resolve a matemática. Exige tela para declarar a
+   cota, que é o que a manteve fora de `dividir-despesa`.
+3. **nome-no-cadastro** *(feature, pequena)* — hoje quem se cadastra passa por
    toda a primeira sessão sem nome, e só descobre a seção "Você" se abrir o
    Perfil. Um campo no `signUp` (metadata → `handle_new_user`) fecha isso.
 
@@ -50,6 +59,10 @@ teste verde, e é o primeiro lugar onde procurar quando algo surpreender.
 
 - **Gestão de membro com um segundo login** — trocar papel do convidado,
   removê-lo, vê-lo sair da lista. Este caminho nunca foi percorrido.
+- **A divisão de despesa inteira.** Nada dela foi exercitado num aparelho, e ela
+  é a primeira fatia desde `espacos-compartilhados` a **exigir republicar as
+  sync rules à mão**. Se as partes não aparecerem para o outro membro e não
+  houver erro nenhum, a causa é essa, não o código.
 - **A propagação do nome para o peer.** Os dois triggers da
   `20260801205317` rodam no Postgres, e nenhum teste alcança o servidor. O que
   está provado é a escrita local e a leitura da coluna; que trocar o nome

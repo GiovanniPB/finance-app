@@ -34,9 +34,14 @@ Visão do espaço ativo: saldo gastável, entradas e saídas do mês, orçamento
 categoria com alerta em 80% e 100%, atividade recente com "Ver tudo".
 
 - **Lista do mês** — `transactions_page.dart`: lançamentos agrupados por dia,
-  com total do dia e cabeçalho de saldo.
+  com total do dia e cabeçalho de saldo. O valor da linha é sempre o **total**,
+  nunca a parte de quem olha — mudar isso faria o saldo do mês não fechar.
 - **Editar lançamento** — `transaction_edit_sheet.dart`: recusa editar o que
   pertence a uma meta, e abre em leitura com caminho para ela.
+- **Dividir despesa** — `split_section.dart`, no fim da folha de edição. Um
+  botão de rateio igual, uma linha por membro, e a soma das partes. Aparece
+  **só** em despesa de espaço `group`; nas outras situações a seção não existe,
+  em vez de existir desabilitada.
 - **Orçamentos** — `budgets_page.dart` + `budget_form_sheet.dart`.
 
 ### Espaços — `spaces_page.dart`
@@ -57,6 +62,13 @@ ativo num toque.
 
 O fluxo dos 30 segundos: valor no teclado próprio, categoria, conta. É a única
 superfície que **não pode ganhar passo** sem revisar a promessa de entrada.
+
+A regra já custou uma decisão: a fatia `dividir-despesa` (2026-08-01) queria um
+interruptor "Dividir" aqui, e ele foi para a folha de edição em vez disso.
+Dividir virou um segundo gesto — pior para quem mora em república, que é o caso
+comum de grupo. Se doer no uso, a saída é **revisar esta promessa de propósito**,
+numa fatia que discuta o que o `+` passa a ser, e não deixar um campo vazar para
+cá sem ninguém decidir.
 
 ### Poupança — `savings_page.dart`
 
