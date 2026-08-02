@@ -1,5 +1,6 @@
 import 'package:core/core.dart';
 
+import 'expense_split.dart';
 import 'transaction.dart';
 
 /// Contrato da camada de dados de transações.
@@ -38,4 +39,36 @@ abstract interface class TransactionsRepository {
 
   /// Remove uma transação pelo id.
   Future<Result<void, Failure>> delete(String id);
+
+  // -----------------------------------------------------------------------
+  // Divisão de despesa (RN-2.1)
+  //
+  // MARCAR E RATEAR SÃO UMA OPERAÇÃO, NÃO DUAS. `is_shared` e as N partes
+  // sobem na mesma transação local: um lançamento marcado sem partes a UI leria
+  // como "dividido entre ninguém", e partes sem a marca não apareceriam na
+  // lista. É o mesmo argumento que obriga espaço e membership a nascerem
+  // juntos.
+  // -----------------------------------------------------------------------
+
+  /// As partes de um lançamento, na ordem de entrada de cada membro.
+  ///
+  /// Lista vazia = lançamento não dividido. Não há estado intermediário: ver o
+  /// bloco acima.
+  Stream<List<ExpenseSplit>> watchSplits(String transactionId);
+
+  /// Divide o lançamento igualmente entre os **membros ativos** do espaço.
+  ///
+  /// Idempotente por refazer: apaga as partes que existirem e insere as novas,
+  /// então tocar duas vezes não dobra o rateio. Chamar de novo depois de o
+  /// valor mudar é o que mantém a soma das partes igual ao total — e é
+  /// exatamente o que `update` faz quando o lançamento já está dividido.
+  ///
+  /// Recusa o que não se rateia: tipo diferente de `expense`, espaço que não é
+  /// `group`, e lançamento inexistente.
+  Future<Result<List<ExpenseSplit>, Failure>> splitEqually(
+    String transactionId,
+  );
+
+  /// Desfaz a divisão: apaga as partes e limpa `is_shared`, numa transação só.
+  Future<Result<void, Failure>> removeSplit(String transactionId);
 }

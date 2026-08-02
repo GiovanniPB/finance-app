@@ -1,5 +1,6 @@
 import 'package:core/core.dart';
 import 'package:finance/di/providers.dart';
+import 'package:finance/features/transactions/domain/expense_split.dart';
 import 'package:finance/features/transactions/domain/transaction.dart';
 import 'package:finance/features/transactions/domain/transactions_repository.dart';
 import 'package:finance/features/transactions/presentation/transaction_edit_controller.dart';
@@ -52,6 +53,22 @@ class RecordingTransactionsRepository implements TransactionsRepository {
     deleted.add(id);
     return const Ok(null);
   }
+
+  // A fatia `dividir-despesa` somou três métodos ao contrato. Este fake é de
+  // um teste que não toca divisão, então lançar é mais honesto que devolver
+  // vazio: se algum dia ele chamar, o teste diz onde.
+  @override
+  Stream<List<ExpenseSplit>> watchSplits(String transactionId) =>
+      throw UnimplementedError();
+
+  @override
+  Future<Result<List<ExpenseSplit>, Failure>> splitEqually(
+    String transactionId,
+  ) async => throw UnimplementedError();
+
+  @override
+  Future<Result<void, Failure>> removeSplit(String transactionId) async =>
+      throw UnimplementedError();
 }
 
 Future<ProviderContainer> ready(RecordingTransactionsRepository repo) async {

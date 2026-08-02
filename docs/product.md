@@ -155,8 +155,10 @@ Duas naturezas, e a distinção decide mutabilidade e histórico:
    proposta `confirmed=false` → o sim do usuário move o progresso.
 6. **Compartilhar espaço** — criar `household`/`group` → convidar por código →
    entrar → gerir papéis, remover, sair, arquivar.
-7. **Dividir despesa** *(Fase 2, não implementado)* — marcar "dividir" →
-   `expense_splits` → saldo "quem deve a quem" → liquidar via Pix.
+7. **Dividir despesa** *(Fase 2, metade feita)* — abrir a despesa de um espaço
+   `group` → "Dividir igualmente" → uma parte por membro ativo em
+   `expense_splits`. Falta o saldo "quem deve a quem" e liquidar via Pix, que
+   dependem da questão #2.
 
 ## Decisões
 

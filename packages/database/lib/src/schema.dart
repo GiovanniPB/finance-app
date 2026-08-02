@@ -164,6 +164,33 @@ const appSchema = Schema([
       Index('category', [IndexedColumn('category_id')]),
     ],
   ),
+  // A parte de uma pessoa numa despesa dividida (RN-2.1).
+  //
+  // `space_id` é denormalizado por aplicação do ADR 0011: a parte aponta para o
+  // lançamento, que sabe o espaço, mas sync rule não faz join. No Postgres um
+  // trigger o mantém igual ao do lançamento, junto da moeda.
+  //
+  // A soma das partes é sempre igual ao total do lançamento, e quem garante
+  // isso é a camada `data` — as N partes e a marca `is_shared` sobem na mesma
+  // `writeTransaction`. Não há constraint de soma no banco, e o porquê está no
+  // cabeçalho da migration 20260801214203.
+  Table(
+    'expense_splits',
+    [
+      Column.text('transaction_id'),
+      Column.text('space_id'),
+      Column.text('user_id'),
+      Column.integer('amount_minor'),
+      Column.text('currency'),
+      Column.text('created_at'),
+      Column.text('updated_at'),
+    ],
+    indexes: [
+      // A leitura é sempre "as partes deste lançamento".
+      Index('transaction', [IndexedColumn('transaction_id')]),
+      Index('space', [IndexedColumn('space_id')]),
+    ],
+  ),
   // Orçamento por categoria e período (RN-1.3).
   Table(
     'budgets',

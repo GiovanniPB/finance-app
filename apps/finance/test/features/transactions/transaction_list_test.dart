@@ -14,6 +14,7 @@ Transaction tx({
   String? categoryId = 'cat-1',
   String? description = 'Mercado',
   String id = 'tx',
+  bool isShared = false,
 }) => Transaction(
   id: id,
   spaceId: 'space-1',
@@ -22,7 +23,7 @@ Transaction tx({
   amount: Money.fromMinor(type.isOutflow ? -minor.abs() : minor.abs()),
   occurredAt: occurredAt,
   source: TransactionSource.manual,
-  isShared: false,
+  isShared: isShared,
   aiCategorized: false,
   createdAt: occurredAt,
   updatedAt: occurredAt,
@@ -147,6 +148,26 @@ void main() {
       ]);
 
       expect(find.text('Alimentação'), findsOneWidget);
+    });
+
+    testWidgets('lançamento dividido diz "Dividida" no metadado', (
+      tester,
+    ) async {
+      // Sem isto a divisão só existiria dentro da folha de edição, e ninguém
+      // abre lançamento por lançamento para saber quais dividiu.
+      await pumpList(tester, [
+        tx(minor: 100, occurredAt: DateTime.now(), isShared: true),
+      ]);
+
+      expect(find.textContaining('Dividida'), findsOneWidget);
+    });
+
+    testWidgets('lançamento não dividido não ganha marcador', (tester) async {
+      await pumpList(tester, [
+        tx(minor: 100, occurredAt: DateTime.now()),
+      ]);
+
+      expect(find.textContaining('Dividida'), findsNothing);
     });
 
     testWidgets('com descrição, a categoria aparece como metadado', (

@@ -2,6 +2,7 @@ import 'package:core/core.dart';
 import 'package:finance/di/providers.dart';
 import 'package:finance/features/spaces/domain/space.dart';
 import 'package:finance/features/spaces/presentation/spaces_providers.dart';
+import 'package:finance/features/transactions/domain/expense_split.dart';
 import 'package:finance/features/transactions/domain/transaction.dart';
 import 'package:finance/features/transactions/domain/transactions_repository.dart';
 import 'package:finance/features/transactions/presentation/quick_entry_controller.dart';
@@ -73,6 +74,22 @@ class RecordingTransactionsRepository implements TransactionsRepository {
 
   @override
   Future<Result<void, Failure>> delete(String id) async =>
+      throw UnimplementedError();
+
+  // A fatia `dividir-despesa` somou três métodos ao contrato. Este fake é de
+  // um teste que não toca divisão, então lançar é mais honesto que devolver
+  // vazio: se algum dia ele chamar, o teste diz onde.
+  @override
+  Stream<List<ExpenseSplit>> watchSplits(String transactionId) =>
+      throw UnimplementedError();
+
+  @override
+  Future<Result<List<ExpenseSplit>, Failure>> splitEqually(
+    String transactionId,
+  ) async => throw UnimplementedError();
+
+  @override
+  Future<Result<void, Failure>> removeSplit(String transactionId) async =>
       throw UnimplementedError();
 }
 

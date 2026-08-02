@@ -88,20 +88,55 @@ Future<void> seedSpace(
   PowerSyncDatabase db, {
   String id = 'space-1',
   String ownerId = 'user-1',
+  String spaceType = 'personal',
+  String? name,
+}) {
+  final spaceName = name ?? (spaceType == 'personal' ? 'Pessoal' : 'República');
+  return db.execute(
+    'INSERT INTO spaces (id, space_type, name, owner_id, privacy_policy, '
+    'status, settlement_currency, created_at, updated_at) '
+    'VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)',
+    [
+      id,
+      spaceType,
+      spaceName,
+      ownerId,
+      'shared_only',
+      'active',
+      'BRL',
+      '2026-07-01T00:00:00.000Z',
+      '2026-07-01T00:00:00.000Z',
+    ],
+  );
+}
+
+/// Insere uma membership direto no banco local.
+///
+/// [joinedAt] importa: o rateio sai na ordem de entrada, e um teste que não
+/// controla essa ordem passa por coincidência de uuid.
+Future<void> seedMember(
+  PowerSyncDatabase db, {
+  required String id,
+  required String userId,
+  String spaceId = 'space-1',
+  String role = 'editor',
+  String status = 'active',
+  String? displayName,
+  String joinedAt = '2026-07-01T00:00:00.000Z',
 }) => db.execute(
-  'INSERT INTO spaces (id, space_type, name, owner_id, privacy_policy, '
-  'status, settlement_currency, created_at, updated_at) '
+  'INSERT INTO space_members (id, space_id, user_id, role, status, '
+  'display_name, joined_at, created_at, updated_at) '
   'VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)',
   [
     id,
-    'personal',
-    'Pessoal',
-    ownerId,
-    'shared_only',
-    'active',
-    'BRL',
-    '2026-07-01T00:00:00.000Z',
-    '2026-07-01T00:00:00.000Z',
+    spaceId,
+    userId,
+    role,
+    status,
+    displayName,
+    joinedAt,
+    joinedAt,
+    joinedAt,
   ],
 );
 
