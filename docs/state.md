@@ -10,16 +10,28 @@ O app roda em iOS e macOS contra Supabase e PowerSync na nuvem, com **2.083
 lançamentos de banco real** ingeridos. Funciona de ponta a ponta: registrar
 gasto, ver o mês, orçamento com alerta, contas, conectar e desconectar banco,
 metas de poupança com progresso, sequência e conquistas, e espaços
-compartilhados com convite por código e gestão de papéis.
+compartilhados com convite por código, gestão de papéis e pessoas identificadas
+pelo nome.
 
 Falta da Fase 1 apenas a **categorização por IA**, adiada por decisão. A Fase 2
 está pela metade: espaços existem, `expense_splits` não.
 
 ## Última fatia
 
-`gestao-de-membros` — trocar papel, remover, sair, arquivar e renomear espaço,
-com três furos de escalonamento de privilégio medidos antes e fechados depois
-(PR #36).
+`nome-de-membro` — o Perfil ganha a seção "Você", e a linha de membro lidera com
+o nome em vez de "Você" / "No espaço desde 12 de julho".
+
+Duas coisas valem registro. **A fatia foi grande de propósito** (2.501 linhas, 22
+arquivos, ~700 delas o mockup): ela fura a regra do "e" por decisão explícita,
+juntando "eu defino meu nome" com "eu vejo o nome do outro". Separadas, nenhuma
+demonstrava — `display_name` era nulo para todo usuário que existe, porque o
+`signUp` não envia metadata e não havia onde definir o nome.
+
+**E o caminho mapeado aqui estava errado.** O bucket `space_peers` com self-join
+não existe: Sync Rules não fazem JOIN. O nome viaja denormalizado em
+`space_members.display_name`, mantido por trigger — [ADR
+0011](adr/0011-dado-de-outro-membro-viaja-na-linha.md). De quebra, coluna nova
+não exige republicar as sync rules.
 
 ## Próximas fatias
 
@@ -27,15 +39,13 @@ com três furos de escalonamento de privilégio medidos antes e fechados depois
    `TransactionTile` é gerado e o agente lê o PNG sozinho. Exige empacotar Inter
    e IBM Plex Mono. **Sem isso, toda iteração de UI depende de alguém olhar a
    tela** — é a fatia que paga por si.
-2. **nome-de-membro** *(feature)* — a linha de membro mostra o nome de quem é,
-   em vez de "Você" / "Quem criou" / "No espaço desde 12 de julho". Caminho
-   mapeado: bucket `space_peers` no `sync_rules.yaml` com parameter query
-   juntando `space_members` consigo mesma, mais policy de SELECT em `profiles`.
-   Exige **republicar as sync rules à mão**.
-3. **dividir-despesa** *(feature)* — uma despesa marcada como dividida num
+2. **dividir-despesa** *(feature)* — uma despesa marcada como dividida num
    espaço `group` gera `expense_splits`. `Money.allocate()` já resolve a
    matemática (RN-2.1). O saldo "quem deve a quem" é outra fatia, e depende da
    questão #2 do PRD.
+3. **nome-no-cadastro** *(feature, pequena)* — hoje quem se cadastra passa por
+   toda a primeira sessão sem nome, e só descobre a seção "Você" se abrir o
+   Perfil. Um campo no `signUp` (metadata → `handle_new_user`) fecha isso.
 
 ## Não visto rodando
 
@@ -44,6 +54,12 @@ teste verde, e é o primeiro lugar onde procurar quando algo surpreender.
 
 - **Gestão de membro com um segundo login** — trocar papel do convidado,
   removê-lo, vê-lo sair da lista. Este caminho nunca foi percorrido.
+- **A propagação do nome para o peer.** Os dois triggers da
+  `20260801205317` rodam no Postgres, e nenhum teste alcança o servidor. O que
+  está provado é a escrita local e a leitura da coluna; que trocar o nome
+  reescreve a membership **do outro aparelho** só se vê com dois logins. Se algo
+  aqui falhar, o sintoma é o peer continuar vendo o nome antigo — a linha nunca
+  fica vazia, porque o fallback assume.
 - **Detecção de poupança** — precisa do worker deployado
   (`supabase functions deploy pluggy-sync-worker`, passo do usuário) e de uma
   conta marcada como alvo com meta ativa apontando para ela. Só **extrato novo**

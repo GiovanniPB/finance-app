@@ -85,6 +85,17 @@ abstract class SpaceMember with _$SpaceMember {
     required MembershipStatus status,
     required DateTime joinedAt,
 
+    /// Nome de quem é este vínculo, copiado de `profiles.display_name`.
+    ///
+    /// **Cópia, nunca fonte.** A UI não escreve este campo: quem o mantém são
+    /// dois triggers no Postgres (ver a migration 20260801205317). Ele existe
+    /// porque sync rule não faz join — sem a coluna, o nome do outro membro não
+    /// chega ao aparelho.
+    ///
+    /// Nulo é o caso normal de quem nunca abriu o Perfil, e a lista de membros
+    /// cai no texto que existia antes desta coluna.
+    String? displayName,
+
     /// Cota padrão no rateio de despesa do grupo (RN-2.1, `percentage`).
     ///
     /// Nula é o caso normal: sem cota declarada, o rateio cai no igualitário.
@@ -102,6 +113,7 @@ abstract class SpaceMember with _$SpaceMember {
     role: SpaceRole.fromDb(row['role']! as String),
     status: MembershipStatus.fromDb(row['status']! as String),
     joinedAt: DateTime.parse(row['joined_at']! as String),
+    displayName: row['display_name'] as String?,
     // `share_percentage` é `numeric` no Postgres e chega como texto na coluna
     // local (ver `schema.dart`): o PowerSync não tem tipo decimal, e ler como
     // número aqui é o que evita espalhar o `parse` por quem consome.
@@ -119,6 +131,10 @@ abstract class SpaceMember with _$SpaceMember {
     'user_id': userId,
     'role': role.db,
     'status': status.db,
+    // Vai no INSERT local para a linha recém-criada já mostrar o nome sem
+    // esperar o round-trip. No Postgres o trigger de `before insert` reescreve
+    // o valor a partir de `profiles`, que é quem manda.
+    'display_name': displayName,
     'share_percentage': sharePercentage?.toString(),
     'joined_at': joinedAt.toUtc().toIso8601String(),
     'created_at': joinedAt.toUtc().toIso8601String(),

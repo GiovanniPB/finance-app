@@ -4,6 +4,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../../../di/providers.dart';
+import '../../profile/presentation/profile_providers.dart';
 import '../domain/space_member.dart';
 import '../domain/space_permissions.dart';
 import 'invite_block.dart';
@@ -159,6 +160,9 @@ class _SpaceDetailPageState extends ConsumerState<SpaceDetailPage> {
                 member: member,
                 permissions: permissions,
                 today: ref.watch(clockProvider)(),
+                // Vem de `profiles`, não da coluna copiada, e vale só para a
+                // minha linha — ver o cabeçalho de `MemberCopy`.
+                myDisplayName: ref.watch(myDisplayNameProvider),
               ),
             const SizedBox(height: AppSpacing.xl),
           ],
@@ -393,11 +397,13 @@ class _MemberRow extends StatelessWidget {
     required this.member,
     required this.permissions,
     required this.today,
+    this.myDisplayName,
   });
 
   final SpaceMember member;
   final SpacePermissions permissions;
   final DateTime today;
+  final String? myDisplayName;
 
   @override
   Widget build(BuildContext context) {
@@ -405,6 +411,12 @@ class _MemberRow extends StatelessWidget {
     // Sem nenhuma das duas, a linha não é tocável — e não deve parecer.
     final isManageable =
         permissions.canChangeRoleOf(member) || permissions.canRemove(member);
+    final identity = MemberCopy.identity(
+      member: member,
+      permissions: permissions,
+      today: today,
+      myDisplayName: myDisplayName,
+    );
 
     return Padding(
       padding: const EdgeInsets.symmetric(
@@ -434,14 +446,25 @@ class _MemberRow extends StatelessWidget {
                   child: Column(
                     crossAxisAlignment: CrossAxisAlignment.start,
                     children: [
-                      Text(
-                        MemberCopy.identity(
-                          member: member,
-                          permissions: permissions,
-                          today: today,
+                      // Sem qualificador é um `Text` puro, e não um
+                      // `Text.rich` de span único: é o caso de toda linha até
+                      // alguém definir um nome, e ele precisa renderizar
+                      // exatamente como renderizava antes desta fatia.
+                      if (identity.qualifier == null)
+                        Text(identity.label, style: context.texts.bodyMedium)
+                      else
+                        Text.rich(
+                          TextSpan(
+                            text: identity.label,
+                            children: [
+                              TextSpan(
+                                text: ' · ${identity.qualifier}',
+                                style: TextStyle(color: tokens.textMuted),
+                              ),
+                            ],
+                          ),
+                          style: context.texts.bodyMedium,
                         ),
-                        style: context.texts.bodyMedium,
-                      ),
                       const SizedBox(height: AppSpacing.xxs),
                       Text(
                         MemberCopy.role(member.role),

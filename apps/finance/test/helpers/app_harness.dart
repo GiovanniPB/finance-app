@@ -1,3 +1,5 @@
+import 'dart:async';
+
 import 'package:core/core.dart';
 import 'package:design_system/design_system.dart';
 import 'package:finance/di/providers.dart';
@@ -11,6 +13,8 @@ import 'package:finance/features/onboarding/domain/onboarding_preferences.dart';
 import 'package:finance/features/onboarding/presentation/onboarding_providers.dart';
 import 'package:finance/features/open_finance/domain/open_finance_connection.dart';
 import 'package:finance/features/open_finance/domain/open_finance_repository.dart';
+import 'package:finance/features/profile/domain/profile.dart';
+import 'package:finance/features/profile/domain/profile_repository.dart';
 import 'package:finance/features/savings/domain/savings_contribution.dart';
 import 'package:finance/features/savings/domain/savings_goal.dart';
 import 'package:finance/features/savings/domain/savings_repository.dart';
@@ -23,12 +27,59 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
 
+/// Perfil de mentira, reativo.
+///
+/// O padrão é **existir sem nome** — o estado de todo usuário criado antes da
+/// fatia `nome-de-membro`. Passe `profile: null` para o caso em que a linha
+/// ainda não chegou pelo bucket `user_owned`, que é diferente e tem tela
+/// própria.
+class FakeProfileRepository implements ProfileRepository {
+  FakeProfileRepository({this.profile = const Profile(id: 'user-1')});
+
+  Profile? profile;
+  final _controller = StreamController<Profile?>.broadcast();
+
+  /// Nomes gravados, na ordem — inclusive os que o repositório recusaria.
+  final List<String> saved = [];
+
+  /// Erro a devolver em vez de gravar.
+  Failure? failure;
+
+  @override
+  Stream<Profile?> watchMine() async* {
+    yield profile;
+    yield* _controller.stream;
+  }
+
+  @override
+  Future<Result<void, Failure>> updateDisplayName(String name) async {
+    saved.add(name);
+
+    final error = failure;
+    if (error != null) return Err(error);
+
+    // A validação é a mesma do repositório de verdade: sem ela, um teste de
+    // tela passaria com nome vazio que a produção recusa.
+    final trimmed = name.trim();
+    if (trimmed.isEmpty) {
+      return const Err(ValidationFailure('Digite um nome.'));
+    }
+
+    profile = (profile ?? const Profile(id: 'user-1')).copyWith(
+      displayName: trimmed,
+    );
+    _controller.add(profile);
+    return const Ok(null);
+  }
+}
+
 /// Conexões de Open Finance em memória.
 ///
 /// [connectToken] é o que `requestConnectToken` devolve; troque por nulo para
 /// exercitar o caminho de falha (a tela mostra o estado de erro com "Tentar de
 /// novo"). Nada aqui toca rede: a Edge Function é fronteira, e teste de widget
 /// não deve depender dela.
+
 class FakeOpenFinanceRepository implements OpenFinanceRepository {
   FakeOpenFinanceRepository({
     List<OpenFinanceConnection> connections = const [],
@@ -636,13 +687,19 @@ SpaceMember testMember({
   String spaceId = 'space-2',
   String userId = 'user-1',
   SpaceRole role = SpaceRole.admin,
+
+  /// Nulo é o padrão de propósito: é o estado de toda linha até a pessoa
+  /// definir o nome no Perfil, e o que os testes de fallback precisam.
+  String? displayName,
+  DateTime? joinedAt,
 }) => SpaceMember(
   id: id,
   spaceId: spaceId,
   userId: userId,
   role: role,
   status: MembershipStatus.active,
-  joinedAt: testNow,
+  displayName: displayName,
+  joinedAt: joinedAt ?? testNow,
 );
 
 Account testAccount({
@@ -863,6 +920,7 @@ Future<void> pumpScreen(
   SavingsRepository? savingsRepository,
   CategoriesRepository? categoriesRepository,
   OpenFinanceRepository? openFinanceRepository,
+  ProfileRepository? profileRepository,
   OnboardingPreferences? onboardingPreferences,
 
   /// Estado da apresentação no boot. O padrão é `true` — "já viu" — porque é o
@@ -903,6 +961,11 @@ Future<void> pumpScreen(
         // real, que depende do PowerSync e lança no boot de teste.
         openFinanceRepositoryProvider.overrideWithValue(
           openFinanceRepository ?? FakeOpenFinanceRepository(),
+        ),
+        // O padrão é um perfil **sem nome**, que é o estado de todo usuário
+        // que existe hoje — e o que mantém as telas de membro no fallback.
+        profileRepositoryProvider.overrideWithValue(
+          profileRepository ?? FakeProfileRepository(),
         ),
         // Relógio fixo: as telas de meta calculam ritmo e projeção contra hoje.
         clockProvider.overrideWithValue(() => testNow),

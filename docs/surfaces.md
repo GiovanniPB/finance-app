@@ -46,7 +46,9 @@ ativo num toque.
 
 - **Detalhe** — `space_detail_page.dart`: membros, papéis, convite por código,
   renomear, arquivar, sair. O dono não vê "Sair do espaço" — vê a frase que
-  explica por quê.
+  explica por quê. A linha de membro lidera com o **nome** (definido no Perfil)
+  e cai no texto antigo — "Você" / "No espaço desde …" — enquanto não houver
+  nome. Com nome, a data de entrada some: ela era muleta de desempate.
 - **Ações de membro** — `member_actions_sheet.dart`: trocar papel, remover.
 - **Criar / entrar** — `space_form_sheet.dart`, `join_space_sheet.dart`,
   `space_rename_sheet.dart`.
@@ -69,8 +71,12 @@ Metas ativas e pausadas, sequência semanal com melhor marca, e sete conquistas
 
 ### Perfil — `profile_page.dart`
 
-Conta, contas bancárias, "Suas categorias", conexões de Open Finance.
+"Você", contas bancárias, "Suas categorias", conexões de Open Finance.
 
+- **Você** — `profile_name_sheet.dart`. O **único** lugar que escreve
+  `profiles.display_name`; o cadastro não pergunta o nome. Antes de a linha de
+  `profiles` sincronizar a seção não é tocável: `UPDATE` sem linha afeta zero e
+  não dá erro.
 - **Conta** — `account_form_sheet.dart`. "Excluir conta" só aparece em conta não
   importada.
 - **Categoria** — `category_form_sheet.dart`.

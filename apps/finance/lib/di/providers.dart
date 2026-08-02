@@ -15,6 +15,8 @@ import '../features/onboarding/data/onboarding_store.dart';
 import '../features/onboarding/domain/onboarding_preferences.dart';
 import '../features/open_finance/data/open_finance_repository_impl.dart';
 import '../features/open_finance/domain/open_finance_repository.dart';
+import '../features/profile/data/profile_repository_impl.dart';
+import '../features/profile/domain/profile_repository.dart';
 import '../features/savings/data/savings_repository_impl.dart';
 import '../features/savings/domain/savings_repository.dart';
 import '../features/spaces/data/spaces_repository_impl.dart';
@@ -70,6 +72,16 @@ AuthRepository authRepository(Ref ref) =>
 
 @Riverpod(keepAlive: true)
 AccountsRepository accountsRepository(Ref ref) => AccountsRepositoryImpl(
+  db: ref.watch(powerSyncServiceProvider).db,
+  supabase: ref.watch(supabaseClientProvider),
+);
+
+/// Perfil de quem está usando o app. Depende do `SupabaseClient` para saber
+/// qual linha de `profiles` é a sua: o bucket `user_owned` entrega só uma, mas
+/// filtrar pelo id evita que um banco local herdado de outra sessão devolva a
+/// linha errada.
+@Riverpod(keepAlive: true)
+ProfileRepository profileRepository(Ref ref) => ProfileRepositoryImpl(
   db: ref.watch(powerSyncServiceProvider).db,
   supabase: ref.watch(supabaseClientProvider),
 );

@@ -1,0 +1,536 @@
+<!doctype html>
+<html lang="pt-BR">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Mockup — nome-de-membro</title>
+<style>
+  /* Tokens do tema claro, copiados de app_palette.dart / app_tokens.dart.
+     Se divergirem do código, o código é a verdade. */
+  :root {
+    --white: #FFFFFF;
+    --ink100: #EEF2F0;  /* surfaceSunken */
+    --ink200: #E1E6E4;  /* border */
+    --ink600: #5C6764;  /* textMuted */
+    --ink900: #1A201F;  /* textPrimary */
+    --teal50: #E9F6F2;  /* brandSubtle */
+    --teal200: #9FD8C9; /* brandBorder */
+    --teal700: #175845; /* brandText */
+    --amber500: #D98A0B;
+
+    --gutter: 20px;
+    --sm: 8px;
+    --md: 12px;
+    --lg: 16px;
+    --xxs: 4px;
+    --radius-lg: 14px;
+  }
+
+  * { box-sizing: border-box; }
+
+  body {
+    margin: 0;
+    padding: 32px 24px 64px;
+    background: var(--ink100);
+    color: var(--ink900);
+    font-family: Inter, -apple-system, BlinkMacSystemFont, "Segoe UI", system-ui, sans-serif;
+    -webkit-font-smoothing: antialiased;
+  }
+
+  h1 {
+    font-size: 20px;
+    font-weight: 600;
+    letter-spacing: -0.3px;
+    margin: 0 0 4px;
+  }
+
+  .lede {
+    color: var(--ink600);
+    font-size: 14px;
+    line-height: 1.5;
+    max-width: 62ch;
+    margin: 0 0 32px;
+  }
+
+  .row-of-frames {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 28px;
+    align-items: flex-start;
+  }
+
+  .frame { width: 340px; }
+
+  .frame > figcaption {
+    font-size: 12px;
+    font-weight: 600;
+    text-transform: uppercase;
+    letter-spacing: 0.6px;
+    color: var(--ink600);
+    margin-bottom: 10px;
+  }
+
+  .frame > figcaption em {
+    display: block;
+    text-transform: none;
+    letter-spacing: 0;
+    font-weight: 400;
+    font-style: normal;
+    margin-top: 3px;
+  }
+
+  .screen {
+    background: var(--white);
+    border: 1px solid var(--ink200);
+    border-radius: 22px;
+    padding: 14px 0 24px;
+    overflow: hidden;
+  }
+
+  .screen.is-current { opacity: 0.72; }
+
+  .page-title {
+    font-size: 26px;
+    font-weight: 600;
+    letter-spacing: -0.6px;
+    padding: 4px var(--gutter) var(--lg);
+    margin: 0;
+  }
+
+  .section-header {
+    display: flex;
+    align-items: baseline;
+    justify-content: space-between;
+    padding: var(--md) var(--gutter) var(--sm);
+    font-size: 13px;
+    font-weight: 600;
+    letter-spacing: 0.2px;
+  }
+
+  .section-header .hint {
+    font-size: 11px;
+    font-weight: 400;
+    color: var(--ink600);
+  }
+
+  /* Uma linha tocável: swatch + duas linhas de texto + chevron. */
+  .tile {
+    display: flex;
+    align-items: center;
+    gap: var(--md);
+    margin: 0 var(--sm);
+    padding: var(--sm);
+    border-radius: var(--radius-lg);
+  }
+
+  .tile.tappable:hover { background: var(--ink100); }
+
+  .swatch {
+    flex: 0 0 auto;
+    width: 40px;
+    height: 40px;
+    border-radius: var(--radius-lg);
+    background: var(--teal50);
+    border: 1px solid var(--teal200);
+    color: var(--teal700);
+    display: grid;
+    place-items: center;
+  }
+
+  .swatch svg { width: 20px; height: 20px; }
+
+  .tile .body { min-width: 0; flex: 1; }
+
+  .primary {
+    font-size: 15px;
+    line-height: 1.3;
+  }
+
+  .primary .qualifier { color: var(--ink600); }
+
+  .secondary {
+    margin-top: var(--xxs);
+    font-size: 11.5px;
+    line-height: 1.35;
+    color: var(--ink600);
+  }
+
+  .chevron { flex: 0 0 auto; color: var(--ink600); }
+  .chevron svg { width: 18px; height: 18px; display: block; }
+
+  .placeholder-name { color: var(--ink600); }
+
+  /* Marcação didática — não faz parte da UI. */
+  .note {
+    margin: var(--sm) var(--gutter) 0;
+    padding: var(--sm) 10px;
+    border-left: 2px solid var(--teal200);
+    background: var(--teal50);
+    font-size: 11.5px;
+    line-height: 1.45;
+    color: var(--teal700);
+    border-radius: 0 6px 6px 0;
+  }
+
+  .note.is-warn {
+    border-left-color: var(--amber500);
+    background: #FDF0D5;
+    color: #8A5504;
+  }
+
+  .divider {
+    height: 1px;
+    background: var(--ink200);
+    margin: var(--md) var(--gutter);
+  }
+
+  .skeleton {
+    height: 13px;
+    border-radius: 4px;
+    background: var(--ink200);
+  }
+  .skeleton.w-half { width: 52%; }
+  .skeleton.w-third { width: 34%; margin-top: 7px; height: 10px; }
+
+  h2 {
+    font-size: 15px;
+    font-weight: 600;
+    margin: 44px 0 6px;
+  }
+
+  h2 + p {
+    color: var(--ink600);
+    font-size: 13.5px;
+    line-height: 1.55;
+    max-width: 68ch;
+    margin: 0 0 18px;
+  }
+</style>
+</head>
+<body>
+
+<h1>nome-de-membro — alvo visual</h1>
+<p class="lede">
+  Duas superfícies mudam. No <strong>Perfil</strong> nasce a seção “Você”, que é
+  o único lugar onde o nome é definido. No <strong>detalhe do espaço</strong> a
+  linha de membro passa a liderar com o nome, e o que hoje é a identidade
+  (“Você”, “Quem criou o espaço”) vira qualificador. Sem nome, tudo volta a ser
+  exatamente o que já é hoje — as telas translúcidas são o estado atual, para
+  comparação.
+</p>
+
+<h2>1 · Perfil — a seção “Você”</h2>
+<p>
+  Entra acima de “Contas”, porque é a identidade da pessoa e não um recurso.
+  Segunda linha explica <em>para que serve</em> ter nome: sem ela o campo parece
+  vaidade, e a pessoa não preenche.
+</p>
+
+<div class="row-of-frames">
+
+  <figure class="frame">
+    <figcaption>Com nome definido
+      <em>o estado normal depois da fatia</em>
+    </figcaption>
+    <div class="screen">
+      <p class="page-title">Perfil</p>
+
+      <div class="section-header"><span>Você</span></div>
+      <div class="tile tappable">
+        <span class="swatch" aria-hidden="true">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7"><circle cx="12" cy="8" r="3.6"/><path d="M4.8 20c0-3.6 3.2-5.6 7.2-5.6s7.2 2 7.2 5.6"/></svg>
+        </span>
+        <span class="body">
+          <span class="primary">Giovanni</span>
+          <span class="secondary">É assim que você aparece para quem divide um espaço com você</span>
+        </span>
+        <span class="chevron" aria-hidden="true">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M9 5l7 7-7 7"/></svg>
+        </span>
+      </div>
+
+      <div class="divider"></div>
+      <div class="section-header"><span>Contas</span><span class="hint">R$ 8.412,30</span></div>
+      <div class="tile">
+        <span class="swatch" aria-hidden="true">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7"><rect x="3" y="6" width="18" height="12" rx="2.5"/><path d="M3 10.5h18"/></svg>
+        </span>
+        <span class="body">
+          <span class="primary">Nubank</span>
+          <span class="secondary">Conta corrente</span>
+        </span>
+      </div>
+    </div>
+  </figure>
+
+  <figure class="frame">
+    <figcaption>Sem nome ainda
+      <em>todo usuário que existe hoje começa aqui</em>
+    </figcaption>
+    <div class="screen">
+      <p class="page-title">Perfil</p>
+
+      <div class="section-header"><span>Você</span></div>
+      <div class="tile tappable">
+        <span class="swatch" aria-hidden="true">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7"><circle cx="12" cy="8" r="3.6"/><path d="M4.8 20c0-3.6 3.2-5.6 7.2-5.6s7.2 2 7.2 5.6"/></svg>
+        </span>
+        <span class="body">
+          <span class="primary placeholder-name">Defina seu nome</span>
+          <span class="secondary">Enquanto não tiver, quem divide um espaço com você vê só o seu papel</span>
+        </span>
+        <span class="chevron" aria-hidden="true">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M9 5l7 7-7 7"/></svg>
+        </span>
+      </div>
+      <p class="note">
+        Convite, não vazio mudo. O <code>AppEmptyState</code> não serve aqui —
+        é uma linha, não uma seção vazia.
+      </p>
+    </div>
+  </figure>
+
+  <figure class="frame">
+    <figcaption>Perfil ainda não sincronizou
+      <em>o caso que costuma virar “salvei e não salvou”</em>
+    </figcaption>
+    <div class="screen">
+      <p class="page-title">Perfil</p>
+
+      <div class="section-header"><span>Você</span></div>
+      <div class="tile">
+        <span class="swatch" aria-hidden="true">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7"><circle cx="12" cy="8" r="3.6"/><path d="M4.8 20c0-3.6 3.2-5.6 7.2-5.6s7.2 2 7.2 5.6"/></svg>
+        </span>
+        <span class="body">
+          <span class="skeleton w-half"></span>
+          <span class="skeleton w-third" style="display:block"></span>
+        </span>
+      </div>
+      <p class="note is-warn">
+        A linha de <code>profiles</code> chega pelo bucket
+        <code>user_owned</code>. Antes dela, a seção não é tocável: um
+        <code>UPDATE</code> sem linha afeta zero e <strong>não dá erro</strong>.
+      </p>
+    </div>
+  </figure>
+
+</div>
+
+<h2>2 · Detalhe do espaço — a linha de membro</h2>
+<p>
+  O nome assume a primeira linha. O papel e o que ele permite continuam na
+  segunda, sem mudança. A data de entrada <strong>desaparece</strong> quando há
+  nome: ela só existia para desempatar “Editor” de “Editor”, e o nome faz esse
+  trabalho melhor.
+</p>
+
+<div class="row-of-frames">
+
+  <figure class="frame">
+    <figcaption>Hoje
+      <em>o que a tela mostra antes da fatia</em>
+    </figcaption>
+    <div class="screen is-current">
+      <div class="section-header"><span>Membros</span><span class="hint">3</span></div>
+
+      <div class="tile">
+        <span class="swatch" aria-hidden="true">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7"><circle cx="12" cy="8" r="3.6"/><path d="M4.8 20c0-3.6 3.2-5.6 7.2-5.6s7.2 2 7.2 5.6"/></svg>
+        </span>
+        <span class="body">
+          <span class="primary">Você, que criou o espaço</span>
+          <span class="secondary">Admin · Convida, remove e edita tudo</span>
+        </span>
+      </div>
+
+      <div class="tile tappable">
+        <span class="swatch" aria-hidden="true">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7"><circle cx="12" cy="8" r="3.6"/><path d="M4.8 20c0-3.6 3.2-5.6 7.2-5.6s7.2 2 7.2 5.6"/></svg>
+        </span>
+        <span class="body">
+          <span class="primary">No espaço desde 12 de julho</span>
+          <span class="secondary">Editor · Lança e edita</span>
+        </span>
+        <span class="chevron" aria-hidden="true">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M9 5l7 7-7 7"/></svg>
+        </span>
+      </div>
+
+      <div class="tile tappable">
+        <span class="swatch" aria-hidden="true">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7"><circle cx="12" cy="8" r="3.6"/><path d="M4.8 20c0-3.6 3.2-5.6 7.2-5.6s7.2 2 7.2 5.6"/></svg>
+        </span>
+        <span class="body">
+          <span class="primary">No espaço desde 26 de julho</span>
+          <span class="secondary">Leitor · Só vê</span>
+        </span>
+        <span class="chevron" aria-hidden="true">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M9 5l7 7-7 7"/></svg>
+        </span>
+      </div>
+    </div>
+  </figure>
+
+  <figure class="frame">
+    <figcaption>Depois — todos com nome
+      <em>o alvo</em>
+    </figcaption>
+    <div class="screen">
+      <div class="section-header"><span>Membros</span><span class="hint">3</span></div>
+
+      <div class="tile">
+        <span class="swatch" aria-hidden="true">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7"><circle cx="12" cy="8" r="3.6"/><path d="M4.8 20c0-3.6 3.2-5.6 7.2-5.6s7.2 2 7.2 5.6"/></svg>
+        </span>
+        <span class="body">
+          <span class="primary">Giovanni <span class="qualifier">· você, que criou o espaço</span></span>
+          <span class="secondary">Admin · Convida, remove e edita tudo</span>
+        </span>
+      </div>
+
+      <div class="tile tappable">
+        <span class="swatch" aria-hidden="true">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7"><circle cx="12" cy="8" r="3.6"/><path d="M4.8 20c0-3.6 3.2-5.6 7.2-5.6s7.2 2 7.2 5.6"/></svg>
+        </span>
+        <span class="body">
+          <span class="primary">Ana Prado</span>
+          <span class="secondary">Editor · Lança e edita</span>
+        </span>
+        <span class="chevron" aria-hidden="true">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M9 5l7 7-7 7"/></svg>
+        </span>
+      </div>
+
+      <div class="tile tappable">
+        <span class="swatch" aria-hidden="true">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7"><circle cx="12" cy="8" r="3.6"/><path d="M4.8 20c0-3.6 3.2-5.6 7.2-5.6s7.2 2 7.2 5.6"/></svg>
+        </span>
+        <span class="body">
+          <span class="primary">Rafael Nunes</span>
+          <span class="secondary">Leitor · Só vê</span>
+        </span>
+        <span class="chevron" aria-hidden="true">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M9 5l7 7-7 7"/></svg>
+        </span>
+      </div>
+      <p class="note">
+        A data de entrada sai de cena. Ela era muleta de desempate, não
+        informação que alguém procurava.
+      </p>
+    </div>
+  </figure>
+
+  <figure class="frame">
+    <figcaption>Depois — mistura
+      <em>só eu preenchi; o fallback tem que ser invisível</em>
+    </figcaption>
+    <div class="screen">
+      <div class="section-header"><span>Membros</span><span class="hint">3</span></div>
+
+      <div class="tile">
+        <span class="swatch" aria-hidden="true">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7"><circle cx="12" cy="8" r="3.6"/><path d="M4.8 20c0-3.6 3.2-5.6 7.2-5.6s7.2 2 7.2 5.6"/></svg>
+        </span>
+        <span class="body">
+          <span class="primary">Giovanni <span class="qualifier">· você, que criou o espaço</span></span>
+          <span class="secondary">Admin · Convida, remove e edita tudo</span>
+        </span>
+      </div>
+
+      <div class="tile tappable">
+        <span class="swatch" aria-hidden="true">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7"><circle cx="12" cy="8" r="3.6"/><path d="M4.8 20c0-3.6 3.2-5.6 7.2-5.6s7.2 2 7.2 5.6"/></svg>
+        </span>
+        <span class="body">
+          <span class="primary">No espaço desde 12 de julho</span>
+          <span class="secondary">Editor · Lança e edita</span>
+        </span>
+        <span class="chevron" aria-hidden="true">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M9 5l7 7-7 7"/></svg>
+        </span>
+      </div>
+
+      <div class="tile tappable">
+        <span class="swatch" aria-hidden="true">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7"><circle cx="12" cy="8" r="3.6"/><path d="M4.8 20c0-3.6 3.2-5.6 7.2-5.6s7.2 2 7.2 5.6"/></svg>
+        </span>
+        <span class="body">
+          <span class="primary">No espaço desde 26 de julho</span>
+          <span class="secondary">Leitor · Só vê</span>
+        </span>
+        <span class="chevron" aria-hidden="true">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M9 5l7 7-7 7"/></svg>
+        </span>
+      </div>
+      <p class="note">
+        Nome nulo cai no texto de hoje, linha por linha. É o caso que a lista
+        vai viver por semanas — e o teste que protege o fallback.
+      </p>
+    </div>
+  </figure>
+
+</div>
+
+<h2>3 · O sheet de editar o nome</h2>
+<p>
+  Espelha <code>space_rename_sheet.dart</code>: um campo, um botão, sem
+  cerimônia. Limite de 1–120 caracteres, o mesmo de <code>spaces.name</code>.
+</p>
+
+<div class="row-of-frames">
+  <figure class="frame">
+    <figcaption>profile_name_sheet
+      <em>um campo, um botão</em>
+    </figcaption>
+    <div class="screen" style="padding-top:10px">
+      <div style="display:grid;place-items:center;padding:2px 0 12px">
+        <span style="width:36px;height:4px;border-radius:2px;background:var(--ink200)"></span>
+      </div>
+      <div style="padding:0 var(--gutter)">
+        <p style="font-size:18px;font-weight:600;margin:0 0 6px">Seu nome</p>
+        <p style="font-size:13px;color:var(--ink600);line-height:1.5;margin:0 0 var(--lg)">
+          Quem divide um espaço com você vê este nome na lista de membros.
+        </p>
+        <div style="border:1px solid var(--teal200);border-radius:12px;padding:12px 14px;font-size:15px;background:var(--white)">
+          Giovanni<span style="color:var(--teal700)">|</span>
+        </div>
+        <p style="font-size:11px;color:var(--ink600);margin:6px 2px 0">8/120</p>
+        <div style="background:var(--teal700);color:var(--white);text-align:center;padding:13px;border-radius:12px;font-size:15px;font-weight:600;margin-top:var(--lg)">
+          Salvar
+        </div>
+      </div>
+    </div>
+  </figure>
+
+  <figure class="frame">
+    <figcaption>Recusa
+      <em>só espaços, ou 121 caracteres</em>
+    </figcaption>
+    <div class="screen" style="padding-top:10px">
+      <div style="display:grid;place-items:center;padding:2px 0 12px">
+        <span style="width:36px;height:4px;border-radius:2px;background:var(--ink200)"></span>
+      </div>
+      <div style="padding:0 var(--gutter)">
+        <p style="font-size:18px;font-weight:600;margin:0 0 6px">Seu nome</p>
+        <p style="font-size:13px;color:var(--ink600);line-height:1.5;margin:0 0 var(--lg)">
+          Quem divide um espaço com você vê este nome na lista de membros.
+        </p>
+        <div style="border:1px solid #CC3D2E;border-radius:12px;padding:12px 14px;font-size:15px;background:var(--white);color:var(--ink600)">
+          &nbsp;
+        </div>
+        <p style="font-size:11.5px;color:#8A2318;margin:6px 2px 0">Digite um nome.</p>
+        <div style="background:var(--ink200);color:var(--ink600);text-align:center;padding:13px;border-radius:12px;font-size:15px;font-weight:600;margin-top:var(--lg)">
+          Salvar
+        </div>
+      </div>
+      <p class="note is-warn">
+        O sheet não fecha. Vermelho aqui é erro real — o único uso permitido
+        pela regra da paleta.
+      </p>
+    </div>
+  </figure>
+</div>
+
+</body>
+</html>
