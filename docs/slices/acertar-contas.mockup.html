@@ -3,7 +3,7 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
-<title>Mockup — quem-deve-a-quem</title>
+<title>Mockup — acertar-contas</title>
 <style>
   /* Tokens do tema claro, de app_palette.dart / app_tokens.dart.
      Se divergirem do código, o código é a verdade. */
@@ -144,6 +144,12 @@
     font-size: 11.5px; color: var(--ink600);
   }
 
+  .settle-hint { font-size: 11.5px; color: var(--ink600); margin-top: var(--xs); }
+
+  /* Só a linha que envolve você é tocável. */
+  .xfer .chev { color: var(--ink600); font-size: 15px; margin-left: var(--xs); }
+  .xfer .chev.is-off { visibility: hidden; }
+
   .settle-empty { padding: var(--xs) 0 var(--xxs); }
   .settle-empty .headline { font-size: 14px; }
   .settle-empty .hint { font-size: 12.5px; color: var(--ink600); margin-top: var(--xxs); line-height: 1.45; }
@@ -158,6 +164,79 @@
     border-left-color: var(--amber500); background: #FDF0D5; color: #8A5504;
   }
   .note code { font-size: 11px; }
+
+  /* A folha de edição, para o seletor de pagador. */
+  .sheet {
+    background: var(--white); border: 1px solid var(--ink200);
+    border-radius: 20px; padding: 10px 0 0; overflow: hidden;
+  }
+  .grab { display: grid; place-items: center; padding: 2px 0 10px; }
+  .grab span { width: 36px; height: 4px; border-radius: 2px; background: var(--ink200); }
+  .sheet-body { padding: 0 var(--gutter) var(--lg); }
+  .sheet-header {
+    display: flex; align-items: baseline; justify-content: space-between;
+    gap: var(--sm); padding-bottom: var(--md);
+    border-bottom: 1px solid var(--ink200); margin-bottom: var(--lg);
+  }
+  .sheet-header .title { font-size: 17px; font-weight: 600; }
+  .sheet-header .when { font-size: 12px; color: var(--ink600); }
+  .amount-display { text-align: center; margin: var(--lg) 0; }
+  .amount-display .value { font-size: 38px; font-weight: 600; letter-spacing: -1.2px; line-height: 1.05; }
+  .amount-display .cap { font-size: 11px; color: var(--ink600); margin-top: var(--xs); }
+  .field-label { font-size: 12px; font-weight: 600; margin-bottom: var(--xs); }
+  .split-section {
+    margin-top: var(--lg); padding-top: var(--lg);
+    border-top: 1px solid var(--ink200);
+  }
+  .split-head {
+    display: flex; align-items: baseline; justify-content: space-between;
+    margin-bottom: var(--sm);
+  }
+  .split-head .name { font-size: 14px; font-weight: 600; }
+  .split-head .count { font-size: 11.5px; color: var(--ink600); }
+  .split-row {
+    display: flex; align-items: center; gap: var(--md);
+    padding: var(--sm) 0; border-bottom: 1px solid var(--ink200);
+  }
+  .split-row:last-of-type { border-bottom: 0; }
+  .split-row .who { flex: 1; min-width: 0; font-size: 14px; }
+  .split-row .share { font-size: 14px; }
+  .pill {
+    display: inline-flex; align-items: center; gap: var(--xs);
+    border: 1px solid var(--ink200); border-radius: 999px;
+    padding: 6px 11px; font-size: 12.5px;
+  }
+  .pill.is-on { background: var(--teal50); border-color: var(--teal200); color: var(--teal700); }
+  .pill-row { display: flex; flex-wrap: wrap; gap: var(--xs); }
+  .btn {
+    display: block; width: 100%; text-align: center;
+    padding: 12px; border-radius: 12px; font-size: 14.5px; font-weight: 600;
+  }
+  .btn.primary { background: var(--teal700); color: var(--white); }
+  .btn.ghost { border: 1px solid var(--ink200); color: var(--ink900); }
+  .sheet-footer {
+    display: flex; gap: var(--sm); padding: var(--md) var(--gutter);
+    border-top: 1px solid var(--ink200); background: var(--white);
+  }
+  .sheet-footer .btn { flex: 1; }
+
+  /* O diálogo de confirmação do acerto. */
+  .dialog-stage {
+    background: rgba(26,32,31,.35); border-radius: 20px;
+    padding: 40px var(--lg); display: grid; place-items: center;
+  }
+  .dialog {
+    background: var(--white); border-radius: 16px; padding: var(--lg);
+    width: 100%; max-width: 290px;
+  }
+  .dialog .dtitle { font-size: 16px; font-weight: 600; margin-bottom: var(--sm); }
+  .dialog .dbody { font-size: 13.5px; line-height: 1.5; color: var(--ink700); }
+  .dialog .dactions {
+    display: flex; justify-content: flex-end; gap: var(--lg);
+    margin-top: var(--lg); font-size: 14px; font-weight: 600;
+  }
+  .dialog .dactions .cancel { color: var(--ink600); font-weight: 400; }
+  .dialog .dactions .confirm { color: var(--teal700); }
 
   .ledger {
     background: var(--white); border: 1px dashed var(--ink200);
@@ -180,20 +259,22 @@
 </head>
 <body>
 
-<h1>quem-deve-a-quem — alvo visual</h1>
+<h1>acertar-contas — alvo visual</h1>
 <p class="lede">
-  Uma seção <strong>“Acertar contas”</strong> no detalhe do espaço, abaixo dos
-  membros, só em espaço <strong>group</strong>. O saldo é <strong>líquido por
-  pessoa</strong> e vira a menor lista de transferências que zera o grupo — no
-  máximo <code>n−1</code>. Nada aqui move dinheiro: liquidar por Pix é a fatia
-  seguinte, e até ela existir <strong>o saldo é cumulativo e nada o zera</strong>.
+  Três peças numa fatia. <strong>Quem pagou</strong> vira coluna
+  (<code>paid_by</code>) com seletor na folha de edição. O saldo é
+  <strong>líquido por pessoa</strong> e vira a menor lista de transferências que
+  zera o grupo — no máximo <code>n−1</code>. E <strong>registrar o acerto</strong>
+  zera o par, gravando um <code>transfer</code> dividido: sem tabela nova, e sem
+  mover dinheiro (quem transfere é você, no app do banco).
 </p>
 
 <h2>0 · A conta que os quadros abaixo mostram</h2>
 <p>
   Três pessoas numa república. O saldo só olha despesa <strong>dividida</strong>:
-  o que ninguém rateou é gasto de quem lançou, não dívida de ninguém. Quem pagou é
-  <code>transactions.created_by</code> — não existe coluna de pagador.
+  o que ninguém rateou é gasto de quem lançou, não dívida de ninguém. Quem pagou
+  vem de <code>paid_by</code>, e <strong>nulo significa quem lançou</strong> — é o
+  que faz as 2.083 linhas que já existem continuarem certas sem backfill.
 </p>
 
 <div class="row-of-frames">
@@ -301,16 +382,17 @@
           </div>
           <div class="xfer">
             <span>Carla</span><span class="arrow">→</span><span class="me">Você</span>
-            <span class="val money">R$ 150,00</span>
+            <span class="val money">R$ 150,00</span><span class="chev">›</span>
           </div>
           <div class="xfer">
             <span>Bruno</span><span class="arrow">→</span><span class="me">Você</span>
-            <span class="val money">R$ 30,00</span>
+            <span class="val money">R$ 30,00</span><span class="chev">›</span>
           </div>
           <div class="settle-foot">
             <span>2 transferências zeram o grupo</span>
             <span>3 despesas divididas</span>
           </div>
+          <div class="settle-hint">Toque na sua linha para registrar o acerto</div>
         </div>
       </div>
     </div>
@@ -334,22 +416,25 @@
         </div>
         <div class="xfer">
           <span class="me">Você</span><span class="arrow">→</span><span>Carla</span>
-          <span class="val money">R$ 680,00</span>
+          <span class="val money">R$ 680,00</span><span class="chev">›</span>
         </div>
         <div class="xfer">
           <span>Bruno</span><span class="arrow">→</span><span>Carla</span>
-          <span class="val money">R$ 440,00</span>
+          <span class="val money">R$ 440,00</span><span class="chev is-off">›</span>
         </div>
         <div class="settle-foot">
           <span>2 transferências zeram o grupo</span>
           <span>2 despesas divididas</span>
         </div>
+        <div class="settle-hint">Toque na sua linha para registrar o acerto</div>
       </div>
     </div>
     <p class="note">
       A linha que não envolve você (<em>Bruno → Carla</em>) aparece igual, sem
-      apagar: esconder a metade que não é sua faria as transferências não somarem
-      com o total, e alguém contaria de novo.
+      apagar — esconder a metade que não é sua faria as transferências não somarem
+      com o total. O que ela <strong>não</strong> tem é o chevron: acertar dívida
+      de terceiros exigiria responder quem tem direito de declarar pagamento
+      alheio.
     </p>
   </figure>
 
@@ -426,11 +511,11 @@
         </div>
         <div class="xfer">
           <span class="nameless">Membro sem nome</span><span class="arrow">→</span><span class="me">Você</span>
-          <span class="val money">R$ 60,00</span>
+          <span class="val money">R$ 60,00</span><span class="chev">›</span>
         </div>
         <div class="xfer">
           <span>Bruno <span class="gone">· saiu do espaço</span></span><span class="arrow">→</span><span class="me">Você</span>
-          <span class="val money">R$ 35,00</span>
+          <span class="val money">R$ 35,00</span><span class="chev">›</span>
         </div>
         <div class="settle-foot">
           <span>2 transferências zeram o grupo</span>
@@ -438,11 +523,11 @@
         </div>
       </div>
     </div>
-    <p class="note is-warn">
-      <strong>“Membro sem nome” é rótulo novo.</strong> O fallback de
-      <code>member_copy.dart</code> hoje é “No espaço desde 28 de julho”, e numa
-      linha de transferência isso sai como <em>“No espaço desde 28 de julho →
-      Você”</em>. A seção precisa de um rótulo curto próprio.
+    <p class="note">
+      <strong>“Membro sem nome” é rótulo novo</strong> (escolhido em 2026-08-01). O
+      fallback de <code>member_copy.dart</code> é “No espaço desde 28 de julho”, e
+      numa linha de transferência sairia como <em>“No espaço desde 28 de julho →
+      Você”</em>. Quem saiu mantém o chevron: a dívida não sai com a pessoa.
     </p>
   </figure>
 
@@ -452,10 +537,13 @@
       <li><strong>Em espaço <code>personal</code> ou <code>household</code></strong> a
         seção não existe — não fica vazia nem desabilitada. Household liquida de
         outro jeito por desenho (PRD §4.2).</li>
-      <li><strong>Botão “Já paguei”.</strong> Registrar o acerto é a fatia seguinte;
-        prometer aqui um botão que não zera nada seria pior que não ter.</li>
-      <li><strong>Chave Pix / copia-e-cola.</strong> Depende de liquidar existir.</li>
-      <li><strong>Histórico de acertos.</strong> Nada foi acertado ainda.</li>
+      <li><strong>Chave Pix / copia-e-cola.</strong> O acerto é registrado, não
+        cobrado: quem transfere é você, no app do banco. Gerar a chave é fatia
+        própria.</li>
+      <li><strong>Confirmação do outro lado.</strong> Quem registra decide sozinho;
+        “aguardando Carla confirmar” pede estado de convite e notificação.</li>
+      <li><strong>Histórico de acertos como tela.</strong> Eles aparecem na lista do
+        mês como <code>transfer</code>, que é onde alguém procura.</li>
       <li><strong>Detalhe por despesa.</strong> Quem quer saber de onde saiu o número
         abre a lista do mês; repetir aqui seria uma segunda lista de lançamentos
         para manter.</li>
@@ -464,30 +552,181 @@
 
 </div>
 
-<h2>3 · Onde isto pode estar errado</h2>
+<h2>3 · “Quem pagou”, na folha de edição</h2>
 <p>
-  As duas coisas que valem sua atenção antes de eu abrir código, porque mudar
-  depois custa retrabalho:
+  Entra <strong>acima</strong> de “Dividido entre”, na mesma seção: quem pagou é o
+  que dá sentido ao rateio, e ler na ordem inversa obrigaria a voltar. Só em
+  despesa de espaço <code>group</code> — nas outras o campo não existe, em vez de
+  existir com uma opção só. O <code>+</code> continua intocado.
 </p>
 
 <div class="row-of-frames">
+
+  <figure class="frame">
+    <figcaption>Sem escolha explícita
+      <em>o estado de toda despesa hoje</em>
+    </figcaption>
+    <div class="sheet">
+      <div class="grab"><span></span></div>
+      <div class="sheet-body">
+        <div class="sheet-header">
+          <span class="title">Mercado</span>
+          <span class="when">28 de julho</span>
+        </div>
+        <div class="amount-display">
+          <div class="value money">R$ 240,00</div>
+          <div class="cap">Despesa</div>
+        </div>
+        <div class="split-section">
+          <div class="split-head"><span class="name">Quem pagou</span></div>
+          <div class="pill-row">
+            <span class="pill is-on">Você</span>
+            <span class="pill">Bruno</span>
+            <span class="pill">Carla</span>
+          </div>
+          <div class="split-head" style="margin-top:16px"><span class="name">Dividido entre</span></div>
+          <span class="btn ghost">Dividir igualmente</span>
+        </div>
+      </div>
+      <div class="sheet-footer">
+        <span class="btn ghost">Excluir</span>
+        <span class="btn primary">Salvar</span>
+      </div>
+    </div>
+    <p class="note">
+      <code>paid_by</code> nulo já mostra quem lançou marcado — nada de “nenhum
+      selecionado”. A coluna nulável é o que evita backfill nas 2.083 linhas e, mais
+      importante, evita <code>not null</code>: um cliente enviando nulo teria o
+      batch recusado, e batch recusado o <code>SupabaseConnector</code> descarta em
+      <strong>silêncio</strong>.
+    </p>
+  </figure>
+
+  <figure class="frame">
+    <figcaption>Pagador trocado
+      <em>Carla pagou, você lançou</em>
+    </figcaption>
+    <div class="sheet">
+      <div class="grab"><span></span></div>
+      <div class="sheet-body">
+        <div class="sheet-header">
+          <span class="title">Mercado</span>
+          <span class="when">28 de julho</span>
+        </div>
+        <div class="amount-display">
+          <div class="value money">R$ 240,00</div>
+          <div class="cap">Despesa</div>
+        </div>
+        <div class="split-section">
+          <div class="split-head"><span class="name">Quem pagou</span></div>
+          <div class="pill-row">
+            <span class="pill">Você</span>
+            <span class="pill">Bruno</span>
+            <span class="pill is-on">Carla</span>
+          </div>
+          <div class="split-head" style="margin-top:16px">
+            <span class="name">Dividido entre</span>
+            <span class="count">3 pessoas</span>
+          </div>
+          <div class="split-row"><span class="who">Você</span><span class="share money">R$ 80,00</span></div>
+          <div class="split-row"><span class="who">Bruno</span><span class="share money">R$ 80,00</span></div>
+          <div class="split-row"><span class="who">Carla</span><span class="share money">R$ 80,00</span></div>
+        </div>
+      </div>
+      <div class="sheet-footer">
+        <span class="btn ghost">Excluir</span>
+        <span class="btn primary">Salvar</span>
+      </div>
+    </div>
+    <p class="note is-warn">
+      <strong>Trocar o pagador não pode apagar a divisão.</strong> É o defeito gêmeo
+      do que a fatia anterior encontrou no teste de integração: <code>is_shared</code>
+      vinha da entidade carregada ao abrir, então salvar apagava a marca. Aqui o
+      teste existe antes do código.
+    </p>
+  </figure>
+
+</div>
+
+<h2>4 · Registrar o acerto</h2>
+<p>
+  Diálogo, não folha: é um sim/não sem campo nenhum. O texto diz <strong>o que vai
+  ser gravado</strong>, porque o efeito é um lançamento novo no grupo — e ninguém
+  espera que “já paguei” crie linha na lista do mês.
+</p>
+
+<div class="row-of-frames">
+
+  <figure class="frame">
+    <figcaption>Você recebendo
+      <em>“Carla → Você”, tocada</em>
+    </figcaption>
+    <div class="dialog-stage">
+      <div class="dialog">
+        <div class="dtitle">Carla te pagou?</div>
+        <div class="dbody">
+          Registra uma transferência de <span class="money">R$ 150,00</span> de Carla
+          para você no grupo República. O saldo entre vocês vai a zero.
+        </div>
+        <div class="dactions">
+          <span class="cancel">Cancelar</span>
+          <span class="confirm">Registrar</span>
+        </div>
+      </div>
+    </div>
+    <p class="note">
+      “Registra uma transferência” é literal: o acerto é um <code>transfer</code>
+      com uma parte só, e é isso que zera o par pela mesma fórmula
+      <code>pagou − deve</code>. Sem tabela nova, e sem republicar sync rules.
+    </p>
+  </figure>
+
+  <figure class="frame">
+    <figcaption>Você pagando
+      <em>o outro sentido, mesmo diálogo</em>
+    </figcaption>
+    <div class="dialog-stage">
+      <div class="dialog">
+        <div class="dtitle">Você já pagou Carla?</div>
+        <div class="dbody">
+          Registra uma transferência de <span class="money">R$ 680,00</span> de você
+          para Carla no grupo Viagem Chapada. O saldo entre vocês vai a zero.
+        </div>
+        <div class="dactions">
+          <span class="cancel">Cancelar</span>
+          <span class="confirm">Registrar</span>
+        </div>
+      </div>
+    </div>
+    <p class="note is-warn">
+      O app <strong>não move dinheiro</strong> (<code>product.md</code>, “Não é”). O
+      Pix acontece no app do banco; aqui só se registra que aconteceu. Se o título
+      sugerir que o app transferiu, ele está errado — vale sua leitura.
+    </p>
+  </figure>
+
   <div class="ledger">
-    <strong>1. O saldo nunca zera</strong>
-    <p class="hint" style="color:var(--ink600); font-size:12.5px; line-height:1.5; margin:8px 0 0">
-      Sem liquidar, no segundo mês a seção mostra dívida acumulada de sempre — quem
-      pagou por Pix continua devendo na tela. Vale entregar assim (o saldo já
-      responde a pergunta) ou <code>quem-deve-a-quem</code> só faz sentido junto com
-      liquidar?
+    <strong>Depois de registrar</strong>
+    <table>
+      <thead>
+        <tr><th>Pessoa</th><th>Antes</th><th>Acerto</th><th>Depois</th></tr>
+      </thead>
+      <tbody>
+        <tr><td>Você</td><td class="money">+180,00</td><td class="money">−150,00</td><td class="money">+30,00</td></tr>
+        <tr><td>Carla</td><td class="money">−150,00</td><td class="money">+150,00</td><td class="money">0,00</td></tr>
+        <tr><td>Bruno</td><td class="money">−30,00</td><td class="money">—</td><td class="money">−30,00</td></tr>
+      </tbody>
+      <tfoot>
+        <tr><td>Soma</td><td class="money">0,00</td><td class="money">0,00</td><td class="money">0,00</td></tr>
+      </tfoot>
+    </table>
+    <p class="note">
+      Zera <strong>o par</strong>, não o grupo: Bruno continua devendo R$ 30,00, e a
+      seção passa a mostrar uma transferência em vez de duas. Acertar de novo com
+      Carla não tem o que registrar — o saldo dela já é zero.
     </p>
   </div>
-  <div class="ledger">
-    <strong>2. Quem lança é quem pagou</strong>
-    <p class="hint" style="color:var(--ink600); font-size:12.5px; line-height:1.5; margin:8px 0 0">
-      Na república real, quem lança o mercado é sempre quem passou o cartão? Se
-      alguém lança pelo outro, o saldo fica errado — e o conserto é coluna
-      <code>paid_by</code>, migration e seletor de pagador: fatia própria.
-    </p>
-  </div>
+
 </div>
 
 </body>
