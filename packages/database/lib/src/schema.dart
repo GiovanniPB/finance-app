@@ -25,6 +25,11 @@ const appSchema = Schema([
     Column.text('updated_at'),
   ]),
   // Pertencimento de um usuário a um espaço, com papel.
+  //
+  // `display_name` é cópia de `profiles.display_name`, mantida por trigger no
+  // Postgres. Mora aqui porque sync rule não faz join e `profiles` não tem
+  // `space_id`: sem a coluna, o nome do outro membro nunca chega ao aparelho.
+  // Ver o cabeçalho da migration 20260801205317.
   Table(
     'space_members',
     [
@@ -33,6 +38,7 @@ const appSchema = Schema([
       Column.text('role'),
       Column.text('share_percentage'),
       Column.text('status'),
+      Column.text('display_name'),
       Column.text('joined_at'),
       Column.text('created_at'),
       Column.text('updated_at'),

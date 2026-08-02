@@ -43,8 +43,8 @@ abstract final class SpacesSql {
 
   static const insertMember =
       'INSERT INTO space_members (id, space_id, user_id, role, status, '
-      'share_percentage, joined_at, created_at, updated_at) '
-      'VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)';
+      'display_name, share_percentage, joined_at, created_at, updated_at) '
+      'VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)';
 
   static const memberById = 'SELECT * FROM space_members WHERE id = ? LIMIT 1';
 
@@ -73,6 +73,7 @@ abstract final class SpacesSql {
     cols['user_id'],
     cols['role'],
     cols['status'],
+    cols['display_name'],
     cols['share_percentage'],
     cols['joined_at'],
     cols['created_at'],
