@@ -14,61 +14,74 @@ compartilhados com convite por código, gestão de papéis e pessoas identificad
 pelo nome.
 
 Falta da Fase 1 apenas a **categorização por IA**, adiada por decisão. A Fase 2
-está pela metade: a despesa de grupo já se divide em partes iguais, mas o saldo
-"quem deve a quem" depende da questão #2 do PRD.
+fechou o ciclo do dinheiro compartilhado: dividir a despesa, dizer quem pagou,
+ver quem deve a quem, e registrar o acerto.
+
+## Antes de abrir o app
+
+**A migration `20260801224605` não foi aplicada.** Sem `supabase db push` a
+coluna `paid_by` não existe no servidor, e o sintoma é o pior deste repo: o
+upload da edição é recusado, o `SupabaseConnector` descarta o batch em silêncio,
+e a troca de pagador aparece aplicada até o checkpoint seguinte.
+
+A republicação das **sync rules** continua pendente desde `dividir-despesa` — por
+causa da tabela `expense_splits`, não desta fatia. Sem ela as partes não chegam
+ao outro aparelho, e a seção "Acertar contas" fica vazia sem erro nenhum.
 
 ## Última fatia
 
-`dividir-despesa` — abrir uma despesa de espaço `group` oferece "Dividir
-igualmente", e o rateio vira uma linha por membro em `expense_splits`.
+`acertar-contas` — o detalhe de um espaço `group` mostra a menor lista de
+transferências que zera o grupo, e registrar o acerto zera o par.
 
-Duas decisões de produto que o repo não respondia, e que agora moram no lugar
-que elas mordem. **A marcação é no sheet de edição, não no `+`**: o
-`surfaces.md` protege o fluxo dos 30 segundos de ganhar passo, e o custo — em
-república, dividir passou a ser dois gestos — está registrado lá com o caminho
-de reverter. **Só rateio igual**: percentual e exato pedem tela de configuração.
+Duas decisões caras viraram ADR. A [0012](adr/0012-saldo-liquido-com-guloso.md)
+responde a questão #2 do PRD, aberta desde a fundação: saldo **líquido** com
+casamento guloso, no máximo `n−1` transferências, aceitando de propósito que o
+app possa mandar você pagar alguém com quem não gastou. A
+[0013](adr/0013-o-acerto-e-um-transfer-dividido.md) é o que barateou a fatia: o
+acerto **não tem tabela**, é um `transfer` com `paid_by` e uma parte só, e a
+fórmula `pagou − deve` o absorve sozinha.
 
-**A fatia foi grande de novo** (2.455 linhas, 27 arquivos), e desta vez sem
-decisão que a justifique: tabela nova arrasta migration, sync rules, schema
-local, entidade, três métodos de repositório, seção de UI e seis fakes de teste
-que implementam a interface. É o piso de uma tabela nova neste projeto, e vale
-saber disso ao dimensionar a próxima.
+**A fatia foi grande: 3.696 linhas e 30 arquivos, o dobro do teto.** Desta vez a
+causa está registrada e não é acidente. A decomposição foi proposta
+(`pagador-explicito` ~700 linhas, depois `acertar-contas` ~1.500) e recusada: o
+usuário escolheu o escopo inteiro em 2026-08-01 aceitando o tamanho. O que
+manteve a fatia em 3.696 e não em 6.000 foi a ADR 0013 — tabela nova custou
+2.455 linhas na fatia anterior.
 
-Dois defeitos apareceram no teste de integração e nenhum mock os pegaria: apagar
-o lançamento deixava partes órfãs (view não tem chave estrangeira, então o
-`on delete cascade` do Postgres não existe no aparelho), e `is_shared` vinha da
-entidade que a folha carregou ao abrir — dividir e salvar apagava a marca.
+O que o mockup pegou antes do código, e teria custado retrabalho depois: a
+premissa de que quem lança é quem paga (rejeitada, virou coluna `paid_by`), e um
+saldo que nada zera (rejeitado, virou o acerto). Nenhuma das duas apareceria num
+teste.
 
 ## Próximas fatias
 
-1. **quem-deve-a-quem** *(feature)* — **bloqueada** pela questão #2 do PRD
-   (algoritmo de minimização de transferências, RN-2.2). As partes já existem;
-   falta decidir como o saldo vira o menor número de transferências.
-2. **rateio-percentual** *(feature)* — usa o `share_percentage` que
+1. **rateio-percentual** *(feature)* — usa o `share_percentage` que
    `space_members` já tem, caindo no igualitário quando é nulo.
    `Money.allocate(ratios)` já resolve a matemática. Exige tela para declarar a
    cota, que é o que a manteve fora de `dividir-despesa`.
-3. **nome-no-cadastro** *(feature, pequena)* — hoje quem se cadastra passa por
+2. **nome-no-cadastro** *(feature, pequena)* — hoje quem se cadastra passa por
    toda a primeira sessão sem nome, e só descobre a seção "Você" se abrir o
-   Perfil. Um campo no `signUp` (metadata → `handle_new_user`) fecha isso.
+   Perfil. Um campo no `signUp` (metadata → `handle_new_user`) fecha isso. Ganhou
+   peso: sem nome, a linha de acerto diz "Membro sem nome".
+3. **acerto-parcial** *(feature, pequena)* — hoje o acerto é o valor inteiro da
+   transferência proposta. Pagar metade exige uma tela de valor.
 
 ## Não visto rodando
 
 Escrito, testado e mergeado — mas nunca exercitado num aparelho. Vale mais que
 teste verde, e é o primeiro lugar onde procurar quando algo surpreender.
 
+- **Toda a fatia `acertar-contas`.** Escolher o pagador, ver o saldo, registrar
+  o acerto. Depende da migration acima; sem ela, escolher pagador é a operação
+  que falha em silêncio.
+- **A divisão de despesa inteira**, da fatia anterior, pelo mesmo motivo das
+  sync rules.
 - **Gestão de membro com um segundo login** — trocar papel do convidado,
-  removê-lo, vê-lo sair da lista. Este caminho nunca foi percorrido.
-- **A divisão de despesa inteira.** Nada dela foi exercitado num aparelho, e ela
-  é a primeira fatia desde `espacos-compartilhados` a **exigir republicar as
-  sync rules à mão**. Se as partes não aparecerem para o outro membro e não
-  houver erro nenhum, a causa é essa, não o código.
-- **A propagação do nome para o peer.** Os dois triggers da
-  `20260801205317` rodam no Postgres, e nenhum teste alcança o servidor. O que
-  está provado é a escrita local e a leitura da coluna; que trocar o nome
-  reescreve a membership **do outro aparelho** só se vê com dois logins. Se algo
-  aqui falhar, o sintoma é o peer continuar vendo o nome antigo — a linha nunca
-  fica vazia, porque o fallback assume.
+  removê-lo, vê-lo sair da lista.
+- **A propagação do nome para o peer.** Os dois triggers da `20260801205317`
+  rodam no Postgres, e nenhum teste alcança o servidor. Se falhar, o sintoma é o
+  peer continuar vendo o nome antigo — a linha nunca fica vazia, porque o
+  fallback assume.
 - **Detecção de poupança** — precisa do worker deployado
   (`supabase functions deploy pluggy-sync-worker`, passo do usuário) e de uma
   conta marcada como alvo com meta ativa apontando para ela. Só **extrato novo**
@@ -82,43 +95,43 @@ Decisões conscientes de postergar, com o porquê. Débito que já está documen
 no arquivo que ele morde (cabeçalho de migration, de Edge Function ou de widget)
 não se repete aqui.
 
+- **Acerto e pagamento de fatura são o mesmo tipo.** O que os separa é ter
+  partes (ADR 0013). Se a ingestão do Open Finance um dia criar `transfer` com
+  partes, o saldo passa a contar dinheiro que não é dívida, e o sintoma é um
+  saldo que não fecha.
+- **Ninguém confirma o acerto do outro lado.** Quem registra decide sozinho que
+  o dinheiro mudou de mãos. Conserto é estado de confirmação, não outra
+  modelagem.
 - **Backfill da detecção de poupança** — a regra só olha linha recém-inserida,
   para reprocessar não ressuscitar uma proposta recusada. Os 2.083 lançamentos
-  antigos nunca viram proposta. Um backfill reabriria exatamente o "não" que a
-  regra protege: teria de rodar uma vez só, sobre janela escolhida. Decidido em
-  2026-07-28: não fazer.
-- **A cadeia de migrations nunca rodou do zero.** As 15 subiram por
+  antigos nunca viram proposta. Decidido em 2026-07-28: não fazer.
+- **A cadeia de migrations nunca rodou do zero.** As 16 subiram por
   `supabase db push` sobre schema existente; `supabase db reset` num banco vazio
   exige Docker. É a diferença entre "aplica sobre o schema atual" e "o repo
   descreve o banco".
-- **Golden test: descartado, não postergado.** Decidido em 2026-08-01. Era a
-  fatia `andaime-de-golden`, e não vai acontecer: exigiria empacotar Inter e IBM
-  Plex Mono (sem elas o golden renderiza caixinha) e manter baseline de imagem,
-  e isso não se paga aqui. A consequência é permanente e virou regra de trabalho
-  na `AGENTS.md`: **toda iteração de layout termina no usuário olhando a tela**,
-  e o que substitui o degrau é o mockup aprovado antes do código mais teste de
-  widget para o que se verifica sem olhar. Reabrir isto só faria sentido se a UI
-  passasse a ser mexida por várias pessoas ao mesmo tempo.
+- **Golden test: descartado, não postergado.** Decidido em 2026-08-01.
+  Exigiria empacotar Inter e IBM Plex Mono (sem elas o golden renderiza
+  caixinha) e manter baseline de imagem, e isso não se paga aqui. A consequência
+  virou regra de trabalho na `AGENTS.md`: **toda iteração de layout termina no
+  usuário olhando a tela**, e o que substitui o degrau é o mockup aprovado antes
+  do código mais teste de widget para o que se verifica sem olhar.
 - **Categorização por IA** — adiada até a questão #4 do PRD (modelo próprio vs.
   API, e dado sensível na inferência) ter resposta.
 - **Pagamento de fatura conta duas vezes.** No cartão virou `transfer`
   (correto); o débito correspondente na conta corrente segue como `expense`.
-  Separar exige heurística sobre descrição — o tipo de regra que já envelheceu
-  mal duas vezes aqui.
 - **Estorno de cartão fica invisível no resumo.** Chega negativo, com assinatura
-  idêntica à de pagamento de fatura. Não há campo que os separe sem heurística.
+  idêntica à de pagamento de fatura.
 - **Saldo de conta não reconcilia com lançamento.** Snapshot por decisão,
-  mitigado por `balance_as_of`. Sair disso é decisão de produto: reconciliar
-  pelo Open Finance, ou exibir um saldo estimado ao lado do informado.
+  mitigado por `balance_as_of`.
 - **`join_space_by_code` sem rate limit.** O que protege são ~6,6·10¹¹ códigos e
   expiração de 7 dias. Resolver antes de a base crescer.
 - **O upload ao Postgres não é testado automaticamente.** Os testes de
-  integração param na camada local; provar que a linha sai da fila e chega ao
-  Supabase é passo manual. Automatizar exige um projeto Supabase descartável.
+  integração param na camada local. Automatizar exige um projeto Supabase
+  descartável.
 - **Abas sem URL própria** — `IndexedStack`. Quando deep link virar requisito,
   trocar por `StatefulShellRoute`.
 - **`pendingContributionsCount` sem tela** — quem não abre a aba Poupança não
-  fica sabendo que há aporte a confirmar. O caminho é marcador na bottom nav.
+  fica sabendo que há aporte a confirmar.
 
 ## Armadilhas
 
@@ -133,10 +146,14 @@ Já morderam, vão morder de novo.
 - **SQL novo sobre tabela do PowerSync precisa de teste que execute de verdade.**
   As tabelas locais são **views com triggers `INSTEAD OF`**: o SQLite recusa
   `UPSERT`. Mock de `SqliteConnection` não distingue SQL válido de SQL recusado.
+- **`watch` descobre as tabelas por `EXPLAIN QUERY PLAN`.** Tabela que a
+  detecção não vê é stream que não re-emite — tela congelada, sem erro. É por
+  isso que o SQL do saldo evita CTE e usa subquery derivada.
 - **A policy de SELECT governa a linha velha e a nova de todo UPDATE.** Linha
   velha invisível ⇒ 0 linhas **sem erro**; linha nova invisível ⇒ `42501`. O
   `SupabaseConnector` descarta o batch, então nada disso chega à tela: aparece
-  aplicado e some no checkpoint.
+  aplicado e some no checkpoint. É a razão de `paid_by` ser nulável e de não
+  haver `check` de que o pagador é membro.
 - **PR empilhado não tem CI.** O workflow dispara em `pull_request` para `main`;
   PR com base noutro branch nunca é checado.
 - **Teste de recorte precisa do valor de fronteira e do dado no formato de quem
@@ -149,8 +166,6 @@ Já morderam, vão morder de novo.
   errado.
 - **`--dart-define-from-file` precisa de caminho absoluto**, e vale no `build`,
   não só no `run`.
-- **Teste que lê `DateTime.now()` passa por coincidência de calendário.** Em 1º
-  de agosto de 2026 a `main` ficou vermelha sozinha: `FocusedMonth` era a única
-  leitura de "hoje" na apresentação que escapava do `clockProvider`, e casava
-  com helpers ancorados no relógio real. Dado de teste ancora em `testNow`;
-  provider lê o `clockProvider`. As duas pontas, ou nenhuma.
+- **Teste que lê `DateTime.now()` passa por coincidência de calendário.** Dado de
+  teste ancora em `testNow`; provider lê o `clockProvider`. As duas pontas, ou
+  nenhuma.
