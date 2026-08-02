@@ -5,11 +5,13 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../../../di/providers.dart';
 import '../../profile/presentation/profile_providers.dart';
+import '../domain/space.dart';
 import '../domain/space_member.dart';
 import '../domain/space_permissions.dart';
 import 'invite_block.dart';
 import 'member_actions_sheet.dart';
 import 'member_copy.dart';
+import 'settlement_section.dart';
 import 'space_rename_sheet.dart';
 import 'space_summary_card.dart';
 import 'spaces_providers.dart';
@@ -164,6 +166,19 @@ class _SpaceDetailPageState extends ConsumerState<SpaceDetailPage> {
                 // minha linha — ver o cabeçalho de `MemberCopy`.
                 myDisplayName: ref.watch(myDisplayNameProvider),
               ),
+            const SizedBox(height: AppSpacing.xl),
+          ],
+
+          // Só em `group`. `household` liquida de outro jeito por desenho (PRD
+          // §4.2) e `personal` não tem com quem acertar — nos dois a seção não
+          // existe, em vez de existir vazia.
+          if (space.type == SpaceType.group) ...[
+            Padding(
+              padding: const EdgeInsets.symmetric(
+                horizontal: AppSpacing.screenGutter,
+              ),
+              child: SettlementSection(space: space),
+            ),
             const SizedBox(height: AppSpacing.xl),
           ],
 

@@ -201,6 +201,78 @@ void main() {
     });
   });
 
+  // O rótulo curto da linha de acerto. Existe porque o fallback de `identity`
+  // é "No espaço desde 28 de julho", que numa transferência sairia como
+  // *"No espaço desde 28 de julho → Você"*.
+  group('shortIdentity', () {
+    MemberIdentity shortOf(
+      String userId, {
+      List<SpaceMember>? members,
+      SpacePermissions? permissions,
+    }) => MemberCopy.shortIdentity(
+      userId: userId,
+      members: members ?? [ownerMember(), testMember(id: 'm-2', userId: guest)],
+      permissions: permissions ?? permissionsFor(),
+    );
+
+    test('a minha ponta é sempre "Você", mesmo com nome definido', () {
+      final identity = shortOf(
+        owner,
+        members: [
+          ownerMember(displayName: 'Giovanni'),
+          testMember(id: 'm-2', userId: guest),
+        ],
+      );
+
+      expect(identity.label, 'Você');
+      expect(identity.qualifier, isNull);
+    });
+
+    test('a outra ponta é o nome dela', () {
+      final identity = shortOf(
+        guest,
+        members: [
+          ownerMember(),
+          testMember(id: 'm-2', userId: guest, displayName: 'Ana Prado'),
+        ],
+      );
+
+      expect(identity.label, 'Ana Prado');
+      expect(identity.qualifier, isNull);
+    });
+
+    test('sem nome, o rótulo curto pede o nome sem dizer', () {
+      expect(shortOf(guest).label, 'Membro sem nome');
+    });
+
+    // A dívida não sai do espaço junto com a pessoa: quem saiu continua no
+    // saldo, com o qualificador que explica por que aquele nome está ali.
+    test('quem saiu ganha o qualificador', () {
+      final identity = shortOf(
+        guest,
+        members: [
+          ownerMember(),
+          testMember(
+            id: 'm-2',
+            userId: guest,
+            displayName: 'Ana Prado',
+            status: MembershipStatus.left,
+          ),
+        ],
+      );
+
+      expect(identity.label, 'Ana Prado');
+      expect(identity.qualifier, 'saiu do espaço');
+    });
+
+    test('sem membership nenhuma, ainda aparece', () {
+      final identity = shortOf('user-3');
+
+      expect(identity.label, 'Membro sem nome');
+      expect(identity.qualifier, 'saiu do espaço');
+    });
+  });
+
   group('role', () {
     test('junta o papel ao que ele permite', () {
       expect(MemberCopy.role(SpaceRole.editor), 'Editor · Lança e edita');

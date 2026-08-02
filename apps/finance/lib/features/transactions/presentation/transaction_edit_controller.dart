@@ -15,6 +15,10 @@ abstract class TransactionEditState with _$TransactionEditState {
     required TransactionType type,
     required DateTime occurredAt,
 
+    /// Quem pagou. Nasce igual a `transaction.paidBy`, que já é o `createdBy`
+    /// resolvido — a folha nunca precisa lidar com nulo.
+    required String paidBy,
+
     /// Valor **absoluto** em centavos. A direção mora em [type].
     @Default(0) int amountMinor,
     String? categoryId,
@@ -57,6 +61,7 @@ class TransactionEditController extends _$TransactionEditController {
   TransactionEditState build(Transaction transaction) => TransactionEditState(
     type: transaction.type,
     occurredAt: transaction.occurredAt,
+    paidBy: transaction.paidBy,
     amountMinor: transaction.amount.amountMinor.abs(),
     categoryId: transaction.categoryId,
     // Sem padrão de conta única aqui, ao contrário do registro rápido: este
@@ -92,6 +97,13 @@ class TransactionEditController extends _$TransactionEditController {
   /// Define a data do lançamento.
   void selectDate(DateTime date) => state = state.copyWith(occurredAt: date);
 
+  /// Escolhe quem pagou a despesa.
+  ///
+  /// Fica no estado do formulário e sobe junto no [save], em vez de gravar a
+  /// cada toque: uma escrita por pílula tocada faria a folha disputar com o
+  /// próprio "Salvar", e o pagador é campo do lançamento como qualquer outro.
+  void selectPayer(String userId) => state = state.copyWith(paidBy: userId);
+
   /// Define a descrição. Texto em branco volta a ser ausência de descrição.
   void editDescription(String value) {
     final trimmed = value.trim();
@@ -119,6 +131,7 @@ class TransactionEditController extends _$TransactionEditController {
             categoryId: state.categoryId,
             accountId: state.accountId,
             description: state.description,
+            paidBy: state.paidBy,
           ),
         );
 

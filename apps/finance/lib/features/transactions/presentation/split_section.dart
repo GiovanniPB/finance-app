@@ -11,6 +11,7 @@ import '../../spaces/presentation/member_copy.dart';
 import '../../spaces/presentation/spaces_providers.dart';
 import '../domain/expense_split.dart';
 import '../domain/transaction.dart';
+import 'transaction_edit_controller.dart';
 import 'transactions_providers.dart';
 
 /// "Dividido entre": o rateio igual do lançamento, e como mexer nele.
@@ -27,6 +28,16 @@ import 'transactions_providers.dart';
 ///
 /// A linha "Soma das partes" não é decoração: é o que torna verificável, sem
 /// confiar no código, que o centavo que não divide não se perdeu.
+///
+/// ─────────────────────────────────────────────────────────────────────────
+/// "QUEM PAGOU" VEM ANTES DE "DIVIDIDO ENTRE"
+///
+/// O rateio só significa alguma coisa depois de se saber quem adiantou o
+/// dinheiro: "cada um deve R$ 80" não diz a quem. Na ordem inversa a pessoa
+/// leria o rateio, faria a pergunta, e teria de voltar.
+///
+/// Diferente do botão de dividir, o pagador **não** grava ao toque: ele é campo
+/// do formulário e sobe no "Salvar", junto do resto.
 class SplitSection extends ConsumerStatefulWidget {
   const SplitSection({required this.transaction, super.key});
 
@@ -79,11 +90,40 @@ class _SplitSectionState extends ConsumerState<SplitSection> {
     final error = _errorMessage;
     final repository = ref.read(transactionsRepositoryProvider);
 
+    final paidBy = ref.watch(
+      transactionEditControllerProvider(
+        widget.transaction,
+      ).select((state) => state.paidBy),
+    );
+
     return Column(
       crossAxisAlignment: CrossAxisAlignment.stretch,
       children: [
         const SizedBox(height: AppSpacing.lg),
         Divider(height: 1, color: tokens.hairline),
+        const SizedBox(height: AppSpacing.lg),
+        Text('Quem pagou', style: context.texts.titleSmall),
+        const SizedBox(height: AppSpacing.sm),
+        Wrap(
+          spacing: AppSpacing.xs,
+          runSpacing: AppSpacing.xs,
+          children: [
+            for (final member in members.where((m) => m.isActive))
+              CategoryChip(
+                key: Key('payer_${member.userId}'),
+                label: _shortLabelFor(member.userId, members, permissions),
+                icon: Icons.person_outline,
+                isSelected: member.userId == paidBy,
+                onSelected: () => ref
+                    .read(
+                      transactionEditControllerProvider(
+                        widget.transaction,
+                      ).notifier,
+                    )
+                    .selectPayer(member.userId),
+              ),
+          ],
+        ),
         const SizedBox(height: AppSpacing.lg),
         Row(
           crossAxisAlignment: CrossAxisAlignment.baseline,
@@ -175,6 +215,20 @@ class _SplitSectionState extends ConsumerState<SplitSection> {
       today: ref.watch(clockProvider)(),
       myDisplayName: ref.watch(myDisplayNameProvider),
     ).text;
+  }
+
+  /// O nome curto, para caber numa pílula ao lado de outras duas.
+  String _shortLabelFor(
+    String userId,
+    List<SpaceMember> members,
+    SpacePermissions? permissions,
+  ) {
+    if (permissions == null) return 'Membro sem nome';
+    return MemberCopy.shortIdentity(
+      userId: userId,
+      members: members,
+      permissions: permissions,
+    ).label;
   }
 }
 

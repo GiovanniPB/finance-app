@@ -22,6 +22,8 @@ import 'package:finance/features/spaces/domain/space.dart';
 import 'package:finance/features/spaces/domain/space_member.dart';
 import 'package:finance/features/spaces/domain/spaces_repository.dart';
 import 'package:finance/features/transactions/domain/expense_split.dart';
+import 'package:finance/features/transactions/domain/settlement.dart';
+import 'package:finance/features/transactions/domain/settlement_repository.dart';
 import 'package:finance/features/transactions/domain/transaction.dart';
 import 'package:finance/features/transactions/domain/transactions_repository.dart';
 import 'package:flutter/material.dart';
@@ -541,12 +543,63 @@ class FakeTransactionsRepository implements TransactionsRepository {
   }) async => throw UnimplementedError();
 
   @override
-  Future<Result<Transaction, Failure>> update(Transaction transaction) async =>
-      throw UnimplementedError();
+  Future<Result<Transaction, Failure>> update(Transaction transaction) async {
+    // Registra em vez de aplicar. A produção deriva `is_shared` da tabela de
+    // partes e ignora o que a entidade trouxe — imitar isso aqui faria o fake
+    // ter regra de negócio, e o teste passaria a provar o fake. Quem prova a
+    // derivação é `transactions_repository_impl_test.dart`, contra views de
+    // verdade.
+    updates.add(transaction);
+    return Ok(transaction);
+  }
+
+  /// Lançamentos passados a `update`, na ordem.
+  final List<Transaction> updates = [];
 
   @override
   Future<Result<void, Failure>> delete(String id) async =>
       throw UnimplementedError();
+}
+
+/// Acerto de contas em memória, com o mesmo guloso da produção.
+///
+/// Recebe os saldos prontos: a soma que os produz é SQL, e ela tem teste que a
+/// executa de verdade. Aqui o que se exercita é a tela.
+class FakeSettlementRepository implements SettlementRepository {
+  FakeSettlementRepository({
+    this.balances = const [],
+    this.splitCount = 0,
+    this.failure,
+  });
+
+  final List<MemberBalance> balances;
+  final int splitCount;
+
+  /// Erro a devolver em vez de registrar o acerto.
+  Failure? failure;
+
+  /// Os acertos registrados, na ordem: `(de, para, valor)`.
+  final List<({String from, String to, Money amount})> settled = [];
+
+  @override
+  Stream<Settlement> watch(String spaceId) => Stream.value(
+    balances.isEmpty
+        ? Settlement.nothingSplit
+        : Settlement.from(balances: balances, splitCount: splitCount),
+  );
+
+  @override
+  Future<Result<void, Failure>> settle({
+    required String spaceId,
+    required String fromUserId,
+    required String toUserId,
+    required Money amount,
+    String? description,
+  }) async {
+    settled.add((from: fromUserId, to: toUserId, amount: amount));
+    final error = failure;
+    return error == null ? const Ok(null) : Err(error);
+  }
 }
 
 class FakeBudgetsRepository implements BudgetsRepository {
@@ -760,12 +813,16 @@ SpaceMember testMember({
   /// definir o nome no Perfil, e o que os testes de fallback precisam.
   String? displayName,
   DateTime? joinedAt,
+
+  /// A linha permanece depois de a pessoa sair, para o histórico não ficar
+  /// órfão — e é o que faz quem saiu continuar aparecendo no acerto de contas.
+  MembershipStatus status = MembershipStatus.active,
 }) => SpaceMember(
   id: id,
   spaceId: spaceId,
   userId: userId,
   role: role,
-  status: MembershipStatus.active,
+  status: status,
   displayName: displayName,
   joinedAt: joinedAt ?? testNow,
 );
@@ -995,6 +1052,7 @@ Future<void> pumpScreen(
   List<Budget> budgets = const [],
   List<Account> accounts = const [],
   TransactionsRepository? transactionsRepository,
+  SettlementRepository? settlementRepository,
   BudgetsRepository? budgetsRepository,
   AccountsRepository? accountsRepository,
   SavingsRepository? savingsRepository,
@@ -1027,6 +1085,9 @@ Future<void> pumpScreen(
         ),
         transactionsRepositoryProvider.overrideWithValue(
           transactionsRepository ?? FakeTransactionsRepository(transactions),
+        ),
+        settlementRepositoryProvider.overrideWithValue(
+          settlementRepository ?? FakeSettlementRepository(),
         ),
         budgetsRepositoryProvider.overrideWithValue(
           budgetsRepository ?? FakeBudgetsRepository(budgets),

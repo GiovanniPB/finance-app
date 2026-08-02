@@ -86,6 +86,47 @@ abstract final class MemberCopy {
     );
   }
 
+  /// O nome curto, para caber numa linha com outra pessoa do lado.
+  ///
+  /// ─────────────────────────────────────────────────────────────────────────
+  /// POR QUE NÃO REUSAR [identity] AQUI
+  ///
+  /// O fallback de [identity] é "No espaço desde 28 de julho" — bom numa lista
+  /// de membros, onde a data desempata três "Editor" idênticos, e ilegível numa
+  /// transferência: *"No espaço desde 28 de julho → Você"*. A linha de acerto
+  /// tem duas pessoas e um valor, e precisa de rótulos curtos nas duas pontas.
+  ///
+  /// "Membro sem nome" é levemente acusatório com quem nunca abriu o Perfil, e
+  /// foi escolhido assim mesmo (2026-08-01): repetido duas vezes ele não
+  /// desempata, mas duas pessoas sem nome num grupo pequeno é raro, e a saída é
+  /// a pessoa definir o nome — que é o que o rótulo pede sem dizer.
+  ///
+  /// [userId] pode não ter membership: quem saiu do espaço depois de a despesa
+  /// ser dividida continua no saldo, porque a dívida não sai com a pessoa.
+  ///
+  /// Não recebe `myDisplayName`, ao contrário de [identity]: a minha ponta é
+  /// sempre "Você". Numa linha com duas pessoas o pronome é o que se acha mais
+  /// rápido, e o meu nome ao lado do nome de outro obrigaria a ler os dois.
+  static MemberIdentity shortIdentity({
+    required String userId,
+    required List<SpaceMember> members,
+    required SpacePermissions permissions,
+  }) {
+    if (permissions.myUserId == userId) {
+      return (label: 'Você', qualifier: null);
+    }
+
+    final member = members.where((m) => m.userId == userId).firstOrNull;
+    if (member == null) {
+      return (label: 'Membro sem nome', qualifier: 'saiu do espaço');
+    }
+
+    return (
+      label: member.displayName ?? 'Membro sem nome',
+      qualifier: member.isActive ? null : 'saiu do espaço',
+    );
+  }
+
   /// A segunda linha: o papel e o que ele permite, juntos.
   ///
   /// "Editor" sozinho não diz nada a quem nunca leu a matriz de permissões; a
