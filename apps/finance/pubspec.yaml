@@ -29,7 +29,7 @@ dependencies:
   powersync: ^2.3.1
   riverpod_annotation: ^4.0.3
   sqlite_async: ^0.14.3
-  supabase_flutter: ^2.16.0
+  supabase_flutter: ^2.17.1
   url_launcher: ^6.3.2
   webview_flutter: ^4.14.1
 
